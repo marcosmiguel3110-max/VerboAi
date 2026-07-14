@@ -199,16 +199,15 @@ let transporterCorreo = null;
 if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
   transporterCorreo = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
+    port: 465,
+    secure: true,
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_APP_PASSWORD },
     tls: {
-      rejectUnauthorized: false,
-      minVersion: 'TLSv1.2'
+      rejectUnauthorized: false
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 5000,
-    socketTimeout: 10000
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000
   });
 } else {
   console.warn('[registro] EMAIL_USER o EMAIL_APP_PASSWORD no estan definidos en tu .env.');
