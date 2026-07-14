@@ -242,7 +242,13 @@ app.post('/api/registro/solicitar', async (req, res) => {
     });
     res.json({ ok: true });
   } catch (e) {
-    console.error('[registro] Error enviando el correo:', e.message);
+    console.error('[registro] Error enviando el correo:');
+    console.error('[registro] Mensaje:', e.message);
+    console.error('[registro] Código:', e.code);
+    console.error('[registro] Stack:', e.stack);
+    if (e.response) {
+      console.error('[registro] Respuesta SMTP:', e.response);
+    }
     codigosPendientes.delete(email);
     res.status(500).json({ error: 'No se pudo enviar el correo. Revisa la configuracion de EMAIL_USER/EMAIL_APP_PASSWORD.' });
   }
@@ -440,7 +446,13 @@ app.get('/auth/google/callback', async (req, res) => {
         </div>`,
       });
     } catch (e) {
-      console.error('[google-auth] Error enviando el correo del codigo:', e.message);
+      console.error('[google-auth] Error enviando el correo del codigo:');
+      console.error('[google-auth] Mensaje:', e.message);
+      console.error('[google-auth] Código:', e.code);
+      console.error('[google-auth] Stack:', e.stack);
+      if (e.response) {
+        console.error('[google-auth] Respuesta SMTP:', e.response);
+      }
       codigosPendientes.delete(userData.email);
       return res.redirect('/login.html?error=google_correo_codigo');
     }
