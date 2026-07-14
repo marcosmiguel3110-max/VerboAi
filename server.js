@@ -198,8 +198,17 @@ const codigosPendientes = new Map(); // email -> { codigo, claveHash, expira }
 let transporterCorreo = null;
 if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
   transporterCorreo = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_APP_PASSWORD },
+    tls: {
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2'
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 5000,
+    socketTimeout: 10000
   });
 } else {
   console.warn('[registro] EMAIL_USER o EMAIL_APP_PASSWORD no estan definidos en tu .env.');
