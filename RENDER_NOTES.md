@@ -18,7 +18,7 @@ Para que el envío de correos funcione en Render:
 
 ## Limitaciones Importantes
 Render usa un sistema de archivos efímero. Esto significa:
-- El directorio `memory/` se perderá cada vez que el servicio se reinicie
+- El directorio `memory/` se perderá cada vez que el servicio se reinicia
 - El historial de chat y el progreso de lectura de la Biblia NO serán persistentes
 - Para persistencia real, necesitarías integrar una base de datos externa (PostgreSQL, MongoDB, etc.)
 
@@ -28,3 +28,6 @@ Para una solución de producción, considera:
 1. Usar PostgreSQL de Render para persistencia
 2. Usar Redis para caché temporal
 3. Migrar el almacenamiento de archivos a una base de datos
+
+## Nota de Deploy
+Última actualización: Configuración SMTP para Gmail corregida para Render.
