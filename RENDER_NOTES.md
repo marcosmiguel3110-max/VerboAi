@@ -10,6 +10,7 @@ Configura estas variables en el dashboard de Render:
 - `APP_USER`: Usuario admin para login (ej: admin)
 - `APP_PASS`: Contraseña para el usuario admin
 - `AUTH_SECRET`: Secreto aleatorio largo para firmar cookies (genera uno con: openssl rand -base64 32)
+- `REQUIRE_EMAIL_CODE`: (opcional) Si es "true", requiere código de verificación por correo. Si no está configurado o es "false", el login es directo (útil si SMTP está bloqueado)
 
 ## Configuración de Gmail para Email
 Para que el envío de correos funcione en Render:
@@ -18,6 +19,11 @@ Para que el envío de correos funcione en Render:
 3. Ve a "Contraseñas de aplicación"
 4. Crea una nueva contraseña de aplicación para "Correo"
 5. Usa esa contraseña en `EMAIL_APP_PASSWORD`
+
+## Nota sobre SMTP en Render
+Render puede bloquear conexiones SMTP salientes. Si el envío de correos falla:
+- **Opción 1**: NO configures `REQUIRE_EMAIL_CODE` (o déjalo en "false") para login directo sin código
+- **Opción 2**: Usa un servicio de email alternativo como SendGrid, Mailgun, o Resend que funcione mejor en Render
 
 ## Limitaciones Importantes
 Render usa un sistema de archivos efímero. Esto significa:
@@ -33,4 +39,4 @@ Para una solución de producción, considera:
 3. Migrar el almacenamiento de archivos a una base de datos
 
 ## Nota de Deploy
-Última actualización: Configuración SMTP para Gmail corregida para Render. Variables AUTH agregadas.
+Última actualización: Configuración SMTP optimizada. Variable REQUIRE_EMAIL_CODE agregada para control de verificación por correo.

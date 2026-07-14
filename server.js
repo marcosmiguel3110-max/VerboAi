@@ -205,9 +205,9 @@ if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
     tls: {
       rejectUnauthorized: false
     },
-    connectionTimeout: 15000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000
+    connectionTimeout: 5000,
+    greetingTimeout: 3000,
+    socketTimeout: 5000
   });
 } else {
   console.warn('[registro] EMAIL_USER o EMAIL_APP_PASSWORD no estan definidos en tu .env.');
@@ -412,15 +412,20 @@ app.get('/auth/google/callback', async (req, res) => {
     const userData = await userResp.json();
     if (!userData.email) return res.redirect('/login.html?error=google_sin_email');
 
-    // Si no hay correo configurado para mandar el codigo, entramos directo
-    // (asi el login con Google no se rompe si todavia no completaste
-    // EMAIL_USER/EMAIL_APP_PASSWORD en el .env).
-    if (!transporterCorreo) {
-      console.warn('[google-auth] EMAIL_USER/EMAIL_APP_PASSWORD no configurados: entrando sin pedir codigo extra.');
+    // Si REQUIRE_EMAIL_CODE no está configurado, entramos directo sin pedir código
+    // (esto permite deshabilitar el envío de correos en entornos donde SMTP está bloqueado)
+    if (!process.env.REQUIRE_EMAIL_CODE) {
+      console.warn('[google-auth] REQUIRE_EMAIL_CODE no configurado: entrando sin pedir codigo extra.');
       let cookieDirecta = `verbo_auth=${encodeURIComponent(firmarValor(userData.email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
       if (req.secure) cookieDirecta += '; Secure';
       res.setHeader('Set-Cookie', [cookieDirecta, 'verbo_oauth_state=; HttpOnly; Path=/; Max-Age=0']);
       return res.redirect('/');
+    }
+
+    // Si REQUIRE_EMAIL_CODE está configurado pero no hay transporter, fallar
+    if (!transporterCorreo) {
+      console.error('[google-auth] REQUIRE_EMAIL_CODE configurado pero EMAIL_USER/EMAIL_APP_PASSWORD no estan definidos.');
+      return res.redirect('/login.html?error=google_correo_codigo');
     }
 
     const codigo = String(Math.floor(100000 + Math.random() * 900000));
@@ -441,12 +446,8 @@ app.get('/auth/google/callback', async (req, res) => {
       });
     } catch (e) {
       console.error('[google-auth] Error enviando el correo del codigo:', e.message);
-      console.warn('[google-auth] Continuando sin codigo de verificacion debido al error.');
       codigosPendientes.delete(userData.email);
-      let cookieDirecta = `verbo_auth=${encodeURIComponent(firmarValor(userData.email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-      if (req.secure) cookieDirecta += '; Secure';
-      res.setHeader('Set-Cookie', [cookieDirecta, 'verbo_oauth_state=; HttpOnly; Path=/; Max-Age=0']);
-      return res.redirect('/');
+      return res.redirect('/login.html?error=google_correo_codigo');
     }
 
     // Cookie corta y firmada que solo guarda QUE correo de Google esta
