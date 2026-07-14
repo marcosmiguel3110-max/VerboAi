@@ -412,20 +412,15 @@ app.get('/auth/google/callback', async (req, res) => {
     const userData = await userResp.json();
     if (!userData.email) return res.redirect('/login.html?error=google_sin_email');
 
-    // Si REQUIRE_EMAIL_CODE no está configurado, entramos directo sin pedir código
-    // (esto permite deshabilitar el envío de correos en entornos donde SMTP está bloqueado)
-    if (!process.env.REQUIRE_EMAIL_CODE) {
-      console.warn('[google-auth] REQUIRE_EMAIL_CODE no configurado: entrando sin pedir codigo extra.');
+    // Si no hay correo configurado para mandar el codigo, entramos directo
+    // (asi el login con Google no se rompe si todavia no completaste
+    // EMAIL_USER/EMAIL_APP_PASSWORD en el .env).
+    if (!transporterCorreo) {
+      console.warn('[google-auth] EMAIL_USER/EMAIL_APP_PASSWORD no configurados: entrando sin pedir codigo extra.');
       let cookieDirecta = `verbo_auth=${encodeURIComponent(firmarValor(userData.email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
       if (req.secure) cookieDirecta += '; Secure';
       res.setHeader('Set-Cookie', [cookieDirecta, 'verbo_oauth_state=; HttpOnly; Path=/; Max-Age=0']);
       return res.redirect('/');
-    }
-
-    // Si REQUIRE_EMAIL_CODE está configurado pero no hay transporter, fallar
-    if (!transporterCorreo) {
-      console.error('[google-auth] REQUIRE_EMAIL_CODE configurado pero EMAIL_USER/EMAIL_APP_PASSWORD no estan definidos.');
-      return res.redirect('/login.html?error=google_correo_codigo');
     }
 
     const codigo = String(Math.floor(100000 + Math.random() * 900000));
