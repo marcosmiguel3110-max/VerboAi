@@ -7,20 +7,32 @@ Configura estas variables en el dashboard de Render:
 - `GROQ_MODEL_VISION`: (opcional) Modelo de visión, default: meta-llama/llama-4-scout-17b-16e-instruct
 - `EMAIL_USER`: Tu correo de Gmail para enviar códigos de verificación
 - `EMAIL_APP_PASSWORD`: Contraseña de aplicación de Gmail (NO tu contraseña normal)
+- `RESEND_API_KEY`: (opcional) Clave de API de Resend como alternativa a SMTP
 - `APP_USER`: Usuario admin para login (ej: admin)
 - `APP_PASS`: Contraseña para el usuario admin
 - `AUTH_SECRET`: Secreto aleatorio largo para firmar cookies (genera uno con: openssl rand -base64 32)
 
-## Configuración de Gmail para Email
-Para que el envío de correos funcione en Render:
+## Configuración de Email
+Tienes dos opciones para enviar correos:
+
+### Opción 1: Gmail SMTP (puede fallar en Render)
 1. Ve a https://myaccount.google.com/security
 2. Activa "Verificación en dos pasos"
 3. Ve a "Contraseñas de aplicación"
 4. Crea una nueva contraseña de aplicación para "Correo"
 5. Usa esa contraseña en `EMAIL_APP_PASSWORD`
 
+### Opción 2: Resend API (recomendado para Render)
+1. Ve a https://resend.com/
+2. Regístrate y obtén tu API key
+3. Configura `RESEND_API_KEY` en Render
+4. El sistema usará Resend automáticamente si SMTP falla
+
 ## Nota sobre SMTP en Render
-Render puede bloquear conexiones SMTP salientes. Si el envío de correos falla, el login con Google funcionará en modo directo sin código de verificación (si EMAIL_USER/EMAIL_APP_PASSWORD no están configurados).
+Render puede bloquear conexiones SMTP salientes. El sistema tiene fallback automático:
+- Primero intenta SMTP (Gmail)
+- Si SMTP falla, usa Resend API
+- Si ambos fallan, el login con Google funcionará en modo directo sin código
 
 ## Limitaciones Importantes
 Render usa un sistema de archivos efímero. Esto significa:
@@ -36,4 +48,4 @@ Para una solución de producción, considera:
 3. Migrar el almacenamiento de archivos a una base de datos
 
 ## Nota de Deploy
-Última actualización: Configuración SMTP optimizada con timeouts reducidos para respuestas más rápidas.
+Última actualización: Fallback a Resend API implementado para solucionar bloqueos SMTP en Render.

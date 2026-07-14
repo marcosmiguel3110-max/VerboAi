@@ -214,6 +214,58 @@ if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
   console.warn('[registro] El registro por correo no va a poder mandar codigos hasta que los completes.');
 }
 
+// Función para enviar correo con fallback a Resend API
+async function enviarCorreoConFallback(destinatario, asunto, texto, html) {
+  // Intentar con SMTP primero
+  if (transporterCorreo) {
+    try {
+      await transporterCorreo.sendMail({
+        from: `"Verbo AI" <${process.env.EMAIL_USER}>`,
+        to: destinatario,
+        subject: asunto,
+        text: texto,
+        html: html,
+      });
+      console.log('[email] Enviado via SMTP');
+      return;
+    } catch (e) {
+      console.warn('[email] SMTP falló, intentando Resend API:', e.message);
+    }
+  }
+
+  // Fallback a Resend API
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'Verbo AI <onboarding@resend.dev>',
+          to: [destinatario],
+          subject: asunto,
+          html: html,
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Resend API error: ${error}`);
+      }
+      
+      console.log('[email] Enviado via Resend API');
+      return;
+    } catch (e) {
+      console.error('[email] Resend API falló:', e.message);
+      throw e;
+    }
+  }
+
+  throw new Error('No hay configuración de email disponible (SMTP ni Resend API)');
+}
+
 app.post('/api/registro/solicitar', async (req, res) => {
   const { email, clave } = req.body || {};
   if (!email || !clave) return res.status(400).json({ error: 'Falta email o clave.' });
@@ -222,24 +274,22 @@ app.post('/api/registro/solicitar', async (req, res) => {
 
   const usuarios = leerUsuarios();
   if (usuarios[email]) return res.status(400).json({ error: 'Ya existe una cuenta con ese correo.' });
-  if (!transporterCorreo) return res.status(500).json({ error: 'El envio de correos no esta configurado en el servidor.' });
 
   const codigo = String(Math.floor(100000 + Math.random() * 900000));
   codigosPendientes.set(email, { codigo, claveHash: hashearClave(clave), expira: Date.now() + 10 * 60 * 1000 });
 
   try {
-    await transporterCorreo.sendMail({
-      from: `"Verbo AI" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Tu codigo de verificacion - Verbo AI',
-      text: `Tu codigo de verificacion es: ${codigo}\n\nVence en 10 minutos.`,
-      html: `<div style="font-family:sans-serif;padding:20px;">
+    await enviarCorreoConFallback(
+      email,
+      'Tu codigo de verificacion - Verbo AI',
+      `Tu codigo de verificacion es: ${codigo}\n\nVence en 10 minutos.`,
+      `<div style="font-family:sans-serif;padding:20px;">
         <h2 style="color:#C9663A;">Verbo AI</h2>
         <p>Tu codigo de verificacion es:</p>
         <p style="font-size:32px;font-weight:bold;letter-spacing:4px;">${codigo}</p>
         <p style="color:#777;font-size:13px;">Vence en 10 minutos. Si no pediste esto, ignora este correo.</p>
-      </div>`,
-    });
+      </div>`
+    );
     res.json({ ok: true });
   } catch (e) {
     console.error('[registro] Error enviando el correo:');
@@ -250,7 +300,7 @@ app.post('/api/registro/solicitar', async (req, res) => {
       console.error('[registro] Respuesta SMTP:', e.response);
     }
     codigosPendientes.delete(email);
-    res.status(500).json({ error: 'No se pudo enviar el correo. Revisa la configuracion de EMAIL_USER/EMAIL_APP_PASSWORD.' });
+    res.status(500).json({ error: 'No se pudo enviar el correo. Revisa la configuracion de EMAIL_USER/EMAIL_APP_PASSWORD o RESEND_API_KEY.' });
   }
 });
 
@@ -418,11 +468,9 @@ app.get('/auth/google/callback', async (req, res) => {
     const userData = await userResp.json();
     if (!userData.email) return res.redirect('/login.html?error=google_sin_email');
 
-    // Si no hay correo configurado para mandar el codigo, entramos directo
-    // (asi el login con Google no se rompe si todavia no completaste
-    // EMAIL_USER/EMAIL_APP_PASSWORD en el .env).
-    if (!transporterCorreo) {
-      console.warn('[google-auth] EMAIL_USER/EMAIL_APP_PASSWORD no configurados: entrando sin pedir codigo extra.');
+    // Si no hay configuración de email (SMTP ni Resend), entramos directo
+    if (!transporterCorreo && !process.env.RESEND_API_KEY) {
+      console.warn('[google-auth] No hay configuración de email: entrando sin pedir codigo extra.');
       let cookieDirecta = `verbo_auth=${encodeURIComponent(firmarValor(userData.email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
       if (req.secure) cookieDirecta += '; Secure';
       res.setHeader('Set-Cookie', [cookieDirecta, 'verbo_oauth_state=; HttpOnly; Path=/; Max-Age=0']);
@@ -433,18 +481,17 @@ app.get('/auth/google/callback', async (req, res) => {
     codigosPendientes.set(userData.email, { codigo, expira: Date.now() + 10 * 60 * 1000, esGoogle: true });
 
     try {
-      await transporterCorreo.sendMail({
-        from: `"Verbo AI" <${process.env.EMAIL_USER}>`,
-        to: userData.email,
-        subject: 'Tu codigo de verificacion - Verbo AI',
-        text: `Tu codigo de verificacion es: ${codigo}\n\nVence en 10 minutos.`,
-        html: `<div style="font-family:sans-serif;padding:20px;">
+      await enviarCorreoConFallback(
+        userData.email,
+        'Tu codigo de verificacion - Verbo AI',
+        `Tu codigo de verificacion es: ${codigo}\n\nVence en 10 minutos.`,
+        `<div style="font-family:sans-serif;padding:20px;">
           <h2 style="color:#C9663A;">Verbo AI</h2>
           <p>Para terminar de entrar con tu cuenta de Google, tu codigo de verificacion es:</p>
           <p style="font-size:32px;font-weight:bold;letter-spacing:4px;">${codigo}</p>
           <p style="color:#777;font-size:13px;">Vence en 10 minutos. Si no pediste esto, ignora este correo.</p>
-        </div>`,
-      });
+        </div>`
+      );
     } catch (e) {
       console.error('[google-auth] Error enviando el correo del codigo:');
       console.error('[google-auth] Mensaje:', e.message);
