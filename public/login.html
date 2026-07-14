@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Verbo AI · Iniciar sesion</title>
+<link rel="icon" href="logo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="login.css" />
+</head>
+<body>
+
+  <div class="cielo">
+    <div class="resplandor"></div>
+    <svg class="montanas" viewBox="0 0 1440 700" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <path class="cordillera cordillera-1" d="M0,420 C160,360 260,470 420,400 C580,330 640,250 800,300 C940,345 1020,260 1160,290 C1300,320 1360,380 1440,340 L1440,700 L0,700 Z" />
+      <path class="cordillera cordillera-2" d="M0,500 C180,440 300,530 460,470 C620,410 700,470 880,430 C1020,400 1120,470 1260,440 C1340,422 1400,450 1440,430 L1440,700 L0,700 Z" />
+      <path class="cordillera cordillera-3" d="M0,580 C200,540 340,600 520,560 C700,520 820,580 1000,555 C1140,536 1280,580 1440,560 L1440,700 L0,700 Z" />
+    </svg>
+  </div>
+
+  <main class="tarjeta-envoltorio">
+    <div class="tarjeta">
+      <div class="anillo-logo">
+        <img src="logo.png" alt="Verbo AI" class="logo-img" />
+      </div>
+      <h1>Verbo AI</h1>
+      <p class="subtitulo">Tu espacio biblico con IA</p>
+
+      <!-- Vista: iniciar sesion -->
+      <form id="formLogin" class="vista-auth" autocomplete="on">
+        <label class="campo">
+          <span>Usuario o correo</span>
+          <input type="text" name="usuario" id="usuario" autocomplete="username" required autofocus />
+        </label>
+
+        <label class="campo">
+          <span>Contrasena</span>
+          <input type="password" name="clave" id="clave" autocomplete="current-password" required />
+        </label>
+
+        <div class="fila-opciones">
+          <label class="recordarme">
+            <input type="checkbox" id="recordar" name="recordar" />
+            Recordarme
+          </label>
+        </div>
+
+        <button type="submit" id="btnIngresar">Iniciar sesion</button>
+        <p id="mensajeError" class="mensaje-error oculto"></p>
+
+        <p class="texto-alternar">¿No tenes cuenta? <a href="#" id="irARegistro">Crear una</a></p>
+
+        <div class="separador"><span>o</span></div>
+
+        <a href="/auth/google" class="btn-google">
+          <svg viewBox="0 0 48 48" width="18" height="18">
+            <path fill="#FFC107" d="M43.6 20.5h-1.9V20.4H24v7.2h11.3c-1.6 4.6-6 7.9-11.3 7.9-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.1-5.1C33.6 6 29 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5Z"/>
+            <path fill="#FF3D00" d="M6.3 14.7l6 4.4C13.9 15.6 18.6 12.9 24 12.9c3.1 0 5.8 1.1 8 3l5.1-5.1C33.6 6 29 4 24 4c-7.4 0-13.8 4.2-17 10.4Z"/>
+            <path fill="#4CAF50" d="M24 44c5.1 0 9.6-1.7 13.1-4.6l-6-5.1c-2 1.4-4.7 2.4-7.1 2.4-5.3 0-9.7-3.3-11.3-7.9l-6 4.6C10.1 39.7 16.5 44 24 44Z"/>
+            <path fill="#1976D2" d="M43.6 20.5H24v7.2h11.3c-.8 2.2-2.2 4-4.1 5.3l6 5.1C40.5 34.9 44 30 44 24c0-1.2-.1-2.4-.4-3.5Z"/>
+          </svg>
+          Continuar con Google
+        </a>
+      </form>
+
+      <!-- Vista: crear cuenta (paso 1: datos) -->
+      <form id="formRegistro" class="vista-auth oculto" autocomplete="on">
+        <label class="campo">
+          <span>Correo</span>
+          <input type="email" id="regEmail" autocomplete="email" required />
+        </label>
+        <label class="campo">
+          <span>Contrasena</span>
+          <input type="password" id="regClave" autocomplete="new-password" required minlength="6" />
+        </label>
+        <label class="campo">
+          <span>Repetir contrasena</span>
+          <input type="password" id="regClave2" autocomplete="new-password" required minlength="6" />
+        </label>
+
+        <button type="submit" id="btnPedirCodigo">Enviarme un codigo</button>
+        <p id="mensajeErrorRegistro" class="mensaje-error oculto"></p>
+
+        <p class="texto-alternar">¿Ya tenes cuenta? <a href="#" id="irALogin">Iniciar sesion</a></p>
+      </form>
+
+      <!-- Vista: verificar codigo (paso 2) -->
+      <form id="formCodigo" class="vista-auth oculto" autocomplete="off">
+        <p class="texto-codigo">Te mandamos un codigo de 6 digitos a <strong id="correoCodigoTexto"></strong>.</p>
+        <label class="campo">
+          <span>Codigo</span>
+          <input type="text" id="codigoInput" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required />
+        </label>
+
+        <button type="submit" id="btnConfirmarCodigo">Confirmar</button>
+        <p id="mensajeErrorCodigo" class="mensaje-error oculto"></p>
+        <p id="mensajeInfoCodigo" class="mensaje-error oculto" style="color:#2e7d32;"></p>
+
+        <p class="texto-alternar" id="lineaReenviar" style="display:none;">
+          <a href="#" id="reenviarCodigo">Reenviar codigo</a>
+        </p>
+        <p class="texto-alternar"><a href="#" id="volverDeRegistro">Volver</a></p>
+      </form>
+
+      <!-- Vista: elegir nombre y aceptar terminos (solo para cuentas nuevas) -->
+      <form id="formNombre" class="vista-auth oculto" autocomplete="off">
+        <p class="texto-codigo">Ya casi. ¿Como queres que te llamemos?</p>
+        <label class="campo">
+          <span>Tu nombre</span>
+          <input type="text" id="nombreInput" maxlength="40" autocomplete="given-name" required autofocus />
+        </label>
+
+        <div class="terminos-caja">
+          <p><strong>Antes de entrar:</strong></p>
+          <ul>
+            <li>No uses Verbo AI para generar contenido ilegal, violento o dañino.</li>
+            <li>No la uses para acosar, engañar o hacerle daño a otra persona.</li>
+            <li>Es una herramienta de apoyo, no reemplaza el consejo pastoral o profesional.</li>
+          </ul>
+          <label class="recordarme">
+            <input type="checkbox" id="aceptaTerminos" required />
+            Acepto usar Verbo AI de forma responsable.
+          </label>
+        </div>
+
+        <button type="submit" id="btnConfirmarNombre">Aceptar y continuar</button>
+        <p id="mensajeErrorNombre" class="mensaje-error oculto"></p>
+      </form>
+    </div>
+
+    <p class="pie-versiculo">"Lampara es a mis pies tu palabra, y lumbrera a mi camino." — Salmos 119:105</p>
+  </main>
+
+<script src="login.js"></script>
+</body>
+</html>
