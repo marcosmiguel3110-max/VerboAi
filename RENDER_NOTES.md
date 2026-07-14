@@ -7,6 +7,9 @@ Configura estas variables en el dashboard de Render:
 - `GROQ_MODEL_VISION`: (opcional) Modelo de visión, default: meta-llama/llama-4-scout-17b-16e-instruct
 - `EMAIL_USER`: Tu correo de Gmail para enviar códigos de verificación
 - `EMAIL_APP_PASSWORD`: Contraseña de aplicación de Gmail (NO tu contraseña normal)
+- `APP_USER`: Usuario admin para login (ej: admin)
+- `APP_PASS`: Contraseña para el usuario admin
+- `AUTH_SECRET`: Secreto aleatorio largo para firmar cookies (genera uno con: openssl rand -base64 32)
 
 ## Configuración de Gmail para Email
 Para que el envío de correos funcione en Render:
@@ -30,4 +33,4 @@ Para una solución de producción, considera:
 3. Migrar el almacenamiento de archivos a una base de datos
 
 ## Nota de Deploy
-Última actualización: Configuración SMTP para Gmail corregida para Render.
+Última actualización: Configuración SMTP para Gmail corregida para Render. Variables AUTH agregadas.
