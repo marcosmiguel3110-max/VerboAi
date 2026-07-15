@@ -309,6 +309,8 @@ function guardarProgresoBiblia(usuario, p) {
   if (!raiz.usuarios) raiz.usuarios = {};
   raiz.usuarios[usuario] = p;
   fs.writeFileSync(BIBLIA_PROGRESO_FILE, JSON.stringify(raiz, null, 2));
+  // Backup a MongoDB en background
+  guardarEnMongoBackground('biblia-progreso', raiz);
 }
 
 // API publica (RV1960) que usamos como fuente de la Biblia completa, para no
@@ -389,7 +391,7 @@ function obtenerUsuarioActual(req) {
 
 const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info']);
 app.use((req, res, next) => {
-  if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/')) return next();
+  if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/')) return next();
   if (estaAutenticado(req)) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
   return res.redirect('/login.html');
@@ -423,7 +425,10 @@ function leerApiTokens() {
   }
 }
 function guardarApiTokens(tokens) {
-  fs.writeFileSync(API_TOKENS_FILE, JSON.stringify({ tokens }, null, 2));
+  const valor = { tokens };
+  fs.writeFileSync(API_TOKENS_FILE, JSON.stringify(valor, null, 2));
+  // Backup a MongoDB en background
+  guardarEnMongoBackground('api-tokens', valor);
 }
 
 // Devuelve true si el usuario actual (email o "local:admin") tiene acceso a la
@@ -536,6 +541,78 @@ function tokenPublico(t) {
 const USUARIOS_FILE = path.join(MEMORY_DIR, 'usuarios.json');
 if (!fs.existsSync(USUARIOS_FILE)) fs.writeFileSync(USUARIOS_FILE, JSON.stringify({ usuarios: {} }, null, 2));
 
+// ---------- MongoDB (persistencia real, no se pierde al reiniciar) ----------
+// Ahora que todos los archivos de /memory estan declarados, agregamos la
+// integracion con MongoDB. Si MONGODB_URI esta configurada, todos los datos
+// (chats, usuarios, tokens API, progreso biblico) se guardan tambien ahi.
+// Si no esta o falla la conexion, todo sigue funcionando con los archivos
+// locales de /memory (como antes).
+//
+// Las funciones leerX()/guardarX() siguen siendo sincronas (no rompen el
+// codigo existente). Lo que hacemos es:
+//   1. Al arrancar el server, cargamos desde Mongo a los archivos locales
+//      (async, antes de app.listen).
+//   2. Cada guardarX() escribe al archivo local (sincrono, como antes) Y
+//      dispara un guardado a Mongo en background (async, no bloquea).
+const mongoDb = require('./db');
+
+// Carga inicial desde Mongo a los archivos locales. Se llama al arrancar,
+// antes de app.listen. Si Mongo no tiene datos todavia (primera vez), no
+// hace nada (los archivos locales ya estan con defaults vacios).
+async function cargarDesdeMongoAlArrancar() {
+  if (!mongoDb.estaConectado()) {
+    console.log('[mongo-sync] Mongo no conectado, saltando carga inicial.');
+    return;
+  }
+  console.log('[mongo-sync] Cargando datos desde MongoDB...');
+  try {
+    // 1. Historial de chats
+    const historial = await mongoDb.leerDocumento('historial');
+    if (historial && typeof historial === 'object') {
+      fs.writeFileSync(MEMORY_FILE, JSON.stringify(historial, null, 2));
+      console.log('[mongo-sync] historial.json cargado desde Mongo.');
+    }
+
+    // 2. Usuarios
+    const usuarios = await mongoDb.leerDocumento('usuarios');
+    if (usuarios && typeof usuarios === 'object') {
+      fs.writeFileSync(USUARIOS_FILE, JSON.stringify(usuarios, null, 2));
+      console.log('[mongo-sync] usuarios.json cargado desde Mongo.');
+    }
+
+    // 3. Tokens API
+    const tokens = await mongoDb.leerDocumento('api-tokens');
+    if (tokens && typeof tokens === 'object') {
+      fs.writeFileSync(API_TOKENS_FILE, JSON.stringify(tokens, null, 2));
+      console.log('[mongo-sync] api-tokens.json cargado desde Mongo.');
+    }
+
+    // 4. Progreso biblico
+    const progreso = await mongoDb.leerDocumento('biblia-progreso');
+    if (progreso && typeof progreso === 'object') {
+      fs.writeFileSync(BIBLIA_PROGRESO_FILE, JSON.stringify(progreso, null, 2));
+      console.log('[mongo-sync] biblia-progreso.json cargado desde Mongo.');
+    }
+  } catch (e) {
+    console.error('[mongo-sync] Error cargando desde Mongo:', e.message);
+  }
+}
+
+// Dispara un guardado a Mongo en background (no bloquea la respuesta al
+// usuario). Si Mongo no esta conectado o falla, no pasa nada: el archivo
+// local ya quedo guardado antes de llamar a esto.
+function guardarEnMongoBackground(id, valor) {
+  if (!mongoDb.estaConectado()) return;
+  // setImmediate para no bloquear el event loop actual
+  setImmediate(async () => {
+    try {
+      await mongoDb.guardarDocumento(id, valor);
+    } catch (e) {
+      console.error(`[mongo-sync] Error guardando "${id}" en Mongo:`, e.message);
+    }
+  });
+}
+
 function leerUsuarios() {
   try {
     const d = JSON.parse(fs.readFileSync(USUARIOS_FILE, 'utf-8'));
@@ -545,7 +622,10 @@ function leerUsuarios() {
   }
 }
 function guardarUsuarios(usuarios) {
-  fs.writeFileSync(USUARIOS_FILE, JSON.stringify({ usuarios }, null, 2));
+  const valor = { usuarios };
+  fs.writeFileSync(USUARIOS_FILE, JSON.stringify(valor, null, 2));
+  // Backup a MongoDB en background
+  guardarEnMongoBackground('usuarios', valor);
 }
 function hashearClave(clave) {
   const sal = crypto.randomBytes(16).toString('hex');
@@ -1678,6 +1758,8 @@ function leerDB() {
 
 function guardarDB(db) {
   fs.writeFileSync(MEMORY_FILE, JSON.stringify(db, null, 2));
+  // Backup a MongoDB en background (no bloquea la respuesta al usuario)
+  guardarEnMongoBackground('historial', db);
 }
 
 function obtenerChat(db, chatId, usuario) {
@@ -2060,36 +2142,88 @@ async function buscarWebGoogle(query) {
 // Lo que hacemos aca es descargar los bytes reales, guardarlos a disco (como
 // con DESCARGAR) y devolver un link local que el usuario puede ver y guardar.
 //
+// Pollinations a veces tarda mucho (60-90s) o devuelve 502/503 cuando esta
+// sobrecargado. Por eso hacemos hasta 3 reintentos con timeout creciente.
+//
 // Parametros:
 //   prompt  -> texto descriptivo de la imagen (se URL-encodea)
 //   seed    -> semilla opcional para reproducibilidad (si no viene, se
 //              genera una aleatoria asi cada pedido da algo distinto)
 async function generarImagenPollinations(prompt, seed) {
-  try {
-    const promptLimpio = (prompt || '').trim().slice(0, 200);
-    if (!promptLimpio) return null;
-    const seedFinal = (typeof seed === 'number' && seed > 0) ? seed : Math.floor(Math.random() * 1000000);
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?width=1024&height=1024&seed=${seedFinal}&nologo=true`;
-    const resp = await fetch(url, {
-      headers: { 'User-Agent': 'VerboAI/1.0', 'Accept': 'image/*' },
-      signal: AbortSignal.timeout(60000), // pollinations a veces tarda
-    });
-    if (!resp.ok) return null;
-    const mime = resp.headers.get('content-type') || 'image/jpeg';
-    if (!mime.startsWith('image/')) return null;
-    const buffer = Buffer.from(await resp.arrayBuffer());
-    if (!buffer || buffer.length < 1000) return null; // descartar respuestas vacias
-    const urlLocal = guardarImagenDisco(buffer, mime);
-    return {
-      url: urlLocal,
-      prompt: promptLimpio,
-      seed: seedFinal,
-      tamanoKB: Math.round(buffer.length / 1024),
-    };
-  } catch (e) {
-    console.error('[pollinations] Error generando imagen:', e.message);
-    return null;
+  const promptLimpio = (prompt || '').trim().slice(0, 200);
+  if (!promptLimpio) return null;
+  const seedFinal = (typeof seed === 'number' && seed > 0) ? seed : Math.floor(Math.random() * 1000000);
+
+  // 3 intentos con timeout creciente: 90s, 120s, 150s. Pollinations a veces
+  // tarda bastante la primera vez que genera un prompt nuevo.
+  const timeouts = [90000, 120000, 150000];
+  let ultimoError = null;
+
+  for (let intento = 0; intento < timeouts.length; intento++) {
+    try {
+      // URL con parametros: width/height (1024x1024 es buen balance), seed
+      // para reproducibilidad, nologo=true para sacar la marca de agua.
+      // model=flux es el modelo default de pollinations (rapido y bueno).
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?width=1024&height=1024&seed=${seedFinal}&nologo=true&model=flux`;
+
+      console.log(`[pollinations] Intento ${intento + 1}/${timeouts.length} - prompt: "${promptLimpio.slice(0, 50)}..."`);
+      const resp = await fetch(url, {
+        // No mandamos Accept: image/* porque a veces pollinations lo interpreta
+        // mal y devuelve error. Solo User-Agent basico.
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(timeouts[intento]),
+      });
+
+      if (!resp.ok) {
+        ultimoError = `HTTP ${resp.status}`;
+        console.warn(`[pollinations] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+        // Si es 4xx (error del cliente), no tiene sentido reintentar
+        if (resp.status >= 400 && resp.status < 500) break;
+        // Si es 5xx o 429, esperamos un poco y reintentamos
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+
+      const mime = resp.headers.get('content-type') || 'image/jpeg';
+      // A veces pollinations devuelve text/html cuando hay error interno
+      if (!mime.startsWith('image/')) {
+        ultimoError = `Content-Type inesperado: ${mime}`;
+        console.warn(`[pollinations] Intento ${intento + 1} devolvio ${mime} (esperaba image/*)`);
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      if (!buffer || buffer.length < 1000) {
+        ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
+        console.warn(`[pollinations] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+
+      // Todo OK: guardamos a disco y devolvemos
+      const urlLocal = guardarImagenDisco(buffer, mime);
+      console.log(`[pollinations] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
+      return {
+        url: urlLocal,
+        prompt: promptLimpio,
+        seed: seedFinal,
+        tamanoKB: Math.round(buffer.length / 1024),
+      };
+    } catch (e) {
+      ultimoError = e.message;
+      console.warn(`[pollinations] Intento ${intento + 1} fallo: ${e.message}`);
+      // Si fue timeout o error de red, reintentamos. Si fue otra cosa, no.
+      if (e.name === 'AbortError' || e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT') {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      break;
+    }
   }
+
+  console.error(`[pollinations] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+  return null;
 }
 
 // Detecta si un mensaje del usuario pide generar una imagen. La "palabra
@@ -2996,8 +3130,19 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
+// Arranque: primero conectamos a MongoDB y cargamos los datos persistentes,
+// despues recien empezamos a escuchar. Esto asegura que cuando llegue la
+// primera peticion, los archivos locales ya tengan los datos de Mongo.
+(async () => {
+  try {
+    await mongoDb.conectarMongo();
+    await cargarDesdeMongoAlArrancar();
+  } catch (e) {
+    console.error('[startup] Error en inicializacion Mongo:', e.message);
+    // No frenamos el arranque: seguimos con archivos locales.
+  }
+  app.listen(PORT, () => {
+    console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
   try {
     const os = require('os');
     const interfaces = os.networkInterfaces();
@@ -3015,7 +3160,8 @@ app.listen(PORT, () => {
       console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
     }
   } catch (e) { /* si falla, no pasa nada, el resto de la app funciona igual */ }
-});
+  }); // fin de app.listen callback
+})(); // fin del IIFE de arranque
 
 // Endpoint de prueba de conexion con el modelo de IA. Requiere sesion
 // iniciada (lo exige el middleware global de arriba). No revela nunca el

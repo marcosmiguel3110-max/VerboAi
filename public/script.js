@@ -1616,6 +1616,29 @@ elForm.addEventListener('submit', async (ev) => {
         } else if (evt.type === 'images') {
           pintarGaleria(evt.query, evt.items);
           mostrarImagenesEnCuaderno(evt.query, evt.items);
+        } else if (evt.type === 'descargas') {
+          // Imagenes generadas (pollinations) o descargadas de la web.
+          // Las mostramos como imagenes en la burbuja de la IA, clickeables
+          // para abrir el lightbox. Cada item tiene { url, nombre, tamanoKB }.
+          ocultarReintento();
+          asegurarBurbuja();
+          const items = Array.isArray(evt.items) ? evt.items : [];
+          if (items.length) {
+            const grid = document.createElement('div');
+            grid.className = 'adjuntas-grid';
+            items.forEach((item) => {
+              if (!item.url) return;
+              const img = document.createElement('img');
+              img.src = item.url;
+              img.className = 'adjunta';
+              img.alt = item.nombre || 'imagen';
+              img.title = item.nombre ? `${item.nombre}${item.tamanoKB ? ' (' + item.tamanoKB + ' KB)' : ''}` : '';
+              img.addEventListener('click', () => abrirLightbox(item.url, item.nombre || ''));
+              grid.appendChild(img);
+            });
+            if (grid.children.length) burbujaIA.appendChild(grid);
+            elMensajes.scrollTop = elMensajes.scrollHeight;
+          }
         } else if (evt.type === 'error') {
           ocultarReintento();
           if (escritor) escritor.detener();

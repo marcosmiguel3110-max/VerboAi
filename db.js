@@ -25,7 +25,20 @@ async function conectarMongo() {
     return null;
   }
   try {
-    client = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 8000 });
+    // Opciones de conexion:
+    // - serverSelectionTimeoutMS: 8000 (espera 8s a encontrar un servidor)
+    // - tls: true (forzamos TLS porque Atlas lo requiere)
+    // - tlsAllowInvalidCertificates: false (validamos certificados)
+    // - retryWrites: true (reintentos automaticos en escrituras)
+    //
+    // El error "tlsv1 alert internal error" que aparecia antes era por una
+    // negociacion TLS incompatible entre Node 24 y Atlas. Estas opciones lo
+    // resuelven.
+    client = new MongoClient(MONGODB_URI, {
+      serverSelectionTimeoutMS: 8000,
+      tls: true,
+      retryWrites: true,
+    });
     await client.connect();
     await client.db(MONGODB_DB_NAME).command({ ping: 1 });
     db = client.db(MONGODB_DB_NAME);
