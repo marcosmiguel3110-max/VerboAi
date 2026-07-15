@@ -319,10 +319,409 @@ html.tema-night .opcion-tema.activa .opcion-modo-punto {
 .opcion-tema-swatch-default { background: linear-gradient(135deg, #FAF6EF 50%, #C9663A 50%); }
 .opcion-tema-swatch-night { background: linear-gradient(135deg, #1B1E29 50%, #E08A5B 50%); }
 
+/* ---------- Clave API: badge "Prox", tokens, panel ---------- */
+.settings-nav-item {
+  position: relative;
+  justify-content: flex-start;
+}
+.badge-prox {
+  margin-left: auto;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  background: var(--acento);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 6px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+.settings-nav-item.activa .badge-prox {
+  background: rgba(255,255,255,0.25);
+  color: white;
+}
+html.tema-night .settings-nav-item:not(.activa) .badge-prox {
+  background: var(--acento);
+  color: white;
+}
+.badge-prox.oculto { display: none; }
+
+/* Estado "Proximamente" */
+.clave-api-prox {
+  text-align: center;
+}
+.clave-api-prox-cuerpo {
+  margin-top: 32px;
+  padding: 32px 24px;
+  background: var(--crema-oscuro);
+  border: 1px dashed var(--borde);
+  border-radius: 16px;
+  color: var(--texto-suave);
+}
+.clave-api-prox-cuerpo svg {
+  color: var(--acento);
+  opacity: 0.7;
+  margin-bottom: 12px;
+}
+.clave-api-prox-titulo {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--texto);
+  margin: 0 0 8px;
+}
+.clave-api-prox-texto {
+  font-size: 13.5px;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 420px;
+  margin: 0 auto;
+}
+.clave-api-prox-texto strong {
+  color: var(--acento);
+  font-weight: 600;
+}
+
+/* Panel autorizado */
+.clave-api-panel.oculto { display: none; }
+.clave-api-panel code {
+  background: var(--crema-oscuro);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--acento);
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+.clave-api-acciones {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0 16px;
+  flex-wrap: wrap;
+}
+.clave-api-input-nombre {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--crema-oscuro);
+  color: var(--texto);
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.clave-api-input-nombre:focus { border-color: var(--acento); }
+
+.btn-generar-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: var(--acento);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-generar-token:hover { background: var(--acento-hover, #B0552E); }
+.btn-generar-token:active { transform: scale(0.98); }
+.btn-generar-token:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-generar-token.cargando { opacity: 0.7; }
+html.tema-night .btn-generar-token { background: var(--boton-nuevo-noche); color: var(--texto); }
+
+/* Banner "token recien creado" */
+.clave-api-token-recien {
+  background: linear-gradient(135deg, rgba(201,102,58,0.12), rgba(201,102,58,0.06));
+  border: 1px solid var(--acento);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+html.tema-night .clave-api-token-recien {
+  background: rgba(255,255,255,0.04);
+  border-color: var(--chat-activo-noche-borde);
+}
+.clave-api-token-recien.oculto { display: none; }
+.token-recien-titulo {
+  font-size: 12.5px;
+  color: var(--acento);
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+.token-recien-cuerpo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.token-recien-cuerpo code {
+  flex: 1;
+  min-width: 200px;
+  background: var(--crema);
+  border: 1px solid var(--borde);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--texto);
+  word-break: break-all;
+  user-select: all;
+}
+html.tema-night .token-recien-cuerpo code {
+  background: var(--fondo-noche, #1B1E29);
+  color: var(--texto);
+}
+.btn-copiar-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: var(--acento);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-copiar-token:hover { background: var(--acento-hover, #B0552E); }
+.btn-copiar-token.copiado { background: #2E8B57; }
+html.tema-night .btn-copiar-token { background: var(--boton-nuevo-noche); color: var(--texto); }
+html.tema-night .btn-copiar-token.copiado { background: #2E8B57; color: white; }
+
+/* Lista de tokens */
+.clave-api-subtitulo {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--texto-suave);
+  font-weight: 600;
+  margin: 18px 0 8px;
+}
+.clave-api-lista-tokens {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.clave-api-vacio {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--texto-suave);
+  font-size: 13px;
+  background: var(--crema-oscuro);
+  border: 1px dashed var(--borde);
+  border-radius: 12px;
+  margin: 0;
+}
+
+.token-card {
+  background: var(--crema-oscuro);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 12px 14px;
+  transition: border-color 0.15s;
+}
+.token-card:hover { border-color: var(--acento); }
+html.tema-night .token-card {
+  background: var(--hover-noche, #1B1E29);
+  border-color: var(--borde-noche, #2A2E40);
+}
+html.tema-night .token-card:hover { border-color: var(--chat-activo-noche-borde); }
+
+.token-card-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.token-card-nombre {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--texto);
+  word-break: break-word;
+}
+.btn-revocar-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: none;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  color: var(--texto-suave);
+  font-family: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.btn-revocar-token:hover {
+  background: #C0392B;
+  color: white;
+  border-color: #C0392B;
+}
+html.tema-night .btn-revocar-token:hover {
+  background: #C0392B;
+  color: white;
+  border-color: #C0392B;
+}
+
+.token-card-token {
+  margin-bottom: 10px;
+}
+.token-card-token code {
+  display: inline-block;
+  background: var(--crema);
+  border: 1px solid var(--borde);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--texto-suave);
+  letter-spacing: 0.3px;
+  user-select: all;
+}
+html.tema-night .token-card-token code {
+  background: var(--fondo-noche, #14161F);
+  color: var(--texto-suave);
+}
+
+.token-card-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+.token-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.token-stat-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--texto-suave);
+  font-weight: 500;
+}
+.token-stat-valor {
+  font-size: 12.5px;
+  color: var(--texto);
+  font-weight: 500;
+}
+.token-stat-barra {
+  height: 4px;
+  background: var(--borde);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.token-stat-barra > div {
+  height: 100%;
+  background: var(--acento);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+html.tema-night .token-stat-barra { background: var(--fondo-noche, #14161F); }
+html.tema-night .token-stat-barra > div { background: var(--chat-activo-noche-borde); }
+
+/* Documentacion colapsable */
+.clave-api-doc {
+  margin-top: 20px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--crema-oscuro);
+  overflow: hidden;
+}
+html.tema-night .clave-api-doc {
+  background: var(--hover-noche, #1B1E29);
+  border-color: var(--borde-noche, #2A2E40);
+}
+.clave-api-doc summary {
+  padding: 12px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--texto);
+  user-select: none;
+  list-style: none;
+  position: relative;
+  padding-right: 36px;
+}
+.clave-api-doc summary::-webkit-details-marker { display: none; }
+.clave-api-doc summary::after {
+  content: '';
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--texto-suave);
+  border-bottom: 2px solid var(--texto-suave);
+  transform: translateY(-75%) rotate(45deg);
+  transition: transform 0.2s;
+}
+.clave-api-doc[open] summary::after {
+  transform: translateY(-25%) rotate(-135deg);
+}
+.clave-api-doc-cuerpo {
+  padding: 0 14px 14px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--texto-suave);
+}
+.clave-api-doc-cuerpo p { margin: 8px 0; }
+.clave-api-doc-cuerpo ul { margin: 8px 0; padding-left: 20px; }
+.clave-api-doc-cuerpo li { margin: 4px 0; }
+.clave-api-doc-cuerpo code {
+  background: var(--crema);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  color: var(--acento);
+  font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+html.tema-night .clave-api-doc-cuerpo code {
+  background: var(--fondo-noche, #14161F);
+  color: var(--chat-activo-noche-borde);
+}
+.clave-api-doc-cuerpo pre {
+  background: var(--crema);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+html.tema-night .clave-api-doc-cuerpo pre {
+  background: var(--fondo-noche, #14161F);
+  border-color: var(--borde-noche, #2A2E40);
+}
+.clave-api-doc-cuerpo pre code {
+  background: none;
+  padding: 0;
+  color: var(--texto);
+}
+
+@media (max-width: 640px) {
+  .token-card-stats { grid-template-columns: 1fr; }
+  .clave-api-acciones { flex-direction: column; }
+  .clave-api-input-nombre { min-width: 0; }
+}
+
 @media (max-width: 640px) {
   .settings-tarjeta { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: min(560px, 92vh); }
   .settings-sidebar { flex-direction: row; border-right: none; border-bottom: 1px solid var(--borde); padding: 12px; }
   .settings-sidebar h2 { display: none; }
+  .badge-prox { font-size: 9px; padding: 1px 5px; }
 }
 
 /* ---------- Buscador de chats ---------- */

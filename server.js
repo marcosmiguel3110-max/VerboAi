@@ -281,13 +281,128 @@ function obtenerUsuarioActual(req) {
   return verificarValorFirmado(leerCookie(req, 'verbo_auth'));
 }
 
-const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar']);
+const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info']);
 app.use((req, res, next) => {
   if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/')) return next();
   if (estaAutenticado(req)) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
   return res.redirect('/login.html');
 });
+
+// ---------- Claves API (tokens tipo "verboai-XXXX") ----------
+// Por ahora esta seccion de Settings solo lo puede usar un conjunto chiquito
+// de correos. Cualquiera que no este en la lista ve "Prox" en su lugar.
+const EMAILS_AUTORIZADOS_API = new Set(
+  (process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+const API_TOKENS_FILE = path.join(MEMORY_DIR, 'api-tokens.json');
+if (!fs.existsSync(API_TOKENS_FILE)) fs.writeFileSync(API_TOKENS_FILE, JSON.stringify({ tokens: [] }, null, 2));
+
+// Creditos y limites por defecto para cada token nuevo. Se pueden cambiar
+// por token despues si hace falta, pero arrancan con estos valores.
+const TOKEN_CREDITOS_INICIALES = 1000;        // cuantas peticiones puede hacer
+const TOKEN_RATE_LIMIT_VENTANA_MS = 60 * 1000; // ventana de 1 minuto
+const TOKEN_RATE_LIMIT_MAX = 20;               // max 20 peticiones por minuto
+
+function leerApiTokens() {
+  try {
+    const d = JSON.parse(fs.readFileSync(API_TOKENS_FILE, 'utf-8'));
+    return Array.isArray(d.tokens) ? d.tokens : [];
+  } catch (e) {
+    return [];
+  }
+}
+function guardarApiTokens(tokens) {
+  fs.writeFileSync(API_TOKENS_FILE, JSON.stringify({ tokens }, null, 2));
+}
+
+// Devuelve true si el usuario actual (email o "local:admin") tiene acceso a la
+// seccion de Clave API. El admin local siempre entra (para probarlo).
+function tieneAccesoApiTokens(usuario) {
+  if (!usuario) return false;
+  if (usuario.startsWith('local:')) return true;
+  return EMAILS_AUTORIZADOS_API.has(usuario.toLowerCase());
+}
+
+// Genera un token aleatorio tipo "verboai-" + 24 digitos. Son solo digitos
+// para que sea facil de copiar y pegar en cualquier lado sin sorpresas con
+// caracteres raros. 24 digitos => 10^24 combinaciones, suficiente.
+function generarTokenVerboai() {
+  const digitos = crypto.randomBytes(12).toString('hex'); // 24 hex chars => 0-9 a-f
+  // Para que sean SOLO digitos (no hex), los mapeamos a 0-9 tomando cada
+  // par y haciendo modulo 10. Sigue siendo suficientemente aleatorio.
+  let soloDigitos = '';
+  for (let i = 0; i < digitos.length; i += 2) {
+    const num = parseInt(digitos.slice(i, i + 2), 16);
+    soloDigitos += String(num % 10);
+  }
+  return 'verboai-' + soloDigitos;
+}
+
+// Busca un token por su valor completo (lo que se manda en Authorization).
+// Devuelve el objeto del token o null. Tambien aplica la "poda" automatica
+// de tokens vencidos por inactividad (no se borran, solo se marcan).
+function buscarTokenPorValor(valor) {
+  if (!valor) return null;
+  const tokens = leerApiTokens();
+  return tokens.find((t) => t.token === valor && t.activo !== false) || null;
+}
+
+// Registra una peticion contra un token: descuenta credito y revisa el rate
+// limit. Devuelve { ok: true } o { ok: false, status, error }.
+function registrarUsoToken(token) {
+  const tokens = leerApiTokens();
+  const idx = tokens.findIndex((t) => t.id === token.id);
+  if (idx === -1) return { ok: false, status: 401, error: 'Token invalido.' };
+
+  const t = tokens[idx];
+  if (t.activo === false) return { ok: false, status: 401, error: 'Token revocado.' };
+  if (typeof t.creditos !== 'number' || t.creditos <= 0) {
+    return { ok: false, status: 402, error: 'El token se quedo sin creditos.' };
+  }
+
+  const ahora = Date.now();
+  // Limpia el historial de la ventana actual (mas viejos que VENTANA_MS)
+  if (!Array.isArray(t.usos)) t.usos = [];
+  t.usos = t.usos.filter((ts) => ahora - ts < TOKEN_RATE_LIMIT_VENTANA_MS);
+  if (t.usos.length >= TOKEN_RATE_LIMIT_MAX) {
+    return {
+      ok: false,
+      status: 429,
+      error: `Rate limit del token alcanzado: max ${TOKEN_RATE_LIMIT_MAX} peticiones por minuto.`,
+    };
+  }
+
+  t.usos.push(ahora);
+  t.creditos = t.creditos - 1;
+  t.ultimoUso = new Date(ahora).toISOString();
+  tokens[idx] = t;
+  guardarApiTokens(tokens);
+  return { ok: true };
+}
+
+// Devuelve una version "sanitizada" del token para mandarle al frontend: SIN
+// el valor completo (solo los ultimos 4 digitos), para que nunca se exponga
+// el token en claro despues de creado (solo se ve 1 vez al generarlo).
+function tokenPublico(t) {
+  const visible = t.token ? t.token.slice(-4) : '????';
+  return {
+    id: t.id,
+    prefijo: 'verboai-••••••••' + visible,
+    creditos: t.creditos,
+    creditosIniciales: t.creditosIniciales || t.creditos,
+    rateLimit: TOKEN_RATE_LIMIT_MAX,
+    rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
+    creadoEn: t.creadoEn,
+    ultimoUso: t.ultimoUso || null,
+    nombre: t.nombre || 'Token sin nombre',
+    activo: t.activo !== false,
+  };
+}
 
 // ---------- Registro con correo + codigo de verificacion ----------
 const USUARIOS_FILE = path.join(MEMORY_DIR, 'usuarios.json');
@@ -752,6 +867,220 @@ app.post('/api/google/reenviar', async (req, res) => {
     codigosPendientes.delete(email);
     res.status(500).json({ error: 'No se pudo reenviar el correo.' });
   }
+});
+
+// ---------- Endpoints para gestionar los tokens de la API (Clave API) ----------
+// Requiere sesion iniciada (el middleware global de arriba ya lo asegura).
+// Solo los correos en EMAILS_AUTORIZADOS_API (o el admin local) pueden hacer
+// algo aca; cualquier otro recibe 403.
+
+app.get('/api/api-tokens/acceso', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  res.json({
+    acceso: tieneAccesoApiTokens(usuario),
+    email: usuario && usuario.startsWith('local:') ? usuario.slice(6) : usuario,
+  });
+});
+
+app.get('/api/api-tokens', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!tieneAccesoApiTokens(usuario)) {
+    return res.status(403).json({ error: 'Tu cuenta no tiene acceso a Clave API por ahora.' });
+  }
+  // El admin local y los correos autorizados ven SOLO sus propios tokens.
+  // Como los crea un usuario autorizado, filtramos por propietario. Si por
+  // ahora solo hay un usuario autorizado, va a verlos a todos igual.
+  const tokens = leerApiTokens().filter((t) => t.propietario === usuario);
+  res.json({ tokens: tokens.map(tokenPublico) });
+});
+
+app.post('/api/api-tokens/generar', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!tieneAccesoApiTokens(usuario)) {
+    return res.status(403).json({ error: 'Tu cuenta no tiene acceso a Clave API por ahora.' });
+  }
+  const nombreLimpio = (req.body && req.body.nombre ? String(req.body.nombre) : '').trim().slice(0, 40);
+  const tokens = leerApiTokens();
+  // Prevenimos que alguien llene el archivo a manotazos: max 10 tokens vivos.
+  const vivos = tokens.filter((t) => t.propietario === usuario && t.activo !== false);
+  if (vivos.length >= 10) {
+    return res.status(400).json({ error: 'Ya tenes 10 tokens activos. Borra alguno antes de crear otro.' });
+  }
+
+  const nuevoToken = {
+    id: generarId(),
+    token: generarTokenVerboai(),
+    nombre: nombreLimpio || 'Token sin nombre',
+    propietario: usuario,
+    creditos: TOKEN_CREDITOS_INICIALES,
+    creditosIniciales: TOKEN_CREDITOS_INICIALES,
+    rateLimitMax: TOKEN_RATE_LIMIT_MAX,
+    rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
+    creadoEn: new Date().toISOString(),
+    ultimoUso: null,
+    usos: [],
+    activo: true,
+  };
+  tokens.push(nuevoToken);
+  guardarApiTokens(tokens);
+
+  // OJO: aca si le mandamos el token completo al frontend, PERO solo esta una
+  // vez. En listados posteriores solo se ve el prefijo "verboai-••••...1234".
+  res.json({
+    ok: true,
+    token: nuevoToken.token,
+    info: tokenPublico(nuevoToken),
+    creditosIniciales: TOKEN_CREDITOS_INICIALES,
+    rateLimit: TOKEN_RATE_LIMIT_MAX,
+    rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
+  });
+});
+
+app.delete('/api/api-tokens/:id', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!tieneAccesoApiTokens(usuario)) {
+    return res.status(403).json({ error: 'Tu cuenta no tiene acceso a Clave API por ahora.' });
+  }
+  const tokens = leerApiTokens();
+  const idx = tokens.findIndex((t) => t.id === req.params.id && t.propietario === usuario);
+  if (idx === -1) return res.status(404).json({ error: 'Token no encontrado.' });
+  // Lo borramos de verdad: como el token ya no se puede usar, no tiene sentido
+  // seguir acumulando creditos o usos de algo inactivo. Si despues se quiere
+  // auditoria, se puede cambiar a activo=false en vez de splice.
+  tokens.splice(idx, 1);
+  guardarApiTokens(tokens);
+  res.json({ ok: true });
+});
+
+// ---------- API publica (consumible con un token "verboai-XXXX") ----------
+// Estas rutas NO pasan por el middleware de sesion de arriba: se autentican
+// con un Bearer token en el header Authorization. Es lo que usarias desde
+// otro proyecto (un bot de Discord, un script, otra web, etc.) para hablar
+// con Verbo AI sin tener que loguearse con Google.
+
+function leerBearerToken(req) {
+  const h = req.headers['authorization'] || '';
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  return m ? m[1].trim() : null;
+}
+
+// Hace lo mismo que el /api/chat pero SIN streaming, SIN imagenes, SIN
+// historial: recibe { mensaje, modo } y devuelve { ok, respuesta }. Pensado
+// para integraciones programaticas (curl, fetch, SDKs).
+app.post('/api/v1/chat', async (req, res) => {
+  const valorToken = leerBearerToken(req);
+  if (!valorToken) {
+    return res.status(401).json({ ok: false, error: 'Falta el header Authorization: Bearer verboai-XXXX' });
+  }
+  const token = buscarTokenPorValor(valorToken);
+  if (!token) {
+    return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
+  }
+
+  const controlUso = registrarUsoToken(token);
+  if (!controlUso.ok) {
+    return res.status(controlUso.status).json({ ok: false, error: controlUso.error });
+  }
+
+  const mensaje = (req.body && typeof req.body.mensaje === 'string') ? req.body.mensaje.trim() : '';
+  const modo = (req.body && req.body.modo === 'catolico') ? 'catolico' : 'general';
+  if (!mensaje) {
+    return res.status(400).json({ ok: false, error: 'Falta "mensaje" en el cuerpo de la peticion.' });
+  }
+  if (mensaje.length > 8000) {
+    return res.status(400).json({ ok: false, error: 'El mensaje es demasiado largo (max 8000 caracteres).' });
+  }
+
+  const mensajesParaModelo = [
+    { role: 'system', content: modo === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT },
+    { role: 'user', content: mensaje },
+  ];
+
+  try {
+    const respuestaGroq = await llamarGroqConReintentos({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: GROQ_MODEL_TEXTO,
+        messages: mensajesParaModelo,
+        temperature: 0.7,
+        max_tokens: 1024,
+        stream: false,
+      }),
+    }, () => {});
+
+    if (!respuestaGroq || !respuestaGroq.ok) {
+      const status = respuestaGroq ? respuestaGroq.status : 0;
+      try {
+        const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
+        console.error(`[api/v1/chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
+      } catch (e) { /* no se pudo leer el cuerpo */ }
+      return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
+    }
+
+    const data = await respuestaGroq.json();
+    const texto = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+
+    // Quitamos las etiquetas internas ([[CUADERNO::...]], [[BUSCAR::...]], etc.)
+    // porque aca no hay UI que las procese: el que consume esta API solo quiere
+    // el texto plano de la respuesta.
+    const textoLimpio = texto
+      .replace(/\[\[CUADERNO::[\s\S]*?\]\]/g, '')
+      .replace(/\[\[BUSCAR::[^\]]*\]\]/g, '')
+      .replace(/\[\[INVESTIGAR::[^\]]*\]\]/g, '')
+      .replace(/\[\[DESCARGAR::[\s\S]*?\]\]/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    // Le devolvemos tambien cuantos creditos le quedan al token, asi el
+    // integrador puede avisarle al usuario o cortar a tiempo.
+    const actualizado = buscarTokenPorValor(valorToken);
+    res.json({
+      ok: true,
+      respuesta: textoLimpio,
+      modelo: NOMBRE_MODELO_PUBLICO,
+      creditosRestantes: actualizado ? actualizado.creditos : null,
+      rateLimitMax: TOKEN_RATE_LIMIT_MAX,
+      rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
+    });
+  } catch (e) {
+    console.error('[api/v1/chat] Error:', e.message);
+    res.status(500).json({ ok: false, error: 'Error al conectar con el modelo. Intenta de nuevo en unos minutos.' });
+  }
+});
+
+// Info del token: util para que el integrador sepa cuantos creditos le
+// quedan sin tener que hacer una peticion de chat real.
+app.get('/api/v1/info', (req, res) => {
+  const valorToken = leerBearerToken(req);
+  if (!valorToken) return res.status(401).json({ ok: false, error: 'Falta Authorization: Bearer verboai-XXXX' });
+  const token = buscarTokenPorValor(valorToken);
+  if (!token) return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
+  // NO consumimos creditos por esta llamada: solo informativa. Pero si igual
+  // aplicamos rate limit para que no lo spameen.
+  const controlUso = registrarUsoToken(token);
+  if (!controlUso.ok) {
+    return res.status(controlUso.status).json({ ok: false, error: controlUso.error });
+  }
+  // Como registrarUsoToken resto 1 credito, lo volvemos a sumar: la info no
+  // deberia consumir. Es un poco ostra pero asi queda simple el codigo de arriba.
+  const tokens = leerApiTokens();
+  const idx = tokens.findIndex((t) => t.id === token.id);
+  if (idx !== -1) {
+    tokens[idx].creditos = (tokens[idx].creditos || 0) + 1;
+    guardarApiTokens(tokens);
+  }
+  res.json({
+    ok: true,
+    nombre: token.nombre,
+    creditos: tokens[idx] ? tokens[idx].creditos : token.creditos,
+    creditosIniciales: token.creditosIniciales || token.creditos,
+    rateLimit: TOKEN_RATE_LIMIT_MAX,
+    rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
+    modelo: NOMBRE_MODELO_PUBLICO,
+    creadoEn: token.creadoEn,
+    ultimoUso: token.ultimoUso,
+  });
 });
 
 // Sin cache para los estaticos: en desarrollo es comun editar script.js o

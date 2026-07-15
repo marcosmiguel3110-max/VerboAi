@@ -294,13 +294,235 @@ document.querySelectorAll('.settings-nav-item').forEach((boton) => {
   });
 });
 
-btnAbrirSettings.addEventListener('click', () => overlaySettings.classList.remove('oculto'));
+btnAbrirSettings.addEventListener('click', () => {
+  overlaySettings.classList.remove('oculto');
+  // Cuando abrimos Settings, aprovechamos para refrescar el estado de Clave
+  // API (por si el usuario acaba de entrar con una cuenta distinta).
+  if (!claveApiAccesoVerificado) verificarAccesoClaveApi();
+});
 btnCerrarSettings.addEventListener('click', () => overlaySettings.classList.add('oculto'));
 overlaySettings.addEventListener('click', (ev) => {
   if (ev.target === overlaySettings) overlaySettings.classList.add('oculto');
 });
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && !overlaySettings.classList.contains('oculto')) overlaySettings.classList.add('oculto');
+});
+
+// ---------- Clave API: tokens tipo "verboai-XXXX" ----------
+// Por ahora la seccion solo la ve marcos.miguel.3110@gmail.com (o el admin
+// local). El resto ve el cartel "Prox". El servidor decide quien entra via
+// /api/api-tokens/acceso, asi si mañana se agregan mas correos autorizados
+// no hace falta tocar el frontend.
+let claveApiAccesoVerificado = false;
+let claveApiTieneAcceso = false;
+let claveApiCargandoTokens = false;
+
+const badgeProxClaveApi = document.getElementById('badgeProxClaveApi');
+const claveApiProx = document.getElementById('claveApiProx');
+const claveApiPanel = document.getElementById('claveApiPanel');
+const btnGenerarToken = document.getElementById('btnGenerarToken');
+const claveApiNombreNuevo = document.getElementById('claveApiNombreNuevo');
+const claveApiTokenRecien = document.getElementById('claveApiTokenRecien');
+const claveApiTokenRecienValor = document.getElementById('claveApiTokenRecienValor');
+const btnCopiarTokenRecien = document.getElementById('btnCopiarTokenRecien');
+const claveApiListaTokens = document.getElementById('claveApiListaTokens');
+
+async function verificarAccesoClaveApi() {
+  try {
+    const r = await fetch('/api/api-tokens/acceso');
+    if (!r.ok) throw new Error('no-auth');
+    const d = await r.json();
+    claveApiAccesoVerificado = true;
+    claveApiTieneAcceso = !!d.acceso;
+    aplicarEstadoClaveApi();
+    if (claveApiTieneAcceso) cargarTokensClaveApi();
+  } catch (e) {
+    // Si ni siquiera podemos preguntar, lo dejamos en "Prox" para no romper.
+    claveApiAccesoVerificado = true;
+    claveApiTieneAcceso = false;
+    aplicarEstadoClaveApi();
+  }
+}
+
+function aplicarEstadoClaveApi() {
+  // El badge "Prox" se oculta cuando el usuario tiene acceso; el panel
+  // principal se oculta cuando no lo tiene.
+  if (claveApiTieneAcceso) {
+    if (badgeProxClaveApi) badgeProxClaveApi.classList.add('oculto');
+    if (claveApiProx) claveApiProx.classList.add('oculto');
+    if (claveApiPanel) claveApiPanel.classList.remove('oculto');
+  } else {
+    if (badgeProxClaveApi) badgeProxClaveApi.classList.remove('oculto');
+    if (claveApiProx) claveApiProx.classList.remove('oculto');
+    if (claveApiPanel) claveApiPanel.classList.add('oculto');
+  }
+}
+
+async function cargarTokensClaveApi() {
+  if (!claveApiTieneAcceso || claveApiCargandoTokens) return;
+  claveApiCargandoTokens = true;
+  try {
+    const r = await fetch('/api/api-tokens');
+    if (!r.ok) {
+      claveApiListaTokens.innerHTML = '<p class="clave-api-vacio">No se pudo cargar la lista de tokens. Probá de nuevo.</p>';
+      return;
+    }
+    const d = await r.json();
+    renderTokensClaveApi(d.tokens || []);
+  } catch (e) {
+    claveApiListaTokens.innerHTML = '<p class="clave-api-vacio">No se pudo cargar la lista de tokens. Probá de nuevo.</p>';
+  } finally {
+    claveApiCargandoTokens = false;
+  }
+}
+
+function formatearFecha(iso) {
+  if (!iso) return '—';
+  try {
+    const f = new Date(iso);
+    return f.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) +
+      ' ' + f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    return iso;
+  }
+}
+
+function renderTokensClaveApi(tokens) {
+  if (!tokens.length) {
+    claveApiListaTokens.innerHTML = '<p class="clave-api-vacio">Todavia no generaste ningun token.</p>';
+    return;
+  }
+  claveApiListaTokens.innerHTML = tokens.map((t) => {
+    const pct = t.creditosIniciales > 0 ? Math.max(0, Math.min(100, Math.round((t.creditos / t.creditosIniciales) * 100))) : 0;
+    return `
+      <div class="token-card" data-id="${t.id}">
+        <div class="token-card-fila">
+          <div class="token-card-nombre">${escapeHtml(t.nombre || 'Token sin nombre')}</div>
+          <button class="btn-revocar-token" data-id="${t.id}" title="Borrar token">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Borrar
+          </button>
+        </div>
+        <div class="token-card-token"><code>${escapeHtml(t.prefijo)}</code></div>
+        <div class="token-card-stats">
+          <div class="token-stat">
+            <span class="token-stat-label">Creditos</span>
+            <span class="token-stat-valor">${t.creditos} / ${t.creditosIniciales}</span>
+            <div class="token-stat-barra"><div style="width:${pct}%"></div></div>
+          </div>
+          <div class="token-stat">
+            <span class="token-stat-label">Rate limit</span>
+            <span class="token-stat-valor">${t.rateLimit} / min</span>
+          </div>
+          <div class="token-stat">
+            <span class="token-stat-label">Creado</span>
+            <span class="token-stat-valor">${formatearFecha(t.creadoEn)}</span>
+          </div>
+          <div class="token-stat">
+            <span class="token-stat-label">Ultimo uso</span>
+            <span class="token-stat-valor">${formatearFecha(t.ultimoUso)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Botones de borrar
+  claveApiListaTokens.querySelectorAll('.btn-revocar-token').forEach((b) => {
+    b.addEventListener('click', () => revocarTokenClaveApi(b.dataset.id));
+  });
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function generarTokenClaveApi() {
+  const nombre = (claveApiNombreNuevo.value || '').trim();
+  btnGenerarToken.disabled = true;
+  btnGenerarToken.classList.add('cargando');
+  try {
+    const r = await fetch('/api/api-tokens/generar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre }),
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      alert(d.error || 'No se pudo generar el token.');
+      return;
+    }
+    // Mostramos el token UNA vez en claro
+    claveApiTokenRecienValor.textContent = d.token;
+    claveApiTokenRecien.classList.remove('oculto');
+    if (claveApiNombreNuevo) claveApiNombreNuevo.value = '';
+    // Refrescamos la lista para que aparezca el nuevo (con prefijo oculto)
+    await cargarTokensClaveApi();
+  } catch (e) {
+    alert('No se pudo generar el token. Probá de nuevo.');
+  } finally {
+    btnGenerarToken.disabled = false;
+    btnGenerarToken.classList.remove('cargando');
+  }
+}
+
+async function revocarTokenClaveApi(id) {
+  if (!id) return;
+  if (!confirm('Borrar este token? Cualquier integracion que lo use va a dejar de andar de inmediato.')) return;
+  try {
+    const r = await fetch('/api/api-tokens/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      alert(d.error || 'No se pudo borrar el token.');
+      return;
+    }
+    await cargarTokensClaveApi();
+  } catch (e) {
+    alert('No se pudo borrar el token. Probá de nuevo.');
+  }
+}
+
+async function copiarAlPortapapeles(texto) {
+  try {
+    await navigator.clipboard.writeText(texto);
+    return true;
+  } catch (e) {
+    // Fallback para navegadores sin clipboard API (http en lugar de https)
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = texto;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch (e2) {
+      return false;
+    }
+  }
+}
+
+if (btnGenerarToken) btnGenerarToken.addEventListener('click', generarTokenClaveApi);
+if (btnCopiarTokenRecien) btnCopiarTokenRecien.addEventListener('click', async () => {
+  const texto = claveApiTokenRecienValor.textContent || '';
+  const ok = await copiarAlPortapapeles(texto);
+  if (ok) {
+    btnCopiarTokenRecien.classList.add('copiado');
+    btnCopiarTokenRecien.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg> Copiado';
+    setTimeout(() => {
+      btnCopiarTokenRecien.classList.remove('copiado');
+      btnCopiarTokenRecien.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copiar';
+    }, 1800);
+  } else {
+    alert('No se pudo copiar. Copialo a mano: ' + texto);
+  }
 });
 
 // ---------- Fondo (tema claro/oscuro), se guarda en localStorage ----------
@@ -1343,6 +1565,10 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
       if (elAvatar) elAvatar.textContent = nombre.trim().charAt(0) || '?';
     })
     .catch(() => {});
+
+  // Verifica si el usuario actual tiene acceso a la seccion "Clave API".
+  // Es no-bloqueante: si tarda o falla, el resto de la app sigue igual.
+  verificarAccesoClaveApi();
 
   let chats = [];
   try {
