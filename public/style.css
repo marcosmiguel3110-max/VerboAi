@@ -1232,14 +1232,6 @@ html.tema-night .btn-cuaderno-toggle:hover { background: var(--hover-noche); }
   background: white;
   border: 1px solid var(--borde);
   border-radius: 14px;
-  transition: margin 0.2s ease;
-}
-
-/* Cuando el selector de modelo esta abierto, empujamos el input hacia arriba
-   para que el menu no tape los mensajes recientes. El valor cubre el alto
-   del menu (aprox 180px con dos opciones). */
-.entrada.selector-abierto {
-  margin-bottom: 200px;
 }
 
 #inputTexto {
@@ -1303,8 +1295,8 @@ html.tema-night .btn-enviar:hover { background: var(--boton-nuevo-noche-hover); 
   height: 36px;
   padding: 0 10px 0 12px;
   border-radius: 10px;
-  border: 1px solid var(--borde);
-  background: var(--crema-oscuro);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--texto);
   font-family: inherit;
   font-size: 13px;
@@ -1314,25 +1306,23 @@ html.tema-night .btn-enviar:hover { background: var(--boton-nuevo-noche-hover); 
   white-space: nowrap;
 }
 .btn-selector-modelo:hover {
-  background: var(--acento-suave);
-  border-color: var(--acento);
+  background: transparent;
   color: var(--acento);
 }
 .btn-selector-modelo.abierto {
-  background: var(--acento-suave);
-  border-color: var(--acento);
+  background: transparent;
   color: var(--acento);
 }
 
 html.tema-night .btn-selector-modelo {
-  background: var(--hover-noche);
-  border-color: var(--borde-noche, #2A2E40);
+  background: transparent;
+  border-color: transparent;
   color: var(--texto);
 }
 html.tema-night .btn-selector-modelo:hover,
 html.tema-night .btn-selector-modelo.abierto {
-  background: var(--chat-activo-noche-fondo);
-  border-color: var(--chat-activo-noche-borde);
+  background: transparent;
+  border-color: transparent;
   color: var(--chat-activo-noche-borde);
 }
 

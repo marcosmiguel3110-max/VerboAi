@@ -73,8 +73,8 @@ let modoActual = localStorage.getItem('verboAiModo') || 'general';
 let modeloActual = localStorage.getItem('verboAiModelo') || 'NewserLite';
 let modelosDisponibles = [
   // Default hardcodeado por si /api/config tarda o falla: la UI sigue andando.
-  { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20 },
-  { nombre: 'NewserAvanced', descripcion: 'Mas potente. Razonamiento mas profundo, respuestas mas ricas.', costoCreditos: 5, rateLimitMax: 10 },
+  { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20, rateLimitMaxWeb: 30 },
+  { nombre: 'NewserAvanced', descripcion: 'Mas potente (gpt-oss-120b). Razonamiento profundo, respuestas mas ricas. Rate limit mas estricto.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8 },
 ];
 let hayCuaderno = false;
 let chatIdActual = localStorage.getItem('verboAiChatId') || null;
@@ -536,13 +536,12 @@ if (btnCopiarTokenRecien) btnCopiarTokenRecien.addEventListener('click', async (
 
 // ---------- Selector de modelo (NewserLite / NewserAvanced) ----------
 // Boton "Nombre + flecha" que va al lado del microfono en el input del chat.
-// Al click lo abre, la flecha rota (apunta arriba), el form se empuja hacia
-// abajo para que el menu no tape los mensajes, y se muestran las opciones
-// con su costo en creditos. La seleccion se persiste en localStorage.
+// Al click lo abre, la flecha rota (apunta arriba) y se muestran las opciones
+// con su costo en creditos. La seleccion se persiste en localStorage y tambien
+// actualiza el subtitulo del header ("Modelo: XXX").
 const btnSelectorModelo = document.getElementById('btnSelectorModelo');
 const selectorModeloMenu = document.getElementById('selectorModeloMenu');
 const selectorModeloNombre = document.getElementById('selectorModeloNombre');
-const formChat = document.getElementById('formChat');
 
 function renderOpcionesModelo() {
   if (!selectorModeloMenu) return;
@@ -585,6 +584,10 @@ function renderOpcionesModelo() {
 
 function aplicarModeloUI() {
   if (selectorModeloNombre) selectorModeloNombre.textContent = modeloActual;
+  // Tambien actualizamos el subtitulo del header ("Modelo: XXX") para que
+  // refleje el modelo elegido en el selector.
+  const headerSub = document.getElementById('chatHeaderSub');
+  if (headerSub) headerSub.textContent = 'Modelo: ' + modeloActual;
   if (selectorModeloMenu) {
     selectorModeloMenu.querySelectorAll('.opcion-modelo').forEach((op) => {
       const activa = op.dataset.modelo === modeloActual;
@@ -599,7 +602,6 @@ function abrirSelectorModelo() {
   selectorModeloMenu.classList.remove('oculto');
   btnSelectorModelo.classList.add('abierto');
   btnSelectorModelo.setAttribute('aria-expanded', 'true');
-  if (formChat) formChat.classList.add('selector-abierto');
   aplicarModeloUI();
 }
 
@@ -608,7 +610,6 @@ function cerrarSelectorModelo() {
   selectorModeloMenu.classList.add('oculto');
   btnSelectorModelo.classList.remove('abierto');
   btnSelectorModelo.setAttribute('aria-expanded', 'false');
-  if (formChat) formChat.classList.remove('selector-abierto');
 }
 
 function toggleSelectorModelo() {

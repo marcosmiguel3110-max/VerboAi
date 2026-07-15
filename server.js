@@ -39,8 +39,15 @@ const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 // lo que ve el usuario en el selector del chat y lo que se puede forzar desde
 // la API mandando { "modelo": "NewserAvanced" } en el body.
 //
-// NewserLite  -> rapido, 1 credito/pedido, 20 req/min (default)
-// NewserAvanced -> modelo mas grande/potente, 5 creditos/pedido, 10 req/min
+// IMPORTANTE: la WEB no consume creditos del token. Solo el endpoint
+// /api/v1/chat (el que se usa con Bearer token desde afuera) descuenta
+// creditos. El rate limit de aca aplica a AMBOS (web y API): la web lo
+// aplicamos en /api/chat usando un contador en memoria por usuario+modelo, y
+// la API lo aplicamos en /api/v1/chat usando el historial de usos del token.
+//
+// NewserLite    -> openai/gpt-oss-20b, 1 credito, 20 req/min (API), 30 req/min (web)
+// NewserAvanced -> openai/gpt-oss-120b, 5 creditos, 5 req/min (API), 8 req/min (web)
+//                  (mas estricto porque el modelo es mas pesado)
 const MODELOS_DISPONIBLES = {
   NewserLite: {
     nombre: 'NewserLite',
@@ -48,19 +55,20 @@ const MODELOS_DISPONIBLES = {
     modeloTexto: GROQ_MODEL_TEXTO,
     modeloVision: GROQ_MODEL_VISION,
     costoCreditos: 1,
-    rateLimitMax: 20,
+    rateLimitMax: 20,            // API: por token
+    rateLimitMaxWeb: 30,         // Web: por usuario (no consume creditos)
     maxTokens: 1024,
   },
   NewserAvanced: {
     nombre: 'NewserAvanced',
-    descripcion: 'Mas potente. Razonamiento mas profundo, respuestas mas ricas.',
-    // Para el modo "avanzado" usamos un modelo de texto mas capaz si esta
-    // configurado en .env; si no, cae al mismo de Lite (asi no rompe si el
-    // entorno no tiene la clave nueva).
-    modeloTexto: process.env.GROQ_MODEL_AVANCED || 'meta-llama/llama-4-scout-17b-16e-instruct',
+    descripcion: 'Mas potente (gpt-oss-120b). Razonamiento profundo, respuestas mas ricas. Rate limit mas estricto.',
+    // Modelo avanzado real: gpt-oss-120b (mucho mas grande que el 20b de Lite).
+    // Se puede sobreescribir con GROQ_MODEL_AVANCED en .env si hace falta.
+    modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
     modeloVision: GROQ_MODEL_VISION,
     costoCreditos: 5,
-    rateLimitMax: 10,
+    rateLimitMax: 5,             // API: mas estricto (5/min en vez de 10)
+    rateLimitMaxWeb: 8,          // Web: mas estricto (8/min en vez de 30)
     maxTokens: 2048,
   },
 };
@@ -79,6 +87,38 @@ function resolverModelo(valor) {
     (k) => k.toLowerCase() === limpio.toLowerCase()
   );
   return MODELOS_DISPONIBLES[clave || MODELO_DEFAULT];
+}
+
+// ---------- Rate limit para la WEB (no consume creditos) ----------
+// Como /api/chat no toca los creditos del token (eso solo lo hace /api/v1/chat),
+// necesitamos un rate limit separado para que alguien desde la web no abuse de
+// NewserAvanced mandando 100 mensajes por minuto. Lo hacemos en memoria, por
+// usuario + modelo, con una ventana deslizante de 60s (igual que el de la API).
+//
+// Es un Map clave -> [timestamps]. Se limpia solo cuando se consulta.
+const RATE_LIMIT_WEB = new Map(); // clave "usuario|modelo" -> [timestamps]
+const RATE_LIMIT_WEB_VENTANA_MS = 60 * 1000;
+
+// Devuelve { ok: true } o { ok: false, status, error, reintentarEnSeg }.
+function verificarRateLimitWeb(usuario, configModelo) {
+  if (!usuario) return { ok: true };
+  const clave = `${usuario}|${configModelo.nombre}`;
+  const ahora = Date.now();
+  let usos = RATE_LIMIT_WEB.get(clave) || [];
+  usos = usos.filter((ts) => ahora - ts < RATE_LIMIT_WEB_VENTANA_MS);
+  if (usos.length >= configModelo.rateLimitMaxWeb) {
+    const masViejo = Math.min(...usos);
+    const reintentarEnSeg = Math.ceil((RATE_LIMIT_WEB_VENTANA_MS - (ahora - masViejo)) / 1000);
+    return {
+      ok: false,
+      status: 429,
+      error: `Estas mandando mensajes muy rapido para ${configModelo.nombre}. Espera ${reintentarEnSeg}s o cambiá a NewserLite.`,
+      reintentarEnSeg,
+    };
+  }
+  usos.push(ahora);
+  RATE_LIMIT_WEB.set(clave, usos);
+  return { ok: true };
 }
 
 // Las consultas reales (Wikipedia, busqueda biblica) a veces tardan menos de
@@ -1101,9 +1141,15 @@ app.post('/api/v1/chat', async (req, res) => {
   // cosa rara (numero, objeto, nombre inexistente). Asi nunca rompe.
   const configModelo = resolverModelo(req.body.modelo);
 
-  // Registramos el uso CON el costo y rate limit que corresponden al modelo
-  // elegido. Si el token no tiene creditos suficientes (NewserAvanced pide 5)
-  // o se paso del rate limit, aca se corta y devolvemos el error.
+  // Registramos el uso CON el costo BASE del modelo y su rate limit. Si el
+  // token no tiene creditos suficientes (NewserAvanced pide 5) o se paso del
+  // rate limit, aca se corta y devolvemos el error.
+  // 
+  // OJO: el costo final puede ser mayor si la respuesta dispara herramientas
+  // (IMAGEN +1, WEB +1, CLIMA +0). Ese extra se cobra DESPUES, cuando ya
+  // sabemos si la herramienta se activo o no. Si el token se queda sin
+  // creditos en ese momento, igual devolvemos la respuesta de texto (no la
+  // penalizamos) pero no se ejecuta la herramienta.
   const controlUso = registrarUsoToken(token, {
     costo: configModelo.costoCreditos,
     rateLimitMax: configModelo.rateLimitMax,
@@ -1112,8 +1158,15 @@ app.post('/api/v1/chat', async (req, res) => {
     return res.status(controlUso.status).json({ ok: false, error: controlUso.error });
   }
 
+  // Construimos el system prompt segun modo + modelo. NewserAvanced recibe
+  // el bloque extra con las 3 herramientas exclusivas (IMAGEN, WEB, CLIMA).
+  let systemPrompt = modo === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT;
+  if (configModelo.nombre === 'NewserAvanced') {
+    systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
+  }
+
   const mensajesParaModelo = [
-    { role: 'system', content: modo === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT },
+    { role: 'system', content: systemPrompt },
     { role: 'user', content: mensaje },
   ];
 
@@ -1142,10 +1195,29 @@ app.post('/api/v1/chat', async (req, res) => {
     const data = await respuestaGroq.json();
     const texto = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
 
-    // Quitamos las etiquetas internas ([[CUADERNO::...]], [[BUSCAR::...]], etc.)
-    // porque aca no hay UI que las procese: el que consume esta API solo quiere
-    // el texto plano de la respuesta.
-    const textoLimpio = texto
+    // Detectar las 3 etiquetas exclusivas de NewserAvanced. Si alguna aparece,
+    // ejecutamos la herramienta correspondiente y la quitamos del texto plano.
+    // IMAGEN y WEB consumen +1 credito cada una; CLIMA no consume.
+    let imagenQueryApi = null;
+    let webSearchQueryApi = null;
+    let climaQueryApi = null;
+    let textoLimpio = texto;
+
+    const reImagenApi = /\[\[IMAGEN::([^\]]+)\]\]/g;
+    const mImg = [...texto.matchAll(reImagenApi)];
+    if (mImg.length) { imagenQueryApi = mImg[0][1].trim(); textoLimpio = textoLimpio.replace(reImagenApi, ''); }
+
+    const reWebApi = /\[\[WEB::([^\]]+)\]\]/g;
+    const mWeb = [...texto.matchAll(reWebApi)];
+    if (mWeb.length) { webSearchQueryApi = mWeb[0][1].trim(); textoLimpio = textoLimpio.replace(reWebApi, ''); }
+
+    const reClimaApi = /\[\[CLIMA::([^\]]+)\]\]/g;
+    const mClima = [...texto.matchAll(reClimaApi)];
+    if (mClima.length) { climaQueryApi = mClima[0][1].trim(); textoLimpio = textoLimpio.replace(reClimaApi, ''); }
+
+    // Quitamos tambien las etiquetas originales (CUADERNO, BUSCAR, etc.) porque
+    // aca no hay UI que las procese: el que consume esta API solo quiere texto.
+    textoLimpio = textoLimpio
       .replace(/\[\[CUADERNO::[\s\S]*?\]\]/g, '')
       .replace(/\[\[BUSCAR::[^\]]*\]\]/g, '')
       .replace(/\[\[INVESTIGAR::[^\]]*\]\]/g, '')
@@ -1153,18 +1225,113 @@ app.post('/api/v1/chat', async (req, res) => {
       .replace(/\n{3,}/g, '\n\n')
       .trim();
 
+    // Calcular costo adicional por herramientas usadas (solo si el modelo es
+    // NewserAvanced, porque las etiquetas solo aparecen ahi).
+    let costoExtra = 0;
+    const herramientasUsadas = [];
+    if (configModelo.nombre === 'NewserAvanced') {
+      if (imagenQueryApi) { costoExtra += 1; herramientasUsadas.push({ herramienta: 'imagen', query: imagenQueryApi, costo: 1 }); }
+      if (webSearchQueryApi) { costoExtra += 1; herramientasUsadas.push({ herramienta: 'web', query: webSearchQueryApi, costo: 1 }); }
+      if (climaQueryApi) { herramientasUsadas.push({ herramienta: 'clima', query: climaQueryApi, costo: 0 }); }
+    }
+    const costoTotal = configModelo.costoCreditos + costoExtra;
+
+    // Si hay costo extra, lo descontamos AHORA del token. Si no le alcanza,
+    // le devolvemos la respuesta de texto igual (no la penalizamos por algo
+    // que el modelo decidio hacer) pero no ejecutamos las herramientas y le
+    // avisamos en el JSON.
+    let herramientasResultado = [];
+    let herramientasOmitidas = false;
+    if (costoExtra > 0) {
+      const tokenActualizado = buscarTokenPorValor(valorToken);
+      if (tokenActualizado && tokenActualizado.creditos >= costoExtra) {
+        // Descontar el extra
+        const tokens = leerApiTokens();
+        const idx = tokens.findIndex((t) => t.id === tokenActualizado.id);
+        if (idx !== -1) {
+          tokens[idx].creditos = (tokens[idx].creditos || 0) - costoExtra;
+          guardarApiTokens(tokens);
+        }
+      } else {
+        // No le alcanza para las herramientas: las omitimos pero devolvemos
+        // la respuesta de texto (ya cobrada al inicio).
+        herramientasOmitidas = true;
+        imagenQueryApi = null;
+        webSearchQueryApi = null;
+        climaQueryApi = null;
+      }
+    }
+
+    // Ejecutar IMAGEN (pollinations.ai)
+    if (imagenQueryApi) {
+      const img = await generarImagenPollinations(imagenQueryApi);
+      if (img) {
+        herramientasResultado.push({
+          herramienta: 'imagen',
+          prompt: img.prompt,
+          url: img.url,
+          tamanoKB: img.tamanoKB,
+        });
+        textoLimpio = `${textoLimpio}\n\n[Imagen generada: ${img.url}]`.trim();
+      } else {
+        herramientasResultado.push({ herramienta: 'imagen', error: 'No se pudo generar la imagen.' });
+      }
+    }
+
+    // Ejecutar WEB (Google Custom Search)
+    if (webSearchQueryApi) {
+      const resultado = await buscarWebGoogle(webSearchQueryApi);
+      if (resultado.exito) {
+        herramientasResultado.push({
+          herramienta: 'web',
+          query: webSearchQueryApi,
+          cseUsado: resultado.cseUsado,
+          resultados: resultado.resultados,
+        });
+        // Agregamos un resumen al texto de la respuesta
+        const textoResultados = '\n\nResultados de la web:\n' +
+          resultado.resultados.map((r, i) => `${i + 1}. ${r.titulo} — ${r.resumen} (${r.link})`).join('\n');
+        textoLimpio = `${textoLimpio}${textoResultados}`;
+      } else {
+        herramientasResultado.push({ herramienta: 'web', error: resultado.error || 'No se pudo buscar en la web.' });
+      }
+    }
+
+    // Ejecutar CLIMA (open-meteo, no consume creditos extra)
+    if (climaQueryApi) {
+      const clima = await consultarClimaOpenMeteo(climaQueryApi);
+      if (clima) {
+        herramientasResultado.push({
+          herramienta: 'clima',
+          lugar: clima.lugar,
+          temperatura: clima.temperatura,
+          sensacion: clima.sensacion,
+          humedad: clima.humedad,
+          viento: clima.viento,
+          descripcion: clima.descripcion,
+        });
+        textoLimpio = `${textoLimpio}\n\n${clima.textoResumen}`;
+      } else {
+        herramientasResultado.push({ herramienta: 'clima', error: 'No se pudo consultar el clima.' });
+      }
+    }
+
     // Le devolvemos tambien cuantos creditos le quedan al token, asi el
     // integrador puede avisarle al usuario o cortar a tiempo. Mandamos el
-    // modelo que efectivamente se uso (por si cayo al default) y el costo
-    // que cobramos, para que el cliente pueda mostrarlo.
+    // modelo que efectivamente se uso (por si cayo al default), el costo
+    // total (base + extra por herramientas) y el detalle de cada herramienta.
     const actualizado = buscarTokenPorValor(valorToken);
     res.json({
       ok: true,
       respuesta: textoLimpio,
       modelo: configModelo.nombre,
       modeloUsado: configModelo.nombre,
-      costoCreditos: configModelo.costoCreditos,
-      creditosRestantes: actualizado ? actualizado.creditos : (controlUso.creditosRestantes != null ? controlUso.creditosRestantes : null),
+      costoCreditos: costoTotal,
+      costoBase: configModelo.costoCreditos,
+      costoExtraHerramientas: costoExtra,
+      herramientas: herramientasResultado,
+      herramientasOmitidas,
+      creditosRestantes: actualizado ? actualizado.creditos : null,
       rateLimitMax: configModelo.rateLimitMax,
       rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
     });
@@ -1319,6 +1486,48 @@ Reglas que nunca cambian pase lo que pase:
   un pasaje de la Biblia.
 - Nunca escribas un link de imagen (formato ![texto](url)) ni inventes una URL de imagen o de descarga: para
   eso siempre usa la etiqueta BUSCAR como se explico arriba.`;
+
+// Prompt adicional que se agrega SOLO cuando el modelo activo es NewserAvanced.
+// Define las 3 herramientas exclusivas de ese modelo: generar imagenes,
+// buscar en la web (Google) y consultar el clima (open-meteo).
+const SYSTEM_PROMPT_AVANCED_EXTRA = `
+
+HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserAvanced):
+Ademas de CUADERNO, BUSCAR, DESCARGAR e INVESTIGAR, en este modelo tenes 3 herramientas mas. Se activan
+igual que las otras: con una etiqueta al FINAL de tu respuesta, en su propia linea, sin explicarla ni
+mencionarla al usuario.
+
+HERRAMIENTA "IMAGEN" (para GENERAR una imagen nueva a partir de un texto, NO para buscar una existente):
+Cuando el usuario te pida CREAR, GENERAR, DIBUJAR o HACER una imagen (no buscar una foto real, para eso
+usas BUSCAR), agregas al FINAL de tu respuesta, en su propia linea, EXACTAMENTE este formato:
+[[IMAGEN::descripcion detallada en ingles de la imagen a generar, 3 a 15 palabras]]
+Ejemplo: si el usuario dice "genera una imagen de un leon descansando", tu respuesta es algo como:
+"Dale, aca va:"
+[[IMAGEN::a majestic lion resting under a tree, golden hour, photorealistic]]
+Esa etiqueta dispara la generacion real de una imagen con IA y se la muestra al usuario. NUNCA inventes
+una URL tu mismo ni digas que no podes generar imagenes — vos SI podes, el sistema lo hace por vos. Usala
+SOLO cuando el usuario pida explicitamente generar/crear/dibujar, no en cada respuesta.
+
+HERRAMIENTA "WEB" (para buscar informacion actualizada en internet, mas alla de Wikipedia):
+Cuando necesites datos actuales (noticias, precios, eventos recientes, datos que cambian con el tiempo)
+que probablemente no esten en Wikipedia, o cuando el usuario te pida buscar en internet/web/google,
+agregas al FINAL de tu respuesta, en su propia linea, EXACTAMENTE este formato:
+[[WEB::consulta de busqueda corta, 2 a 6 palabras]]
+Ejemplo: "que paso hoy en el mundial" -> tu respuesta breve + [[WEB::resultados mundial hoy]]
+Esto dispara una busqueda REAL en Google Custom Search y los resultados se agregan despues de tu respuesta.
+No la uses para cosas que ya sabes o que cubre INVESTIGAR (Wikipedia/Biblia). Usala con moderacion.
+
+HERRAMIENTA "CLIMA" (para consultar el clima ACTUAL de un lugar):
+Cuando el usuario te pregunte por el clima, temperatura, si va a llover, etc. de un lugar especifico,
+agregas al FINAL de tu respuesta, en su propia linea, EXACTAMENTE este formato:
+[[CLIMA::nombre del lugar]]
+Ejemplo: "como esta el clima en Madrid?" -> tu respuesta breve + [[CLIMA::Madrid]]
+Esto consulta la API de open-meteo y agrega el resultado real (temperatura, sensacion, humedad, viento)
+despues de tu respuesta. NUNCA inventes datos del clima tu mismo — si te preguntan, usas esta herramienta.
+
+Estas etiquetas [[IMAGEN::...]], [[WEB::...]] y [[CLIMA::...]] son invisibles para el usuario, se procesan
+aparte por el sistema. Nunca las menciones ni las escribas a la mitad del texto. Puedes combinar varias
+herramientas en la misma respuesta, cada una en su propia linea al final.`;
 
 // Modo "Catolicismo": mismo prompt base + un bloque que cambia el enfoque
 // hacia la fe y doctrina catolica. OJO: el LECTOR de la Biblia sigue usando
@@ -1677,6 +1886,217 @@ async function descargarImagenAlDisco(item) {
   }
 }
 
+// ---------- Herramientas exclusivas de NewserAvanced ----------
+// Estas 3 herramientas solo estan disponibles cuando el modelo activo es
+// NewserAvanced. NewserLite no las ofrece. Cada una tiene un costo adicional
+// en creditos cuando se usan desde la API (Bearer token):
+//
+//   IMAGEN  (pollinations.ai)        -> +1 credito (encima del costo del modelo)
+//   WEB     (Google Custom Search)    -> +1 credito (rotacion de 5 CSE IDs)
+//   CLIMA   (open-meteo.com)          -> +0 creditos (gratis, no consume)
+//
+// En la WEB no se descuentan creditos (la web nunca consume creditos, solo
+// aplica el rate limit por usuario+modelo). El "costo extra" solo aplica al
+// endpoint /api/v1/chat.
+
+// 5 IDs de motor de busqueda personalizado (CSE) de Google, 100 peticiones/dia
+// cada uno = 500 peticiones diarias combinadas. Si un ID devuelve 429 (limite
+// excedido), el sistema rota automaticamente al siguiente (igual que el codigo
+// Python de referencia).
+const GOOGLE_CSE_IDS = [
+  '007f53248834f4524',
+  'd34a2db0057db4ff1',
+  '26ed6febd4ad444db',
+  '1165ecc789ae54cb4',
+  'a1c500707cbdc41a9',
+];
+const GOOGLE_CSE_API_KEY = process.env.GOOGLE_CSE_API_KEY || '';
+
+// Busca informacion en la web usando Google Custom Search. Tolerante a
+// fallos: si un CSE ID agota su cuota diaria (HTTP 429), rota automaticamente
+// al siguiente ID de la lista. Devuelve { exito, cseUsado, resultados } o
+// { exito: false, error } si todos fallan.
+async function buscarWebGoogle(query) {
+  if (!GOOGLE_CSE_API_KEY) {
+    return { exito: false, error: 'Falta GOOGLE_CSE_API_KEY en el .env del servidor.' };
+  }
+  const maxIntentos = GOOGLE_CSE_IDS.length;
+  let ultimoError = null;
+
+  for (let intento = 0; intento < maxIntentos; intento++) {
+    const cseIdActual = GOOGLE_CSE_IDS[intento];
+    const params = new URLSearchParams({
+      key: GOOGLE_CSE_API_KEY,
+      cx: cseIdActual,
+      q: query,
+      num: '5',
+    });
+    try {
+      const resp = await fetch(`https://www.googleapis.com/customsearch/v1?${params.toString()}`, {
+        headers: { 'User-Agent': 'VerboAI/1.0' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (resp.status === 429) {
+        console.warn(`[web-search] CSE '${cseIdActual}' alcanzo su limite diario (429). Rotando al siguiente...`);
+        ultimoError = 'HTTP 429 - Limite de cuota excedido';
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
+      if (!resp.ok) {
+        ultimoError = `HTTP ${resp.status}`;
+        continue;
+      }
+      const datos = await resp.json();
+      const items = Array.isArray(datos.items) ? datos.items : [];
+      const resultados = items.map((item) => ({
+        titulo: item.title || '',
+        link: item.link || '',
+        resumen: item.snippet || '',
+      }));
+      return { exito: true, cseUsado: cseIdActual, resultados };
+    } catch (e) {
+      ultimoError = e.message;
+      continue;
+    }
+  }
+  return { exito: false, error: ultimoError || 'Todos los CSE IDs fallaron.' };
+}
+
+// Genera una imagen con pollinations.ai. La URL misma es la "generadora":
+// pollinations devuelve la imagen ya renderizada al hacer GET a esa URL.
+// Lo que hacemos aca es descargar los bytes reales, guardarlos a disco (como
+// con DESCARGAR) y devolver un link local que el usuario puede ver y guardar.
+//
+// Parametros:
+//   prompt  -> texto descriptivo de la imagen (se URL-encodea)
+//   seed    -> semilla opcional para reproducibilidad (si no viene, se
+//              genera una aleatoria asi cada pedido da algo distinto)
+async function generarImagenPollinations(prompt, seed) {
+  try {
+    const promptLimpio = (prompt || '').trim().slice(0, 200);
+    if (!promptLimpio) return null;
+    const seedFinal = (typeof seed === 'number' && seed > 0) ? seed : Math.floor(Math.random() * 1000000);
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?width=1024&height=1024&seed=${seedFinal}&nologo=true`;
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'VerboAI/1.0', 'Accept': 'image/*' },
+      signal: AbortSignal.timeout(60000), // pollinations a veces tarda
+    });
+    if (!resp.ok) return null;
+    const mime = resp.headers.get('content-type') || 'image/jpeg';
+    if (!mime.startsWith('image/')) return null;
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    if (!buffer || buffer.length < 1000) return null; // descartar respuestas vacias
+    const urlLocal = guardarImagenDisco(buffer, mime);
+    return {
+      url: urlLocal,
+      prompt: promptLimpio,
+      seed: seedFinal,
+      tamanoKB: Math.round(buffer.length / 1024),
+    };
+  } catch (e) {
+    console.error('[pollinations] Error generando imagen:', e.message);
+    return null;
+  }
+}
+
+// Consulta el clima actual de una ubicacion usando open-meteo.com (API
+// gratuita, sin clave, sin limite serio). NO consume creditos.
+//
+// Recibe { lat, lon, nombre } o un string con el nombre del lugar (en cuyo
+// caso primero geocodifica con la API de open-meteo). Devuelve un resumen
+// textual corto para que la IA lo integre en su respuesta.
+async function consultarClimaOpenMeteo(consulta) {
+  try {
+    const q = (consulta || '').trim();
+    if (!q) return null;
+
+    // 1. Geocodificar: nombre del lugar -> lat, lon
+    const geoParams = new URLSearchParams({
+      name: q,
+      count: '1',
+      language: 'es',
+      format: 'json',
+    });
+    const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${geoParams.toString()}`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!geoResp.ok) return null;
+    const geoData = await geoResp.json();
+    const lugar = geoData.results && geoData.results[0];
+    if (!lugar) return null;
+
+    // 2. Clima actual: lat, lon -> temperatura, viento, etc.
+    const climaParams = new URLSearchParams({
+      latitude: String(lugar.latitude),
+      longitude: String(lugar.longitude),
+      current: 'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m',
+      timezone: 'auto',
+    });
+    const climaResp = await fetch(`https://api.open-meteo.com/v1/forecast?${climaParams.toString()}`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!climaResp.ok) return null;
+    const climaData = await climaResp.json();
+    const c = climaData.current;
+    if (!c) return null;
+
+    // Traducir el weather_code (WMO) a texto en español
+    const descripcion = describirCodigoClima(c.weather_code);
+
+    return {
+      lugar: lugar.name + (lugar.country ? ', ' + lugar.country : ''),
+      lat: lugar.latitude,
+      lon: lugar.longitude,
+      temperatura: c.temperature_2m,
+      sensacion: c.apparent_temperature,
+      humedad: c.relative_humidity_2m,
+      viento: c.wind_speed_10m,
+      codigo: c.weather_code,
+      descripcion,
+      textoResumen: `Clima actual en ${lugar.name}${lugar.country ? ', ' + lugar.country : ''}: ${c.temperature_2m}°C (sensación ${c.apparent_temperature}°C), ${descripcion}, humedad ${c.relative_humidity_2m}%, viento ${c.wind_speed_10m} km/h.`,
+    };
+  } catch (e) {
+    console.error('[open-meteo] Error:', e.message);
+    return null;
+  }
+}
+
+// Traduce el codigo de tiempo WMO usado por open-meteo a una descripcion
+// corta en español. Tabla oficial: https://open-meteo.com/en/docs (weather_code).
+function describirCodigoClima(code) {
+  const mapa = {
+    0: 'despejado',
+    1: 'mayormente despejado',
+    2: 'parcialmente nublado',
+    3: 'nublado',
+    45: 'niebla',
+    48: 'niebla con escarcha',
+    51: 'llovizna ligera',
+    53: 'llovizna moderada',
+    55: 'llovizna intensa',
+    56: 'llovizna helada ligera',
+    57: 'llovizna helada intensa',
+    61: 'lluvia ligera',
+    63: 'lluvia moderada',
+    65: 'lluvia intensa',
+    66: 'lluvia helada ligera',
+    67: 'lluvia helada intensa',
+    71: 'nieve ligera',
+    73: 'nieve moderada',
+    75: 'nieve intensa',
+    77: 'granos de nieve',
+    80: 'chubascos ligeros',
+    81: 'chubascos moderados',
+    82: 'chubascos violentos',
+    85: 'chubascos de nieve ligeros',
+    86: 'chubascos de nieve intensos',
+    95: 'tormenta',
+    96: 'tormenta con granizo ligero',
+    99: 'tormenta con granizo intenso',
+  };
+  return mapa[code] || 'condiciones desconocidas';
+}
+
 // ---------- Lista de conversaciones guardadas (para el historial de chats) ----------
 app.get('/api/chats', (req, res) => {
   const db = leerDB();
@@ -1744,6 +2164,7 @@ app.get('/api/config', (req, res) => {
     descripcion: m.descripcion,
     costoCreditos: m.costoCreditos,
     rateLimitMax: m.rateLimitMax,
+    rateLimitMaxWeb: m.rateLimitMaxWeb,
   }));
   res.json({
     modelo: MODELO_DEFAULT,
@@ -1883,6 +2304,16 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     return res.status(400).json({ error: 'Falta el mensaje o al menos una imagen.' });
   }
 
+  // Rate limit de la WEB (no consume creditos del token, solo limita frecuencia
+  // por usuario + modelo). Si se pasa, le devolvemos un error en JSON que el
+  // frontend muestra como mensaje normal. Esto evita que alguien desde la web
+  // ametralle NewserAvanced (que es mas pesado para el proveedor).
+  const usuarioActualRateLimit = obtenerUsuarioActual(req);
+  const controlRateWeb = verificarRateLimitWeb(usuarioActualRateLimit, configModelo);
+  if (!controlRateWeb.ok) {
+    return res.status(controlRateWeb.status).json({ error: controlRateWeb.error });
+  }
+
   // A partir de aqui respondemos en streaming NDJSON (una linea JSON por evento).
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
@@ -1955,8 +2386,16 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       contenidoUsuario = mensajeParaModelo;
     }
 
+    // Construimos el system prompt segun el modo (general/catolico) y el
+    // modelo (Lite/Avanced). NewserAvanced recibe un bloque extra con las 3
+    // herramientas exclusivas (IMAGEN, WEB, CLIMA).
+    let systemPrompt = modoElegido === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT;
+    if (configModelo.nombre === 'NewserAvanced') {
+      systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
+    }
+
     const mensajesParaModelo = [
-      { role: 'system', content: modoElegido === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       ...construirHistorialParaModelo(historial),
       { role: 'user', content: contenidoUsuario },
     ];
@@ -1994,7 +2433,11 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let textoCompleto = '';
     let emitido = 0;
 
-    const MARCADORES = ['[[CUADERNO::', '[[BUSCAR::', '[[INVESTIGAR::', '[[DESCARGAR::'];
+    // Marcadores que cortan el stream: incluye los 4 originales + los 3 nuevos
+    // exclusivos de NewserAvanced. Para NewserLite los nuevos nunca van a
+    // aparecer en la respuesta (no estan en el prompt), asi que es seguro
+    // agregarlos aca siempre.
+    const MARCADORES = ['[[CUADERNO::', '[[BUSCAR::', '[[INVESTIGAR::', '[[DESCARGAR::', '[[IMAGEN::', '[[WEB::', '[[CLIMA::'];
     function calcularCorte(buffer) {
       let corte = buffer.length;
       for (const m of MARCADORES) {
@@ -2056,6 +2499,10 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let investigarQuery = null;
     let descargaQuery = null;
     let descargaCantidad = 1;
+    // Nuevas etiquetas exclusivas de NewserAvanced:
+    let imagenQuery = null;        // [[IMAGEN::prompt en ingles]]
+    let webSearchQuery = null;     // [[WEB::consulta google]]
+    let climaQuery = null;         // [[CLIMA::nombre del lugar]]
 
     const reCuadernoG = /\[\[CUADERNO::(.+?)::([\s\S]*?)\]\]/g;
     const coincidenciasCuaderno = [...textoVisible.matchAll(reCuadernoG)];
@@ -2091,6 +2538,31 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       textoVisible = textoVisible.replace(reDescargarG, '');
     }
 
+    // ---- Nuevas etiquetas exclusivas de NewserAvanced ----
+    // IMAGEN: genera una imagen con pollinations.ai
+    const reImagenG = /\[\[IMAGEN::([^\]]+)\]\]/g;
+    const coincidenciasImagen = [...textoVisible.matchAll(reImagenG)];
+    if (coincidenciasImagen.length) {
+      imagenQuery = coincidenciasImagen[0][1].trim();
+      textoVisible = textoVisible.replace(reImagenG, '');
+    }
+
+    // WEB: busca en Google Custom Search (con rotacion de 5 CSE IDs)
+    const reWebG = /\[\[WEB::([^\]]+)\]\]/g;
+    const coincidenciasWeb = [...textoVisible.matchAll(reWebG)];
+    if (coincidenciasWeb.length) {
+      webSearchQuery = coincidenciasWeb[0][1].trim();
+      textoVisible = textoVisible.replace(reWebG, '');
+    }
+
+    // CLIMA: consulta open-meteo (no consume creditos extra)
+    const reClimaG = /\[\[CLIMA::([^\]]+)\]\]/g;
+    const coincidenciasClima = [...textoVisible.matchAll(reClimaG)];
+    if (coincidenciasClima.length) {
+      climaQuery = coincidenciasClima[0][1].trim();
+      textoVisible = textoVisible.replace(reClimaG, '');
+    }
+
     // Red de seguridad: a veces el modelo entiende el pedido pero se olvida
     // de escribir la directiva [[DESCARGAR::...]] (mas comun en modelos de
     // texto chicos). Si el mensaje del usuario tiene intencion clara de
@@ -2117,7 +2589,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     // Si quedo texto sin emitir (fuera de las directivas), lo mandamos ahora
     if (emitido < textoCompleto.length) {
       let restante = textoCompleto.slice(emitido);
-      restante = restante.replace(reCuadernoG, '').replace(reBuscarG, '').replace(reInvestigarG, '').replace(reDescargarG, '').trim();
+      restante = restante.replace(reCuadernoG, '').replace(reBuscarG, '').replace(reInvestigarG, '').replace(reDescargarG, '').replace(reImagenG, '').replace(reWebG, '').replace(reClimaG, '').trim();
       if (restante) enviar({ type: 'chunk', text: restante });
     }
 
@@ -2188,6 +2660,62 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       } else {
         enviar({ type: 'chunk', text: '\n\nNo pude encontrar ni descargar ninguna imagen para eso, perdon.' });
         textoVisible = `${textoVisible}\n\nNo pude encontrar ni descargar ninguna imagen para eso, perdon.`.trim();
+      }
+    }
+
+    // ---- IMAGEN (NewserAvanced): genera con pollinations.ai ----
+    if (imagenQuery) {
+      enviar({ type: 'investigando', query: `Generando imagen: ${imagenQuery}` });
+      enviar({ type: 'investigando_sitio', sitio: 'image.pollinations.ai' });
+      const img = await esperarMinimo(generarImagenPollinations(imagenQuery), 2000);
+      enviar({ type: 'investigando_fin' });
+      if (img) {
+        // Reusamos el mismo evento 'descargas' que ya sabe renderizar el frontend
+        // (muestra la imagen + link de descarga). Asi no hay que tocar el JS.
+        enviar({ type: 'descargas', items: [{ url: img.url, nombre: img.prompt, tamanoKB: img.tamanoKB }] });
+      } else {
+        enviar({ type: 'chunk', text: '\n\nNo pude generar la imagen en este momento, perdon. Probá de nuevo en un rato.' });
+        textoVisible = `${textoVisible}\n\nNo pude generar la imagen en este momento, perdon.`.trim();
+      }
+    }
+
+    // ---- WEB (NewserAvanced): busca en Google Custom Search ----
+    if (webSearchQuery) {
+      enviar({ type: 'investigando', query: `Buscando en la web: ${webSearchQuery}` });
+      enviar({ type: 'investigando_sitio', sitio: 'Google Custom Search' });
+      const resultado = await esperarMinimo(buscarWebGoogle(webSearchQuery), 1500);
+      enviar({ type: 'investigando_fin' });
+
+      if (resultado.exito && resultado.resultados.length) {
+        // Sintetizamos los resultados y los mandamos como chunk + fuentes
+        const fuentesWeb = resultado.resultados.map((r) => ({ titulo: r.titulo, url: r.link }));
+        const textoResultados = '\n\n**Resultados de la web:**\n' +
+          resultado.resultados.map((r, i) => `${i + 1}. **${r.titulo}** — ${r.resumen}`).join('\n');
+        enviar({ type: 'chunk', text: textoResultados });
+        enviar({ type: 'fuentes', items: fuentesWeb });
+        textoVisible = `${textoVisible}${textoResultados}`.trim();
+      } else {
+        const aviso = `\n\nNo encontre resultados en la web para "${webSearchQuery}" en este momento. (${resultado.error || ''})`.trim();
+        enviar({ type: 'chunk', text: aviso });
+        textoVisible = `${textoVisible}${aviso}`.trim();
+      }
+    }
+
+    // ---- CLIMA (NewserAvanced): consulta open-meteo (no consume creditos extra) ----
+    if (climaQuery) {
+      enviar({ type: 'investigando', query: `Consultando clima: ${climaQuery}` });
+      enviar({ type: 'investigando_sitio', sitio: 'open-meteo.com' });
+      const clima = await esperarMinimo(consultarClimaOpenMeteo(climaQuery), 1500);
+      enviar({ type: 'investigando_fin' });
+
+      if (clima) {
+        const textoClima = `\n\n${clima.textoResumen}`;
+        enviar({ type: 'chunk', text: textoClima });
+        textoVisible = `${textoVisible}${textoClima}`.trim();
+      } else {
+        const aviso = `\n\nNo pude consultar el clima de "${climaQuery}" en este momento.`;
+        enviar({ type: 'chunk', text: aviso });
+        textoVisible = `${textoVisible}${aviso}`.trim();
       }
     }
 
