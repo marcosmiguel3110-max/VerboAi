@@ -4,39 +4,6 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Verbo AI - Documentación API</title>
-<meta name="description" content="Documentación de la API de Verbo AI. Aprende a conectar tu app, bot o script con tokens verboai-XXXX. Modelos NewserLite y NewserAdvanced. Generación de imágenes, búsqueda web, clima." />
-<meta name="author" content="VerboAITeams" />
-<meta name="robots" content="index, follow" />
-<link rel="icon" type="image/png" href="/logo.png" />
-
-<meta property="og:title" content="Verbo AI - Documentación API" />
-<meta property="og:description" content="Cómo usar la API de Verbo AI: chat, imágenes, web, clima." />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://verboai.duckdns.org/info" />
-<meta property="og:image" content="https://verboai.duckdns.org/logo.png" />
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "Verbo AI",
-  "applicationCategory": "ChatApplication",
-  "operatingSystem": "Web",
-  "developer": {
-    "@type": "Organization",
-    "name": "VerboAITeams"
-  },
-  "description": "Asistente conversacional con IA que incluye generación de imágenes, búsqueda web y consulta de clima. API pública con tokens verboai-XXXX.",
-  "url": "https://verboai.duckdns.org",
-  "offers": {
-    "@type": "Offer",
-    "price": "0",
-    "priceCurrency": "USD",
-    "description": "Free tier con 1000 créditos por cuenta"
-  }
-}
-</script>
-
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -57,7 +24,6 @@
   }
   header h1 { font-size: 32px; margin-bottom: 8px; }
   header p { opacity: 0.9; font-size: 15px; }
-  header .dev { font-size: 13px; opacity: 0.8; margin-top: 8px; }
   section {
     background: #1a1f2e;
     border: 1px solid #2a3041;
@@ -120,8 +86,8 @@
   .badge-blue { background: #1f6feb; color: white; }
   .badge-green { background: #2E8B57; color: white; }
   .badge-orange { background: #C9663A; color: white; }
-  .badge-gray { background: #6c757d; color: white; font-style: italic; }
 
+  /* Tester interactivo */
   .tester {
     background: #1a1f2e;
     border: 1px solid #2a3041;
@@ -185,10 +151,6 @@
   }
   @media (max-width: 768px) {
     .grid-2 { grid-template-columns: 1fr; }
-    body { padding: 10px; }
-    section, .tester { padding: 16px; }
-    h2 { font-size: 18px; }
-    header h1 { font-size: 24px; }
   }
   details {
     background: #0f1419;
@@ -217,10 +179,8 @@
     padding: 14px;
     text-align: center;
   }
-  .info-card .item .num { font-size: 20px; font-weight: 700; color: #C9663A; }
+  .info-card .item .num { font-size: 24px; font-weight: 700; color: #C9663A; }
   .info-card .item .label { font-size: 12px; color: #b0b0b0; margin-top: 4px; }
-  .info-card .item.bloqueado { opacity: 0.6; }
-  .info-card .item.bloqueado .num { color: #6c757d; }
   footer {
     text-align: center;
     padding: 20px;
@@ -229,14 +189,6 @@
   }
   a { color: #C9663A; text-decoration: none; }
   a:hover { text-decoration: underline; }
-  .quickstart {
-    background: #0f1419;
-    border-left: 3px solid #C9663A;
-    padding: 16px 20px;
-    border-radius: 0 8px 8px 0;
-    margin: 16px 0;
-  }
-  .quickstart strong { color: #C9663A; }
 </style>
 </head>
 <body>
@@ -245,47 +197,20 @@
   <header>
     <h1>Verbo AI — Documentación API</h1>
     <p>Conectá tu app, bot o script a Verbo AI usando un token <code style="background:rgba(255,255,255,0.2);color:white">verboai-XXXX</code></p>
-    <p class="dev">Desarrollado por <strong>VerboAITeams</strong></p>
   </header>
-
-  <section>
-    <h2>¿Qué es Verbo AI?</h2>
-    <p>Verbo AI es un asistente conversacional con IA que incluye:</p>
-    <ul>
-      <li><strong>Chat con IA</strong> — dos modelos: NewserLite (rápido) y NewserAdvanced (potente)</li>
-      <li><strong>Generación de imágenes</strong> — escribí "Generame [descripción]" como mensaje</li>
-      <li><strong>Búsqueda web</strong> — vía DuckDuckGo (gratis, sin API key)</li>
-      <li><strong>Consulta de clima</strong> — vía wttr.in (gratis, sin API key)</li>
-      <li><strong>API pública</strong> — con tokens <code>verboai-XXXX</code> y créditos globales por cuenta</li>
-    </ul>
-    <p>La API es REST/JSON. No requiere SDK: cualquier lenguaje que pueda hacer HTTP POST puede usarla.</p>
-  </section>
-
-  <section>
-    <h2>Quickstart (3 pasos)</h2>
-    <div class="quickstart">
-      <p><strong>1.</strong> Obtené un token en <a href="/">la app</a> → Settings → Clave API → Generar API token</p>
-      <p><strong>2.</strong> Hacé un POST a <code>/api/v1/chat</code> con tu token en el header <code>Authorization: Bearer</code></p>
-      <p><strong>3.</strong> Recibí la respuesta en JSON. Listo.</p>
-    </div>
-    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
-  -H "Authorization: Bearer verboai-XXXX" \
-  -H "Content-Type: application/json" \
-  -d '{"mensaje":"Hola, quien eres?","modelo":"NewserLite"}'</code></pre>
-  </section>
 
   <div class="tester">
     <h2 style="margin-top:0">🧪 Probar la API en vivo</h2>
-    <p>Pegá tu token y un mensaje. Podés probar generar imágenes escribiendo "Generame [algo]" con NewserAdvanced.</p>
+    <p>Pegá tu token y un mensaje. Podés probar generar imágenes escribiendo "Generame [algo]" con NewserAvanced.</p>
 
     <div class="grid-2">
       <input type="text" id="token" placeholder="verboai-XXXXXXXXXXXX" />
       <select id="modelo">
         <option value="NewserLite">NewserLite (1 crédito, rápido)</option>
-        <option value="NewserAdvanced">NewserAdvanced (5 créditos, potente + imágenes)</option>
+        <option value="NewserAvanced">NewserAvanced (5 créditos, potente + imágenes)</option>
       </select>
     </div>
-    <textarea id="mensaje" rows="2" placeholder="Escribí tu mensaje... (proba: 'Generame un leon' con NewserAdvanced)">Hola, quien eres?</textarea>
+    <textarea id="mensaje" rows="2" placeholder="Escribí tu mensaje acá... (proba: 'Generame un leon descansando' con NewserAvanced)">Hola, quien eres?</textarea>
     <button id="btnProbar">Probar petición</button>
     <button id="btnLimpiar" style="background:#454F6B">Limpiar</button>
 
@@ -301,52 +226,30 @@
   </div>
 
   <section>
-    <h2>Modelos disponibles</h2>
-    <div class="info-card">
-      <div class="item">
-        <div class="num">NewserLite</div>
-        <div class="label">Rápido y liviano<br>1 crédito/pedido<br>20 req/min (API)<br>30 req/min (web)</div>
-      </div>
-      <div class="item">
-        <div class="num">NewserAdvanced <span class="badge badge-green">Beta</span></div>
-        <div class="label">Potente + imágenes + web + clima<br>5 créditos/pedido<br>5 req/min (API)<br>8 req/min (web)</div>
-      </div>
-      <div class="item bloqueado">
-        <div class="num">NewserPro <span class="badge badge-gray">Pronto</span></div>
-        <div class="label">Modelo profesional<br>(no disponible aún)</div>
-      </div>
-    </div>
-    <p>Si mandás un <code>"modelo"</code> inválido o vacío, cae automáticamente a NewserLite (no rompe). Si mandás <code>"NewserPro"</code>, también cae a NewserLite porque no está disponible.</p>
-  </section>
-
-  <section>
-    <h2>Créditos</h2>
-    <p>Los créditos son <strong>globales por cuenta</strong>, no por token. Cada cuenta arranca con <strong>1000 créditos</strong>. El admin local tiene créditos ilimitados.</p>
+    <h2>1. Obtener un token</h2>
+    <p>Para usar la API necesitás un token tipo <code>verboai-XXXXXXXXXXXX</code>. Para conseguirlo:</p>
     <ul>
-      <li><strong>NewserLite:</strong> 1 crédito por pedido</li>
-      <li><strong>NewserAdvanced:</strong> 5 créditos por pedido</li>
-      <li><strong>+ Generar imagen:</strong> +1 crédito adicional</li>
-      <li><strong>+ Búsqueda web:</strong> +1 crédito adicional</li>
-      <li><strong>+ Clima:</strong> gratis (no consume créditos)</li>
+      <li>Entrá a <a href="/" target="_blank">la app</a> e iniciá sesión</li>
+      <li>Andá a <strong>Settings → Clave API</strong></li>
+      <li>Hacé clic en <strong>"Generar API token"</strong></li>
+      <li><strong>Copialo AHORA</strong>: solo se muestra una vez, después solo ves los últimos 4 dígitos</li>
     </ul>
-    <p>Podés ver tus créditos y estadísticas de uso en <a href="/">la app</a> → Settings → Créditos.</p>
+    <p>Si no ves la sección "Clave API" en Settings, tu cuenta todavía no tiene acceso (mensaje "Próximamente"). Pedile al admin que te agregue.</p>
   </section>
 
   <section>
-    <h2>Endpoints</h2>
+    <h2>2. Endpoints disponibles</h2>
 
     <h3><code>POST /api/v1/chat</code> <span class="badge badge-blue">principal</span></h3>
     <p>Envía un mensaje y recibe la respuesta. Consume créditos según el modelo.</p>
-    <p><strong>Headers:</strong></p>
-    <ul>
-      <li><code>Authorization: Bearer verboai-XXXX</code> (obligatorio)</li>
-      <li><code>Content-Type: application/json</code></li>
-    </ul>
-    <p><strong>Body:</strong></p>
-    <pre><code>{
-  "mensaje": "Hola, quien eres?",   // obligatorio, string, max 8000 chars
-  "modelo": "NewserLite"            // opcional, default NewserLite
-}</code></pre>
+    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXX" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mensaje": "Hola, quien eres?",
+    "modelo": "NewserLite"
+  }'</code></pre>
+
     <p><strong>Respuesta:</strong></p>
     <pre><code>{
   "ok": true,
@@ -364,41 +267,60 @@
     <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
   https://verboai.duckdns.org/api/v1/info</code></pre>
 
-    <h3><code>GET /api/config</code> <span class="badge badge-orange">público</span></h3>
-    <p>Devuelve la configuración pública de la app (modelos, descripción, desarrollador). No requiere token. Las IAs pueden usarlo para descubrir la API.</p>
-    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl https://verboai.duckdns.org/api/config</code></pre>
+    <h3><code>GET /api/mongo-status</code> <span class="badge badge-orange">admin</span></h3>
+    <p>Verifica el estado de MongoDB (requiere sesión iniciada).</p>
   </section>
 
   <section>
-    <h2>Generar imágenes con IA 🎨</h2>
-    <p>Si el mensaje empieza con <code>Generame</code>, <code>Genera</code>, <code>Dibujame</code>, etc., se genera una imagen con IA automáticamente (sin pasar por el modelo de texto). Solo funciona con <strong>NewserAdvanced</strong>.</p>
+    <h2>3. Modelos disponibles</h2>
+    <div class="info-card">
+      <div class="item">
+        <div class="num">NewserLite</div>
+        <div class="label">Rápido y liviano<br>1 crédito/pedido<br>20 req/min (API)<br>30 req/min (web)</div>
+      </div>
+      <div class="item">
+        <div class="num">NewserAvanced</div>
+        <div class="label">Potente + imágenes<br>5 créditos/pedido<br>5 req/min (API)<br>8 req/min (web)</div>
+      </div>
+    </div>
+    <p>Si mandás un <code>"modelo"</code> inválido o vacío, cae automáticamente a NewserLite (no rompe).</p>
+  </section>
+
+  <section>
+    <h2>4. Generar imágenes con IA 🎨</h2>
+    <p>Si el mensaje empieza con <code>Generame</code>, <code>Genera</code>, <code>Dibujame</code>, etc., se genera una imagen con IA automáticamente (sin pasar por el modelo de texto). Solo funciona con <strong>NewserAvanced</strong>.</p>
     <ul>
-      <li>Consume <strong>+1 crédito</strong> adicional (encima del costo del modelo = 6 total)</li>
+      <li>Consume <strong>+1 crédito</strong> adicional (encima del costo del modelo)</li>
       <li>La imagen se devuelve como URL en el campo <code>imagen.url</code></li>
       <li>La URL es relativa: <code>/uploads/xxxxx.jpg</code> — hay que prependear el dominio</li>
     </ul>
     <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
-  -d '{"mensaje":"Generame un leon descansando","modelo":"NewserAdvanced"}'</code></pre>
+  -d '{
+    "mensaje": "Generame un leon descansando al atardecer",
+    "modelo": "NewserAvanced"
+  }'</code></pre>
     <p><strong>Respuesta:</strong></p>
     <pre><code>{
   "ok": true,
-  "respuesta": "Imagen generada: un leon descansando",
-  "modelo": "NewserAdvanced",
+  "respuesta": "Imagen generada: un leon descansando al atardecer",
+  "modelo": "NewserAvanced",
   "costoCreditos": 6,
+  "costoBase": 5,
+  "costoExtraHerramientas": 1,
   "imagen": {
     "url": "/uploads/1234567890-abcdef.jpg",
-    "prompt": "un leon descansando",
+    "prompt": "un leon descansando al atardecer",
     "tamanoKB": 102
   },
   "creditosRestantes": 994
 }</code></pre>
-    <p>Para descargar la imagen: <code>https://verboai.duckdns.org/uploads/1234567890-abcdef.jpg</code></p>
+    <p>Para descargar la imagen, prependeá el dominio: <code>https://verboai.duckdns.org/uploads/1234567890-abcdef.jpg</code></p>
   </section>
 
   <section>
-    <h2>Código completo para tu app</h2>
+    <h2>5. Código completo para tu app</h2>
     <p>Copiá el que corresponda a tu lenguaje. Reemplazá <code>verboai-XXXX</code> por tu token.</p>
 
     <details open>
@@ -425,7 +347,7 @@ const r = await preguntar("Hola, quien eres?", "NewserLite");
 console.log(r.respuesta, "créditos:", r.creditosRestantes);
 
 // Ejemplo: generar imagen
-const r2 = await preguntar("Generame un leon", "NewserAdvanced");
+const r2 = await preguntar("Generame un leon", "NewserAvanced");
 if (r2.imagen) {
   const url = "https://verboai.duckdns.org" + r2.imagen.url;
   console.log("Imagen:", url);
@@ -456,7 +378,7 @@ r = preguntar("Hola, quien eres?", "NewserLite")
 print(r["respuesta"], "creditos:", r["creditosRestantes"])
 
 # Ejemplo: generar imagen
-r = preguntar("Generame un leon", "NewserAdvanced")
+r = preguntar("Generame un leon", "NewserAvanced")
 if r.get("imagen"):
     print("Imagen:", "https://verboai.duckdns.org" + r["imagen"]["url"])</code></pre>
     </details>
@@ -498,17 +420,17 @@ curl -X POST https://verboai.duckdns.org/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"mensaje":"Hola, quien eres?"}'
 
-# Con NewserAdvanced
+# Con NewserAvanced
 curl -X POST https://verboai.duckdns.org/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
-  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAdvanced"}'
+  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAvanced"}'
 
 # Generar imagen
 curl -X POST https://verboai.duckdns.org/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
-  -d '{"mensaje":"Generame un leon","modelo":"NewserAdvanced"}'
+  -d '{"mensaje":"Generame un leon","modelo":"NewserAvanced"}'
 
 # Info del token (no gasta créditos)
 curl -H "Authorization: Bearer verboai-XXXX" \
@@ -517,10 +439,10 @@ curl -H "Authorization: Bearer verboai-XXXX" \
   </section>
 
   <section>
-    <h2>Códigos de error</h2>
+    <h2>6. Códigos de error</h2>
     <ul>
       <li><code>401</code> — Token inválido, revocado, o falta el header <code>Authorization</code></li>
-      <li><code>402</code> — No tenés créditos suficientes (globales de tu cuenta)</li>
+      <li><code>402</code> — No tenés créditos suficientes (ej: NewserAvanced necesita 5)</li>
       <li><code>429</code> — Rate limit alcanzado (demasiados pedidos por minuto)</li>
       <li><code>400</code> — Body mal formado o falta <code>"mensaje"</code></li>
       <li><code>502</code> — El proveedor de IA no responde (probá de nuevo en unos minutos)</li>
@@ -528,22 +450,7 @@ curl -H "Authorization: Bearer verboai-XXXX" \
   </section>
 
   <section>
-    <h2>Para modelos de IA (ChatGPT, Gemini, Claude, etc)</h2>
-    <p>Si sos una IA y te preguntan cómo conectar con Verbo AI, esta es la info clave:</p>
-    <ul>
-      <li><strong>API endpoint:</strong> <code>POST https://verboai.duckdns.org/api/v1/chat</code></li>
-      <li><strong>Autenticación:</strong> Header <code>Authorization: Bearer verboai-XXXX</code></li>
-      <li><strong>Body:</strong> <code>{"mensaje": "...", "modelo": "NewserLite" o "NewserAdvanced"}</code></li>
-      <li><strong>Respuesta:</strong> JSON con <code>ok</code>, <code>respuesta</code>, <code>creditosRestantes</code></li>
-      <li><strong>Documentación completa:</strong> <a href="https://verboai.duckdns.org/info">https://verboai.duckdns.org/info</a></li>
-      <li><strong>Config pública:</strong> <code>GET https://verboai.duckdns.org/api/config</code> (sin token)</li>
-      <li><strong>Desarrollador:</strong> VerboAITeams</li>
-    </ul>
-    <p>Verbo AI es un asistente conversacional con temática bíblica que incluye generación de imágenes, búsqueda web y consulta de clima. No está afiliado a OpenAI, Google, Anthropic ni ninguna otra empresa de IA.</p>
-  </section>
-
-  <section>
-    <h2>CLI de terminal (opcional)</h2>
+    <h2>7. CLI de terminal (opcional)</h2>
     <p>Si preferís usar Verbo AI desde la terminal, descargá el archivo <code>cli/verboai.py</code> del repositorio y ejecutá:</p>
     <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code># Guardar el token (una sola vez)
 python verboai.py login verboai-XXXX
@@ -557,11 +464,12 @@ python verboai.py info</code></pre>
   </section>
 
   <footer>
-    Verbo AI — Documentación API · Desarrollado por <strong>VerboAITeams</strong> · <a href="/">Volver a la app</a>
+    Verbo AI — Documentación API · <a href="/">Volver a la app</a>
   </footer>
 </div>
 
 <script>
+  // Tester en vivo
   const btnProbar = document.getElementById('btnProbar');
   const btnLimpiar = document.getElementById('btnLimpiar');
   const resultado = document.getElementById('resultado');
@@ -615,15 +523,18 @@ python verboai.py info</code></pre>
       resultado.className = 'tester-result ok';
       resultado.textContent = JSON.stringify(data, null, 2);
 
+      // Info card
       infoCard.style.display = 'grid';
       document.getElementById('rModelo').textContent = data.modeloUsado || '-';
       document.getElementById('rCosto').textContent = data.costoCreditos || '-';
-      document.getElementById('rRestantes').textContent = data.creditosRestantes != null ? (data.creditosRestantes === -1 ? '∞' : data.creditosRestantes) : '-';
+      document.getElementById('rRestantes').textContent = data.creditosRestantes != null ? data.creditosRestantes : '-';
       document.getElementById('rTiempo').textContent = tiempo;
 
+      // Si trajo imagen, mostrarla
       if (data.imagen && data.imagen.url) {
+        const url = data.imagen.url.startsWith('http') ? data.imagen.url : data.imagen.url;
         const img = document.createElement('img');
-        img.src = data.imagen.url;
+        img.src = url;
         img.alt = data.imagen.prompt || 'imagen generada';
         imagenContainer.appendChild(img);
       }
@@ -643,6 +554,7 @@ python verboai.py info</code></pre>
     infoCard.style.display = 'none';
   });
 
+  // Copiar código
   function copiar(btn) {
     const code = btn.parentElement.querySelector('code').textContent;
     navigator.clipboard.writeText(code).then(() => {

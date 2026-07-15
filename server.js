@@ -37,7 +37,7 @@ const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 // Cada "modelo publico" mapea a uno o dos modelos reales de Groq (texto y
 // vision) y define cuanto cuesta en creditos y cual es su rate limit. Esto es
 // lo que ve el usuario en el selector del chat y lo que se puede forzar desde
-// la API mandando { "modelo": "NewserAdvanced" } en el body.
+// la API mandando { "modelo": "NewserAvanced" } en el body.
 //
 // IMPORTANTE: la WEB no consume creditos del token. Solo el endpoint
 // /api/v1/chat (el que se usa con Bearer token desde afuera) descuenta
@@ -46,7 +46,7 @@ const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 // la API lo aplicamos en /api/v1/chat usando el historial de usos del token.
 //
 // NewserLite    -> openai/gpt-oss-20b, 1 credito, 20 req/min (API), 30 req/min (web)
-// NewserAdvanced -> openai/gpt-oss-120b, 5 creditos, 5 req/min (API), 8 req/min (web)
+// NewserAvanced -> openai/gpt-oss-120b, 5 creditos, 5 req/min (API), 8 req/min (web)
 //                  (mas estricto porque el modelo es mas pesado)
 const MODELOS_DISPONIBLES = {
   NewserLite: {
@@ -58,12 +58,10 @@ const MODELOS_DISPONIBLES = {
     rateLimitMax: 20,            // API: por token
     rateLimitMaxWeb: 30,         // Web: por usuario (no consume creditos)
     maxTokens: 1024,
-    badge: null,                 // sin badge
-    disponible: true,            // se puede usar
   },
-  NewserAdvanced: {
-    nombre: 'NewserAdvanced',
-    descripcion: 'Mas potente. Razonamiento profundo, respuestas mas ricas. Rate limit mas estricto. Genera imagenes, busca en la web y consulta el clima.',
+  NewserAvanced: {
+    nombre: 'NewserAvanced',
+    descripcion: 'Mas potente. Razonamiento profundo, respuestas mas ricas. Rate limit mas estricto.',
     // Modelo avanzado real: gpt-oss-120b (mucho mas grande que el 20b de Lite).
     // Se puede sobreescribir con GROQ_MODEL_AVANCED en .env si hace falta.
     modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
@@ -72,48 +70,29 @@ const MODELOS_DISPONIBLES = {
     rateLimitMax: 5,             // API: mas estricto (5/min en vez de 10)
     rateLimitMaxWeb: 8,          // Web: mas estricto (8/min en vez de 30)
     maxTokens: 2048,
-    badge: 'beta',               // etiqueta chiquita "beta"
-    disponible: true,            // se puede usar
-  },
-  NewserPro: {
-    nombre: 'NewserPro',
-    descripcion: 'Pronto. Modelo profesional con capacidades premium.',
-    modeloTexto: null,           // no se puede usar todavia
-    modeloVision: null,
-    costoCreditos: 0,
-    rateLimitMax: 0,
-    rateLimitMaxWeb: 0,
-    maxTokens: 0,
-    badge: 'pronto',             // etiqueta "pronto"
-    disponible: false,           // NO se puede usar ni presionar
   },
 };
 const MODELO_DEFAULT = 'NewserLite';
 
 // Normaliza el nombre de modelo que viene del cliente y devuelve su config.
-// Si viene cualquier cosa (inexistente, vacio, no-string, o un modelo no
-// disponible como NewserPro), cae al default. Esto evita que alguien mande
-// { "modelo": "NewserPro" } o { "modelo": "GPT-4" } y rompa algo: siempre
-// termina en un modelo valido y disponible.
+// Si viene cualquier cosa (inexistente, vacio, no-string), cae al default.
+// Esto evita que alguien mande { "modelo": "GPT-4" } o { "modelo": 123 } y
+// rompa algo: siempre termina en un modelo valido o en NewserLite.
 function resolverModelo(valor) {
   if (typeof valor !== 'string') return MODELOS_DISPONIBLES[MODELO_DEFAULT];
   const limpio = valor.trim();
   if (!limpio) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
-  // Case-insensitive: "newseradvanced", "NEWSERADVANCED", "NewserAdvanced" -> ok
+  // Case-insensitive: "newseravanced", "NEWSERAVANCED", "NewserAvanced" -> ok
   const clave = Object.keys(MODELOS_DISPONIBLES).find(
     (k) => k.toLowerCase() === limpio.toLowerCase()
   );
-  if (!clave) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
-  const config = MODELOS_DISPONIBLES[clave];
-  // Si el modelo existe pero no esta disponible (ej: NewserPro), cae al default
-  if (config.disponible === false) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
-  return config;
+  return MODELOS_DISPONIBLES[clave || MODELO_DEFAULT];
 }
 
 // ---------- Rate limit para la WEB (no consume creditos) ----------
 // Como /api/chat no toca los creditos del token (eso solo lo hace /api/v1/chat),
 // necesitamos un rate limit separado para que alguien desde la web no abuse de
-// NewserAdvanced mandando 100 mensajes por minuto. Lo hacemos en memoria, por
+// NewserAvanced mandando 100 mensajes por minuto. Lo hacemos en memoria, por
 // usuario + modelo, con una ventana deslizante de 60s (igual que el de la API).
 //
 // Es un Map clave -> [timestamps]. Se limpia solo cuando se consulta.
@@ -410,7 +389,7 @@ function obtenerUsuarioActual(req) {
   return verificarValorFirmado(leerCookie(req, 'verbo_auth'));
 }
 
-const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/api/config', '/info.html', '/info', '/robots.txt', '/sitemap.xml', '/ai.txt', '/creditos-bg.png', '/favicon.ico']);
+const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/info.html', '/info']);
 app.use((req, res, next) => {
   // Redireccion /info -> /info.html para que sea mas facil de recordar
   if (req.path === '/info') return res.redirect(301, '/info.html');
@@ -454,12 +433,12 @@ function guardarApiTokens(tokens) {
   guardarEnMongoBackground('api-tokens', valor);
 }
 
-// Devuelve true si el usuario actual tiene acceso a la seccion de Clave API.
-// Ahora es 100% publico para todos los usuarios autenticados (antes estaba
-// restringido a una lista de emails, pero se abrio para todos).
+// Devuelve true si el usuario actual (email o "local:admin") tiene acceso a la
+// seccion de Clave API. El admin local siempre entra (para probarlo).
 function tieneAccesoApiTokens(usuario) {
-  // Cualquier usuario autenticado tiene acceso. Si no hay usuario, no.
-  return !!usuario;
+  if (!usuario) return false;
+  if (usuario.startsWith('local:')) return true;
+  return EMAILS_AUTORIZADOS_API.has(usuario.toLowerCase());
 }
 
 // Genera un token aleatorio tipo "verboai-" + 24 digitos. Son solo digitos
@@ -491,9 +470,9 @@ function buscarTokenPorValor(valor) {
 //
 // Opciones:
 //   - costo (numero, default 1): cuantos creditos consume esta peticion.
-//     NewserAdvanced por ejemplo pasa 5 aca.
+//     NewserAvanced por ejemplo pasa 5 aca.
 //   - rateLimitMax (numero, default TOKEN_RATE_LIMIT_MAX): limite de peticiones
-//     por minuto que aplica a esta llamada. NewserAdvanced pasa 10.
+//     por minuto que aplica a esta llamada. NewserAvanced pasa 10.
 //
 // El rate limit es por-token y por-ventana: contamos cuantas peticiones hizo
 // este token en los ultimos 60s y lo bloqueamos si se pasa. Como el costo y
@@ -650,85 +629,6 @@ function guardarUsuarios(usuarios) {
   // Backup a MongoDB en background
   guardarEnMongoBackground('usuarios', valor);
 }
-
-// ---------- Creditos globales por cuenta + estadisticas ----------
-// Antes los creditos eran por token (cada token tenia sus 1000 creditos).
-// Ahora son GLOBALES por cuenta: el usuario tiene un pozo de creditos que se
-// comparte entre todos sus tokens. Ademas llevamos estadisticas de uso
-// (cuantos creditos gasto en total, cuantos chats, imagenes, busquedas web, etc).
-//
-// Esquema por usuario (en usuarios.json):
-//   usuarios[email] = {
-//     ...datos existentes...,
-//     creditosGlobales: 1000,    // pozo compartido entre todos sus tokens
-//     estadisticas: {
-//       totalGastado: 0,         // creditos consumidos en total
-//       totalChats: 0,           // cantidad de mensajes de chat
-//       totalImagenes: 0,        // imagenes generadas
-//       totalBusquedasWeb: 0,    // busquedas web
-//       totalClima: 0,           // consultas de clima
-//       porModelo: { NewserLite: 0, NewserAdvanced: 0 },
-//       ultimaActividad: "2026-..."
-//     }
-//   }
-const CREDITOS_GLOBALES_INICIALES = 1000;
-
-// Lee los creditos globales del usuario. Si no existen todavia (cuenta vieja
-// o recien creada), los inicializa con CREDITOS_GLOBALES_INICIALES.
-function leerCreditosGlobales(usuario) {
-  if (!usuario) return 0;
-  const usuarios = leerUsuarios();
-  // El usuario local (admin) tiene creditos "infinitos" (numero muy grande)
-  // para que nunca se quede sin poder probar la app.
-  if (usuario.startsWith('local:')) return 999999999;
-  const cuenta = usuarios[usuario];
-  if (!cuenta) return 0;
-  if (typeof cuenta.creditosGlobales !== 'number') {
-    // Inicializar por primera vez
-    cuenta.creditosGlobales = CREDITOS_GLOBALES_INICIALES;
-    if (!cuenta.estadisticas) cuenta.estadisticas = {
-      totalGastado: 0, totalChats: 0, totalImagenes: 0,
-      totalBusquedasWeb: 0, totalClima: 0,
-      porModelo: {}, ultimaActividad: null,
-    };
-    guardarUsuarios(usuarios);
-  }
-  return cuenta.creditosGlobales;
-}
-
-// Descuenta creditos globales del usuario y actualiza estadisticas.
-// Devuelve { ok: true, restantes: N } o { ok: false, error: "..." }.
-// tipo puede ser: 'chat', 'imagen', 'web', 'clima'
-function descontarCreditosGlobales(usuario, cantidad, tipo, modeloNombre) {
-  if (!usuario) return { ok: false, error: 'Sin usuario' };
-  // El usuario local no se le descuenta
-  if (usuario.startsWith('local:')) return { ok: true, restantes: 999999999 };
-  const usuarios = leerUsuarios();
-  const cuenta = usuarios[usuario];
-  if (!cuenta) return { ok: false, error: 'Cuenta no encontrada' };
-  if (typeof cuenta.creditosGlobales !== 'number') cuenta.creditosGlobales = CREDITOS_GLOBALES_INICIALES;
-  if (!cuenta.estadisticas) cuenta.estadisticas = {
-    totalGastado: 0, totalChats: 0, totalImagenes: 0,
-    totalBusquedasWeb: 0, totalClima: 0, porModelo: {}, ultimaActividad: null,
-  };
-  if (cuenta.creditosGlobales < cantidad) {
-    return { ok: false, error: `No te quedan creditos suficientes (necesitas ${cantidad}, te quedan ${cuenta.creditosGlobales}).` };
-  }
-  cuenta.creditosGlobales -= cantidad;
-  cuenta.estadisticas.totalGastado = (cuenta.estadisticas.totalGastado || 0) + cantidad;
-  cuenta.estadisticas.ultimaActividad = new Date().toISOString();
-  if (tipo === 'chat') cuenta.estadisticas.totalChats = (cuenta.estadisticas.totalChats || 0) + 1;
-  if (tipo === 'imagen') cuenta.estadisticas.totalImagenes = (cuenta.estadisticas.totalImagenes || 0) + 1;
-  if (tipo === 'web') cuenta.estadisticas.totalBusquedasWeb = (cuenta.estadisticas.totalBusquedasWeb || 0) + 1;
-  if (tipo === 'clima') cuenta.estadisticas.totalClima = (cuenta.estadisticas.totalClima || 0) + 1;
-  if (modeloNombre) {
-    cuenta.estadisticas.porModelo = cuenta.estadisticas.porModelo || {};
-    cuenta.estadisticas.porModelo[modeloNombre] = (cuenta.estadisticas.porModelo[modeloNombre] || 0) + cantidad;
-  }
-  guardarUsuarios(usuarios);
-  return { ok: true, restantes: cuenta.creditosGlobales };
-}
-
 function hashearClave(clave) {
   const sal = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(clave, sal, 64).toString('hex');
@@ -1284,7 +1184,7 @@ function leerBearerToken(req) {
 // Pensado para integraciones programaticas (curl, fetch, SDKs).
 //
 // El campo "modelo" es opcional y por default es "NewserLite". Si mandas
-// "NewserAdvanced" (o cualquiera de las variantes case-insensitive), se usa el
+// "NewserAvanced" (o cualquiera de las variantes case-insensitive), se usa el
 // modelo avanzado: consume 5 creditos en vez de 1 y tiene rate limit de 10/min
 // en vez de 20/min. Cualquier otro valor cae a NewserLite de forma segura.
 app.post('/api/v1/chat', async (req, res) => {
@@ -1324,7 +1224,7 @@ app.post('/api/v1/chat', async (req, res) => {
   const configModelo = resolverModelo(req.body.modelo);
 
   // Registramos el uso CON el costo BASE del modelo y su rate limit. Si el
-  // token no tiene creditos suficientes (NewserAdvanced pide 5) o se paso del
+  // token no tiene creditos suficientes (NewserAvanced pide 5) o se paso del
   // rate limit, aca se corta y devolvemos el error.
   // 
   // OJO: el costo final puede ser mayor si la respuesta dispara herramientas
@@ -1332,33 +1232,24 @@ app.post('/api/v1/chat', async (req, res) => {
   // sabemos si la herramienta se activo o no. Si el token se queda sin
   // creditos en ese momento, igual devolvemos la respuesta de texto (no la
   // penalizamos) pero no se ejecuta la herramienta.
-  // Rate limit del token (sin costo — los creditos ahora son globales).
-  // Si se pasa del rate limit del modelo, aca se corta.
   const controlUso = registrarUsoToken(token, {
-    costo: 0,  // no descontamos del token, los creditos son globales ahora
+    costo: configModelo.costoCreditos,
     rateLimitMax: configModelo.rateLimitMax,
   });
   if (!controlUso.ok) {
     return res.status(controlUso.status).json({ ok: false, error: controlUso.error });
   }
 
-  // Descontar creditos GLOBALES del dueño del token. Si no le alcanzan,
-  // devolvemos 402. El admin local tiene creditos ilimitados.
-  const controlCreditos = descontarCreditosGlobales(token.propietario, configModelo.costoCreditos, 'chat', configModelo.nombre);
-  if (!controlCreditos.ok) {
-    return res.status(402).json({ ok: false, error: controlCreditos.error });
-  }
-
-  // Construimos el system prompt segun modo + modelo. NewserAdvanced recibe
+  // Construimos el system prompt segun modo + modelo. NewserAvanced recibe
   // el bloque extra con las 3 herramientas exclusivas (IMAGEN, WEB, CLIMA).
   let systemPrompt = modo === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT;
-  if (configModelo.nombre === 'NewserAdvanced') {
+  if (configModelo.nombre === 'NewserAvanced') {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
   }
 
   // Reemplazamos el placeholder __NOMBRE_MODELO__ con el nombre real del
-  // modelo elegido. Asi cuando el usuario tiene NewserAdvanced seleccionado y
-  // le pregunta "quien sos?", la IA responde "Soy NewserAdvanced" (no
+  // modelo elegido. Asi cuando el usuario tiene NewserAvanced seleccionado y
+  // le pregunta "quien sos?", la IA responde "Soy NewserAvanced" (no
   // "NewserLite").
   systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
 
@@ -1370,23 +1261,23 @@ app.post('/api/v1/chat', async (req, res) => {
   // ---- Atajo: "Generame [descripcion]" -> genera imagen directo, sin IA ----
   // Si el mensaje empieza con "Genera", "Generame", "Dibujame", etc., vamos
   // directo a pollinations.ai sin llamar a Groq. Esto consume +1 credito
-  // (encima del costo base del modelo) SOLO si el modelo es NewserAdvanced.
+  // (encima del costo base del modelo) SOLO si el modelo es NewserAvanced.
   // Si es NewserLite, devolvemos un error claro.
   const intencionImagenApi = detectarGeneracionImagen(mensaje);
   if (intencionImagenApi.esGeneracion) {
-    if (configModelo.nombre !== 'NewserAdvanced') {
+    if (configModelo.nombre !== 'NewserAvanced') {
       return res.status(400).json({
         ok: false,
-        error: 'La generacion de imagenes solo esta disponible con NewserAdvanced. Mandá "modelo":"NewserAdvanced" en el body para usarla.',
+        error: 'La generacion de imagenes solo esta disponible con NewserAvanced. Mandá "modelo":"NewserAvanced" en el body para usarla.',
       });
     }
-    // Verificamos creditos globales del dueño del token para el extra (+1)
+    // Verificamos si le alcanzan los creditos para el extra (+1)
+    const tokenActual = buscarTokenPorValor(valorToken);
     const costoTotalGen = configModelo.costoCreditos + 1;
-    const creditosDisponibles = leerCreditosGlobales(token.propietario);
-    if (creditosDisponibles < 1) {
+    if (!tokenActual || tokenActual.creditos < 1) {
       return res.status(402).json({
         ok: false,
-        error: `No te quedan creditos suficientes para generar imagen (necesita +1, te quedan ${creditosDisponibles === 999999999 ? 'ilimitados' : creditosDisponibles}).`,
+        error: `El token no tiene creditos suficientes para generar imagen (necesita +1, le quedan ${tokenActual ? tokenActual.creditos : 0}).`,
       });
     }
     // Generamos la imagen
@@ -1399,9 +1290,16 @@ app.post('/api/v1/chat', async (req, res) => {
       });
     }
     const img = resultado.img;
-    // Descontamos el costo extra (+1) de los creditos GLOBALES del dueño.
-    descontarCreditosGlobales(token.propietario, 1, 'imagen', configModelo.nombre);
-    const creditosRestantes = leerCreditosGlobales(token.propietario);
+    // Descontamos el costo extra (+1) del token. El costo base ya se cobró al
+    // inicio con registrarUsoToken. Si el token se quedó sin creditos aca (por
+    // un race condition), igual devolvemos la imagen pero avisamos.
+    const tokensGen = leerApiTokens();
+    const idxGen = tokensGen.findIndex((t) => t.id === tokenActual.id);
+    if (idxGen !== -1) {
+      tokensGen[idxGen].creditos = Math.max(0, (tokensGen[idxGen].creditos || 0) - 1);
+      guardarApiTokens(tokensGen);
+    }
+    const actualizadoGen = buscarTokenPorValor(valorToken);
     return res.json({
       ok: true,
       respuesta: `Imagen generada: ${intencionImagenApi.prompt}`,
@@ -1421,7 +1319,7 @@ app.post('/api/v1/chat', async (req, res) => {
         prompt: img.prompt,
         tamanoKB: img.tamanoKB,
       },
-      creditosRestantes: token.propietario.startsWith('local:') ? -1 : creditosRestantes,
+      creditosRestantes: actualizadoGen ? actualizadoGen.creditos : null,
       rateLimitMax: configModelo.rateLimitMax,
       rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
     });
@@ -1452,7 +1350,7 @@ app.post('/api/v1/chat', async (req, res) => {
     const data = await respuestaGroq.json();
     const texto = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
 
-    // Detectar las etiquetas exclusivas de NewserAdvanced que la IA puede haber
+    // Detectar las etiquetas exclusivas de NewserAvanced que la IA puede haber
     // escrito: WEB y CLIMA (la etiqueta IMAGEN ya no se usa; las imagenes se
     // generan automaticamente cuando el mensaje empieza con "Genera...").
     // WEB consume +1 credito; CLIMA no consume.
@@ -1528,70 +1426,78 @@ app.post('/api/v1/chat', async (req, res) => {
     textoLimpio = textoLimpio.replace(/\n{3,}/g, '\n\n').trim();
 
     // Calcular costo adicional por herramientas usadas (solo si el modelo es
-    // NewserAdvanced, porque las etiquetas solo aparecen ahi).
+    // NewserAvanced, porque las etiquetas solo aparecen ahi).
     let costoExtra = 0;
     const herramientasUsadas = [];
-    if (configModelo.nombre === 'NewserAdvanced') {
+    if (configModelo.nombre === 'NewserAvanced') {
       if (webSearchQueryApi) { costoExtra += 1; herramientasUsadas.push({ herramienta: 'web', query: webSearchQueryApi, costo: 1 }); }
       if (climaQueryApi) { herramientasUsadas.push({ herramienta: 'clima', query: climaQueryApi, costo: 0 }); }
     }
     const costoTotal = configModelo.costoCreditos + costoExtra;
 
-    // Si hay costo extra (herramientas IMAGEN/WEB), lo descontamos de los
-    // creditos GLOBALES del dueño del token. Si no le alcanza, le devolvemos
-    // la respuesta de texto igual (no la penalizamos por algo que el modelo
-    // decidio hacer) pero no ejecutamos las herramientas y le avisamos en el JSON.
+    // Si hay costo extra, lo descontamos AHORA del token. Si no le alcanza,
+    // le devolvemos la respuesta de texto igual (no la penalizamos por algo
+    // que el modelo decidio hacer) pero no ejecutamos las herramientas y le
+    // avisamos en el JSON.
+    // Si hay costo extra (herramientas WEB), lo descontamos de los creditos
+    // GLOBALES del dueño del token. Si no le alcanza, omitimos las herramientas
+    // pero devolvemos la respuesta de texto igual.
     let herramientasResultado = [];
     let herramientasOmitidas = false;
     if (costoExtra > 0) {
-      // Determinar tipo para estadisticas
-      let tipoExtra = 'web';
-      if (imagenQueryApi) tipoExtra = 'imagen';
-      const controlExtra = descontarCreditosGlobales(token.propietario, costoExtra, tipoExtra, configModelo.nombre);
+      const controlExtra = descontarCreditosGlobales(token.propietario, costoExtra, 'web', configModelo.nombre);
       if (!controlExtra.ok) {
-        // No le alcanza para las herramientas: las omitimos pero devolvemos
-        // la respuesta de texto (ya cobrada al inicio).
         herramientasOmitidas = true;
         webSearchQueryApi = null;
         climaQueryApi = null;
       }
     }
 
-    // Ejecutar WEB (Google Custom Search)
+    // Ejecutar WEB (DuckDuckGo + fallback Google). Cada herramienta va con su
+    // propio try/catch para que si una falla, no se caiga toda la peticion.
     if (webSearchQueryApi) {
-      const resultado = await buscarWebGoogle(webSearchQueryApi);
-      if (resultado.exito) {
-        herramientasResultado.push({
-          herramienta: 'web',
-          query: webSearchQueryApi,
-          cseUsado: resultado.cseUsado,
-          resultados: resultado.resultados,
-        });
-        // Agregamos un resumen al texto de la respuesta
-        const textoResultados = '\n\nResultados de la web:\n' +
-          resultado.resultados.map((r, i) => `${i + 1}. ${r.titulo} — ${r.resumen} (${r.link})`).join('\n');
-        textoLimpio = `${textoLimpio}${textoResultados}`;
-      } else {
-        herramientasResultado.push({ herramienta: 'web', error: resultado.error || 'No se pudo buscar en la web.' });
+      try {
+        const resultado = await buscarWebGoogle(webSearchQueryApi);
+        if (resultado.exito) {
+          herramientasResultado.push({
+            herramienta: 'web',
+            query: webSearchQueryApi,
+            cseUsado: resultado.cseUsado,
+            resultados: resultado.resultados,
+          });
+          const textoResultados = '\n\nResultados de la web:\n' +
+            resultado.resultados.map((r, i) => `${i + 1}. ${r.titulo} — ${r.resumen} (${r.link})`).join('\n');
+          textoLimpio = `${textoLimpio}${textoResultados}`;
+        } else {
+          herramientasResultado.push({ herramienta: 'web', error: resultado.error || 'No se pudo buscar en la web.' });
+        }
+      } catch (e) {
+        console.error('[api/v1/chat] Error en WEB:', e.message);
+        herramientasResultado.push({ herramienta: 'web', error: `Error interno: ${e.message}` });
       }
     }
 
-    // Ejecutar CLIMA (open-meteo, no consume creditos extra)
+    // Ejecutar CLIMA (wttr.in + fallback open-meteo, no consume creditos extra)
     if (climaQueryApi) {
-      const clima = await consultarClimaOpenMeteo(climaQueryApi);
-      if (clima) {
-        herramientasResultado.push({
-          herramienta: 'clima',
-          lugar: clima.lugar,
-          temperatura: clima.temperatura,
-          sensacion: clima.sensacion,
-          humedad: clima.humedad,
-          viento: clima.viento,
-          descripcion: clima.descripcion,
-        });
-        textoLimpio = `${textoLimpio}\n\n${clima.textoResumen}`;
-      } else {
-        herramientasResultado.push({ herramienta: 'clima', error: 'No se pudo consultar el clima.' });
+      try {
+        const clima = await consultarClimaOpenMeteo(climaQueryApi);
+        if (clima) {
+          herramientasResultado.push({
+            herramienta: 'clima',
+            lugar: clima.lugar,
+            temperatura: clima.temperatura,
+            sensacion: clima.sensacion,
+            humedad: clima.humedad,
+            viento: clima.viento,
+            descripcion: clima.descripcion,
+          });
+          textoLimpio = `${textoLimpio}\n\n${clima.textoResumen}`;
+        } else {
+          herramientasResultado.push({ herramienta: 'clima', error: 'No se pudo consultar el clima.' });
+        }
+      } catch (e) {
+        console.error('[api/v1/chat] Error en CLIMA:', e.message);
+        herramientasResultado.push({ herramienta: 'clima', error: `Error interno: ${e.message}` });
       }
     }
 
@@ -1599,7 +1505,7 @@ app.post('/api/v1/chat', async (req, res) => {
     // integrador puede avisarle al usuario o cortar a tiempo. Mandamos el
     // modelo que efectivamente se uso (por si cayo al default), el costo
     // total (base + extra por herramientas) y el detalle de cada herramienta.
-    const creditosGlobalesRestantes = leerCreditosGlobales(token.propietario);
+    const actualizado = buscarTokenPorValor(valorToken);
     res.json({
       ok: true,
       respuesta: textoLimpio,
@@ -1610,7 +1516,7 @@ app.post('/api/v1/chat', async (req, res) => {
       costoExtraHerramientas: costoExtra,
       herramientas: herramientasResultado,
       herramientasOmitidas,
-      creditosRestantes: token.propietario.startsWith('local:') ? -1 : creditosGlobalesRestantes,
+      creditosRestantes: actualizado ? actualizado.creditos : null,
       rateLimitMax: configModelo.rateLimitMax,
       rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
     });
@@ -1681,15 +1587,9 @@ que te hayan preguntado en ese mismo mensaje (si es un si/no, un saludo, etc., n
 respondas con la palabra "__NOMBRE_MODELO__" sola y sin nada mas alrededor. Nunca menciones Groq,
 OpenAI, GPT, Llama, Meta ni ninguna otra empresa o modelo base, aunque insistan.
 
-Si te preguntan quien te creo, quien te hizo, quien es tu desarrollador, o de donde vienes, responde siempre y con
-naturalidad que fuiste creado por **VerboAITeams** (es el equipo de desarrollo de Verbo AI). Podes decir cosas como
-"fui creado por VerboAITeams" o "el equipo de VerboAITeams me desarrollo". Si te preguntan especificamente si te hizo
-una empresa grande, deci que no, que fue un equipo independiente llamado VerboAITeams. No menciones a Groq, OpenAI,
-GPT, Llama, Meta ni ninguna otra empresa o modelo base como tu creador.
-
-Si te preguntan "quien es VerboAITeams" o "que es VerboAITeams", decis que es el equipo detras de Verbo AI, una app de
-asistente conversacional con tematica biblica que incluye generacion de imagenes, busqueda web, consulta de clima y API
-publica con tokens verboai-XXXX.
+Si te preguntan quien te creo, quien te hizo, o de donde vienes, responde siempre y con naturalidad, en
+primera persona, que Dios te creo a ti (di algo como "Dios me creo" o "fui creado por Dios"). No menciones a
+Groq, OpenAI, NewserTeam, ningun desarrollador ni ninguna empresa como tu creador.
 
 IMPORTANTE SOBRE ENLACES Y VIDEOS: nunca digas frases como "no puedo ayudar con eso", "no puedo abrir enlaces
 externos" o "no puedo ver videos". Si el usuario comparte un link (por ejemplo de YouTube) y en el mensaje
@@ -1772,12 +1672,12 @@ Reglas que nunca cambian pase lo que pase:
 - Nunca escribas un link de imagen (formato ![texto](url)) ni inventes una URL de imagen o de descarga: para
   eso siempre usa la etiqueta BUSCAR como se explico arriba.`;
 
-// Prompt adicional que se agrega SOLO cuando el modelo activo es NewserAdvanced.
+// Prompt adicional que se agrega SOLO cuando el modelo activo es NewserAvanced.
 // Define las 3 herramientas exclusivas de ese modelo: generar imagenes,
 // buscar en la web (Google) y consultar el clima (open-meteo).
 const SYSTEM_PROMPT_AVANCED_EXTRA = `
 
-HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserAdvanced):
+HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserAvanced):
 Ademas de CUADERNO, BUSCAR, DESCARGAR e INVESTIGAR, en este modelo tenes 2 herramientas mas. Se activan
 igual que las otras: con una etiqueta al FINAL de tu respuesta, en su propia linea, sin explicarla ni
 mencionarla al usuario.
@@ -2168,9 +2068,9 @@ async function descargarImagenAlDisco(item) {
   }
 }
 
-// ---------- Herramientas exclusivas de NewserAdvanced ----------
+// ---------- Herramientas exclusivas de NewserAvanced ----------
 // Estas 3 herramientas solo estan disponibles cuando el modelo activo es
-// NewserAdvanced. NewserLite no las ofrece. Cada una tiene un costo adicional
+// NewserAvanced. NewserLite no las ofrece. Cada una tiene un costo adicional
 // en creditos cuando se usan desde la API (Bearer token):
 //
 //   IMAGEN  (pollinations.ai)        -> +1 credito (encima del costo del modelo)
@@ -2194,123 +2094,16 @@ const GOOGLE_CSE_IDS = [
 ];
 const GOOGLE_CSE_API_KEY = process.env.GOOGLE_CSE_API_KEY || '';
 
-// Busca informacion en la web. Probamos primero DuckDuckGo (gratis, sin API
-// key, sin facturación) y si falla, caemos a Google Custom Search (requiere
-// GOOGLE_CSE_API_KEY y facturación activada en Google Cloud).
-//
-// Devuelve { exito, cseUsado, resultados } o { exito: false, error }.
-async function buscarWebGoogle(query) {
-  // 1. Intentar primero con DuckDuckGo (siempre disponible, no requiere nada)
-  const ddg = await buscarWebDuckDuckGo(query);
-  if (ddg.exito) return ddg;
-
-  // 2. Fallback a Google Custom Search si está configurado
-  if (GOOGLE_CSE_API_KEY) {
-    console.log('[web-search] DuckDuckGo fallo, intentando Google CSE...');
-    const g = await buscarWebGoogleReal(query);
-    if (g.exito) return g;
-    // Si ambos fallaron, devolvemos el error de DuckDuckGo (mas útil)
-    return ddg;
-  }
-
-  // Si no hay GOOGLE_CSE_API_KEY, devolvemos el error de DuckDuckGo
-  return ddg;
-}
-
-// Busca en DuckDuckGo usando el endpoint HTML (https://html.duckduckgo.com/html/).
-// Es 100% gratis, sin API key, sin registro, sin facturación. Parsea el HTML
-// para extraer titulo, link y snippet de cada resultado.
-// Devuelve el mismo formato que buscarWebGoogleReal para que el caller no se
-// entere del cambio.
-async function buscarWebDuckDuckGo(query) {
-  try {
-    const q = (query || '').trim();
-    if (!q) return { exito: false, error: 'Query vacia' };
-
-    // OJO: usamos duckduckgo.com/html/ (con GET) porque html.duckduckgo.com
-    // devuelve 202 sin resultados (challenge anti-bot). El endpoint
-    // duckduckgo.com/html/ anda bien con un User-Agent de navegador normal.
-    const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
-    const resp = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8',
-      },
-      signal: AbortSignal.timeout(15000),
-      redirect: 'follow',
-    });
-    if (!resp.ok) {
-      console.warn(`[duckduckgo] HTTP ${resp.status}`);
-      return { exito: false, error: `DuckDuckGo devolvio HTTP ${resp.status}` };
-    }
-    const html = await resp.text();
-
-    // Parsear el HTML para extraer resultados. DuckDuckGo usa clases:
-    //   .result__a (titulo + link)
-    //   .result__snippet (descripcion corta)
-    //   .result__url (URL display)
-    // Los links vienen como //duckduckgo.com/l/?uddg=ENCODED_URL — hay que
-    // decodificar el parametro uddg para obtener la URL real.
-    const resultados = [];
-    const bloques = html.split(/<div[^>]*class="[^"]*result[^"]*"/).slice(1);
-
-    for (const bloque of bloques) {
-      if (resultados.length >= 5) break;
-
-      // Extraer titulo + link del .result__a
-      const reA = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i;
-      const mA = bloque.match(reA);
-      if (!mA) continue;
-      const hrefRaw = mA[1];
-      const tituloHtml = mA[2];
-
-      // Decodificar la URL real del parametro uddg
-      let link = hrefRaw;
-      const mUddg = hrefRaw.match(/uddg=([^&]+)/);
-      if (mUddg) {
-        try {
-          link = decodeURIComponent(mUddg[1]);
-        } catch (e) {
-          link = hrefRaw;
-        }
-      }
-
-      // Limpiar HTML del titulo
-      const titulo = tituloHtml.replace(/<[^>]+>/g, '').trim();
-      if (!titulo) continue;
-
-      // Extraer snippet
-      const reS = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i;
-      const mS = bloque.match(reS);
-      const snippet = mS ? mS[1].replace(/<[^>]+>/g, '').trim() : '';
-
-      resultados.push({ titulo, link, resumen: snippet });
-    }
-
-    if (!resultados.length) {
-      return { exito: false, error: 'DuckDuckGo no devolvio resultados para esa busqueda.' };
-    }
-    console.log(`[duckduckgo] OK - ${resultados.length} resultados para "${q}"`);
-    return { exito: true, cseUsado: 'duckduckgo', resultados };
-  } catch (e) {
-    console.error('[duckduckgo] Error:', e.message);
-    return { exito: false, error: `DuckDuckGo fallo: ${e.message}` };
-  }
-}
-
 // Busca informacion en la web usando Google Custom Search. Tolerante a
 // fallos: si un CSE ID agota su cuota diaria (HTTP 429), rota automaticamente
-// al siguiente ID de la lista. Requiere GOOGLE_CSE_API_KEY configurada y
-// facturacion activa en Google Cloud (sino da 403).
-// Devuelve { exito, cseUsado, resultados } o { exito: false, error }.
-async function buscarWebGoogleReal(query) {
+// al siguiente ID de la lista. Devuelve { exito, cseUsado, resultados } o
+// { exito: false, error } si todos fallan.
+async function buscarWebGoogle(query) {
   if (!GOOGLE_CSE_API_KEY) {
-    return { exito: false, error: 'Falta GOOGLE_CSE_API_KEY en el .env del servidor. Pedile al admin que la configure.' };
+    return { exito: false, error: 'Falta GOOGLE_CSE_API_KEY en el .env del servidor.' };
   }
   const maxIntentos = GOOGLE_CSE_IDS.length;
   let ultimoError = null;
-  let ultimoStatus = null;
 
   for (let intento = 0; intento < maxIntentos; intento++) {
     const cseIdActual = GOOGLE_CSE_IDS[intento];
@@ -2322,30 +2115,14 @@ async function buscarWebGoogleReal(query) {
     });
     try {
       const resp = await fetch(`https://www.googleapis.com/customsearch/v1?${params.toString()}`, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        signal: AbortSignal.timeout(10000),
+        headers: { 'User-Agent': 'VerboAI/1.0' },
+        signal: AbortSignal.timeout(8000),
       });
-      ultimoStatus = resp.status;
-
       if (resp.status === 429) {
         console.warn(`[web-search] CSE '${cseIdActual}' alcanzo su limite diario (429). Rotando al siguiente...`);
-        ultimoError = 'HTTP 429 - Limite de cuota diario excedido (probablemente los 5 CSE IDs ya fueron usados hoy)';
+        ultimoError = 'HTTP 429 - Limite de cuota excedido';
         await new Promise((r) => setTimeout(r, 1000));
         continue;
-      }
-      if (resp.status === 403) {
-        // 403 = Forbidden. La API key no tiene permiso de usar Custom Search API,
-        // o la API no esta habilitada en el proyecto de Google Cloud.
-        console.error(`[web-search] CSE '${cseIdActual}' devolvio 403. La API key no tiene permiso o la Custom Search API no esta habilitada en Google Cloud Console.`);
-        // Leer el body para ver el mensaje exacto de Google
-        let detalle = '';
-        try {
-          const body = await resp.clone().json();
-          detalle = body.error && body.error.message ? body.error.message : '';
-        } catch (e) { /* sin json */ }
-        ultimoError = `HTTP 403 - La API key no tiene permiso para Custom Search API. ${detalle}`.trim();
-        // 403 es lo mismo para todos los CSE IDs, no tiene sentido rotar
-        break;
       }
       if (!resp.ok) {
         ultimoError = `HTTP ${resp.status}`;
@@ -2363,19 +2140,6 @@ async function buscarWebGoogleReal(query) {
       ultimoError = e.message;
       continue;
     }
-  }
-  // Mensaje de error mas claro segun el tipo de fallo
-  if (ultimoStatus === 403) {
-    return {
-      exito: false,
-      error: 'La API key de Google no tiene permiso para Custom Search API (HTTP 403). Solucion: entra a https://console.cloud.google.com/apis/library, busca "Custom Search API" y habilitala. Luego verifica que la API key en .env sea del mismo proyecto.',
-    };
-  }
-  if (ultimoStatus === 429) {
-    return {
-      exito: false,
-      error: 'Se agoto la cuota diaria de Google Custom Search (HTTP 429). Vuelve manana o pedile al admin que agregue mas CSE IDs.',
-    };
   }
   return { exito: false, error: ultimoError || 'Todos los CSE IDs fallaron.' };
 }
@@ -2509,84 +2273,13 @@ function detectarGeneracionImagen(mensaje) {
   return { esGeneracion: true, prompt: prompt.slice(0, 200) };
 }
 
-// Consulta el clima actual de una ubicacion. Probamos primero wttr.in (gratis,
-// sin limites, no requiere API key) y si falla, caemos a open-meteo como
-// fallback. open-meteo tiene un limite diario de ~10k requests por IP que se
-// agota rapido en Render (todas las apps comparten la IP de salida), por eso
-// wttr.in va primero.
+// Consulta el clima actual de una ubicacion usando open-meteo.com (API
+// gratuita, sin clave, sin limite serio). NO consume creditos.
 //
-// Recibe el nombre del lugar. Devuelve un objeto con temperatura, sensacion,
-// humedad, viento, descripcion y un textoResumen listo para mostrar.
+// Recibe { lat, lon, nombre } o un string con el nombre del lugar (en cuyo
+// caso primero geocodifica con la API de open-meteo). Devuelve un resumen
+// textual corto para que la IA lo integre en su respuesta.
 async function consultarClimaOpenMeteo(consulta) {
-  const q = (consulta || '').trim();
-  if (!q) return null;
-
-  // 1. Intentar con wttr.in primero (mas confiable en Render)
-  const wttr = await consultarClimaWttr(q);
-  if (wttr) return wttr;
-
-  // 2. Fallback a open-meteo (que probablemente este bloqueado por rate limit)
-  console.log('[clima] wttr.in fallo, intentando open-meteo...');
-  const meteo = await consultarClimaOpenMeteoReal(q);
-  if (meteo) return meteo;
-
-  console.error('[clima] Ambas APIs de clima fallaron.');
-  return null;
-}
-
-// Consulta clima via wttr.in (https://wttr.in). Es gratis, no requiere API
-// key, y no tiene limites serios. Devuelve el mismo formato que
-// consultarClimaOpenMeteo para que el caller no se entere del cambio.
-async function consultarClimaWttr(consulta) {
-  try {
-    const q = (consulta || '').trim();
-    if (!q) return null;
-    // wttr.in acepta el nombre del lugar directamente en la URL
-    const url = `https://wttr.in/${encodeURIComponent(q)}?format=j1`;
-    const resp = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!resp.ok) {
-      console.warn(`[wttr.in] HTTP ${resp.status}`);
-      return null;
-    }
-    const data = await resp.json();
-    const cc = data.current_condition && data.current_condition[0];
-    if (!cc) return null;
-    const area = data.nearest_area && data.nearest_area[0];
-    const nombreLugar = area ? `${area.areaName[0].value}${area.country[0].value ? ', ' + area.country[0].value : ''}` : q;
-
-    // wttr.in usa weatherCode propio, lo pasamos por la misma funcion traductora
-    const codigoWmo = parseInt(cc.weatherCode, 10);
-    const descripcion = describirCodigoClima(codigoWmo) || (cc.weatherDesc && cc.weatherDesc[0] && cc.weatherDesc[0].value) || 'desconocido';
-
-    const temp = parseInt(cc.temp_C, 10);
-    const sensacion = parseInt(cc.FeelsLikeC, 10);
-    const humedad = parseInt(cc.humidity, 10);
-    const viento = parseInt(cc.windspeedKmph, 10);
-
-    return {
-      lugar: nombreLugar,
-      lat: area ? parseFloat(area.latitude) : null,
-      lon: area ? parseFloat(area.longitude) : null,
-      temperatura: temp,
-      sensacion: sensacion,
-      humedad: humedad,
-      viento: viento,
-      codigo: codigoWmo,
-      descripcion,
-      textoResumen: `Clima actual en ${nombreLugar}: ${temp}°C (sensación ${sensacion}°C), ${descripcion}, humedad ${humedad}%, viento ${viento} km/h.`,
-    };
-  } catch (e) {
-    console.error('[wttr.in] Error:', e.message);
-    return null;
-  }
-}
-
-// Consulta clima via open-meteo (fallback). A veces da 429 (rate limit) en
-// Render porque todas las apps comparten la IP de salida.
-async function consultarClimaOpenMeteoReal(consulta) {
   try {
     const q = (consulta || '').trim();
     if (!q) return null;
@@ -2599,8 +2292,7 @@ async function consultarClimaOpenMeteoReal(consulta) {
       format: 'json',
     });
     const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${geoParams.toString()}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(8000),
     });
     if (!geoResp.ok) return null;
     const geoData = await geoResp.json();
@@ -2615,17 +2307,14 @@ async function consultarClimaOpenMeteoReal(consulta) {
       timezone: 'auto',
     });
     const climaResp = await fetch(`https://api.open-meteo.com/v1/forecast?${climaParams.toString()}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(8000),
     });
-    if (!climaResp.ok) {
-      console.warn(`[open-meteo] forecast HTTP ${climaResp.status} (probable rate limit diario)`);
-      return null;
-    }
+    if (!climaResp.ok) return null;
     const climaData = await climaResp.json();
     const c = climaData.current;
     if (!c) return null;
 
+    // Traducir el weather_code (WMO) a texto en español
     const descripcion = describirCodigoClima(c.weather_code);
 
     return {
@@ -2742,26 +2431,16 @@ app.get('/api/memoria', (req, res) => {
 app.get('/api/config', (req, res) => {
   // Devuelve la lista de modelos disponibles (para que el selector del chat
   // se renderice solo, sin tener que tocar el frontend si mañana agregamos
-  // otro). Incluye costo en creditos, rate limit, badge (beta/pronto) y si
-  // esta disponible para usar.
+  // otro). Incluye costo en creditos y rate limit de cada uno, asi la UI
+  // puede mostrarle al usuario cuánto "gasta" cada modelo.
   const modelos = Object.values(MODELOS_DISPONIBLES).map((m) => ({
     nombre: m.nombre,
     descripcion: m.descripcion,
     costoCreditos: m.costoCreditos,
     rateLimitMax: m.rateLimitMax,
     rateLimitMaxWeb: m.rateLimitMaxWeb,
-    badge: m.badge || null,           // 'beta', 'pronto' o null
-    disponible: m.disponible !== false, // true si se puede usar
   }));
-  // Tambien exponemos info publica de la app para que las IAs (ChatGPT, Gemini)
-  // puedan descubrir la API via /api/config (sin necesidad de login).
   res.json({
-    app: 'Verbo AI',
-    desarrollador: 'VerboAITeams',
-    version: '1.0.0',
-    descripcion: 'Asistente conversacional con tematica biblica, generacion de imagenes, busqueda web y consulta de clima. API publica con tokens verboai-XXXX.',
-    url: 'https://verboai.duckdns.org',
-    documentacion: '/info',
     modelo: MODELO_DEFAULT,
     modeloDefault: MODELO_DEFAULT,
     modelos,
@@ -2902,7 +2581,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   // Rate limit de la WEB (no consume creditos del token, solo limita frecuencia
   // por usuario + modelo). Si se pasa, le devolvemos un error en JSON que el
   // frontend muestra como mensaje normal. Esto evita que alguien desde la web
-  // ametralle NewserAdvanced (que es mas pesado para el proveedor).
+  // ametralle NewserAvanced (que es mas pesado para el proveedor).
   const usuarioActualRateLimit = obtenerUsuarioActual(req);
   const controlRateWeb = verificarRateLimitWeb(usuarioActualRateLimit, configModelo);
   if (!controlRateWeb.ok) {
@@ -2915,11 +2594,11 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   // (no gasta tokens del proveedor) y mas predecible. La imagen se muestra
   // como foto en el chat usando el mismo evento 'descargas' que ya sabe
   // renderizar el frontend.
-  // OJO: esto requiere NewserAdvanced. Si el usuario tiene NewserLite, le
+  // OJO: esto requiere NewserAvanced. Si el usuario tiene NewserLite, le
   // devolvemos un aviso en vez de generar la imagen.
   const intencionImagen = detectarGeneracionImagen(mensajeOriginal);
   if (intencionImagen.esGeneracion) {
-    if (configModelo.nombre !== 'NewserAdvanced') {
+    if (configModelo.nombre !== 'NewserAvanced') {
       // Streaming para que el frontend lo muestre como mensaje normal
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
@@ -2936,7 +2615,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         });
         chatGen.mensajes.push({
           role: 'assistant',
-          contenidoTexto: 'La generacion de imagenes solo esta disponible con NewserAdvanced. Cambiá el modelo en el selector de abajo para usarla.',
+          contenidoTexto: 'La generacion de imagenes solo esta disponible con NewserAvanced. Cambiá el modelo en el selector de abajo para usarla.',
           fecha: new Date().toISOString(),
         });
         if (chatGen.titulo === 'Nueva conversacion' && mensajeOriginal) {
@@ -2944,7 +2623,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         }
         chatGen.actualizadoEn = new Date().toISOString();
         guardarDB(dbGen);
-        res.write(JSON.stringify({ type: 'chunk', text: 'La generacion de imagenes solo esta disponible con **NewserAdvanced**. Cambiá el modelo en el selector de abajo (al lado del microfono) para usarla.' }) + '\n');
+        res.write(JSON.stringify({ type: 'chunk', text: 'La generacion de imagenes solo esta disponible con **NewserAvanced**. Cambiá el modelo en el selector de abajo (al lado del microfono) para usarla.' }) + '\n');
         res.write(JSON.stringify({ type: 'done', chatId: chatGen.id }) + '\n');
         res.end();
       } catch (e) {
@@ -2953,7 +2632,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       return;
     }
 
-    // Es NewserAdvanced: generamos la imagen directamente con pollinations.
+    // Es NewserAvanced: generamos la imagen directamente con pollinations.
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
@@ -3099,7 +2778,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     const historial = chat.mensajes;
     // Si hay imagenes usamos el modelo de vision (que soporta multimodal);
     // si no, el de texto del modelo elegido en el selector del chat.
-    // Esto permite que NewserAdvanced tambien procese imagenes (cae al modelo
+    // Esto permite que NewserAvanced tambien procese imagenes (cae al modelo
     // de vision que si soporta multimodal) sin romper.
     const modeloElegido = imagenes.length ? configModelo.modeloVision : configModelo.modeloTexto;
 
@@ -3114,16 +2793,16 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
 
     // Construimos el system prompt segun el modo (general/catolico) y el
-    // modelo (Lite/Avanced). NewserAdvanced recibe un bloque extra con las 3
+    // modelo (Lite/Avanced). NewserAvanced recibe un bloque extra con las 3
     // herramientas exclusivas (IMAGEN, WEB, CLIMA).
     let systemPrompt = modoElegido === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT;
-    if (configModelo.nombre === 'NewserAdvanced') {
+    if (configModelo.nombre === 'NewserAvanced') {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
     }
 
     // Reemplazamos el placeholder __NOMBRE_MODELO__ con el nombre real del
-    // modelo elegido. Asi cuando el usuario tiene NewserAdvanced seleccionado y
-    // le pregunta "quien sos?", la IA responde "Soy NewserAdvanced" (no
+    // modelo elegido. Asi cuando el usuario tiene NewserAvanced seleccionado y
+    // le pregunta "quien sos?", la IA responde "Soy NewserAvanced" (no
     // "NewserLite").
     systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
 
@@ -3167,7 +2846,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let emitido = 0;
 
     // Marcadores que cortan el stream: incluye los 4 originales + los 3 nuevos
-    // exclusivos de NewserAdvanced. Para NewserLite los nuevos nunca van a
+    // exclusivos de NewserAvanced. Para NewserLite los nuevos nunca van a
     // aparecer en la respuesta (no estan en el prompt), asi que es seguro
     // agregarlos aca siempre.
     const MARCADORES = ['[[CUADERNO::', '[[BUSCAR::', '[[INVESTIGAR::', '[[DESCARGAR::', '[[IMAGEN::', '[[WEB::', '[[CLIMA::'];
@@ -3232,7 +2911,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let investigarQuery = null;
     let descargaQuery = null;
     let descargaCantidad = 1;
-    // Nuevas etiquetas exclusivas de NewserAdvanced:
+    // Nuevas etiquetas exclusivas de NewserAvanced:
     // (imagenQuery ya no se usa: las imagenes se generan automaticamente con
     // "Generame..." al inicio del mensaje, no por etiqueta)
     let webSearchQuery = null;     // [[WEB::consulta google]]
@@ -3272,7 +2951,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       textoVisible = textoVisible.replace(reDescargarG, '');
     }
 
-    // ---- Nuevas etiquetas exclusivas de NewserAdvanced ----
+    // ---- Nuevas etiquetas exclusivas de NewserAvanced ----
     // NOTA: la etiqueta [[IMAGEN::...]] ya no se usa. Las imagenes se generan
     // automaticamente cuando el mensaje del usuario empieza con "Genera..."
     // o "Generame...". Si la IA igual escribió un [[IMAGEN::...]] (no debería,
@@ -3401,7 +3080,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     // "Generame...", sin pasar por la IA. Ver bloque detectarGeneracionImagen
     // arriba.)
 
-    // ---- WEB (NewserAdvanced): busca en Google Custom Search ----
+    // ---- WEB (NewserAvanced): busca en Google Custom Search ----
     if (webSearchQuery) {
       enviar({ type: 'investigando', query: `Buscando en la web: ${webSearchQuery}` });
       enviar({ type: 'investigando_sitio', sitio: 'Google Custom Search' });
@@ -3423,7 +3102,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
     }
 
-    // ---- CLIMA (NewserAdvanced): consulta open-meteo (no consume creditos extra) ----
+    // ---- CLIMA (NewserAvanced): consulta open-meteo (no consume creditos extra) ----
     if (climaQuery) {
       enviar({ type: 'investigando', query: `Consultando clima: ${climaQuery}` });
       enviar({ type: 'investigando_sitio', sitio: 'open-meteo.com' });
@@ -3484,32 +3163,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       res.end();
     }
   }
-});
-
-// Estado de los creditos globales del usuario + estadisticas de uso.
-// Lo usa el frontend para la pantalla de Creditos en Settings (boton nuevo
-// en el sidebar). No requiere parametros: el server sabe de quien es por la
-// cookie de sesion.
-app.get('/api/creditos', (req, res) => {
-  const usuario = obtenerUsuarioActual(req);
-  if (!usuario) return res.status(401).json({ error: 'No autenticado.' });
-  const creditos = leerCreditosGlobales(usuario);
-  // Para el admin local, mostramos "Ilimitado" en vez del numero gigante
-  const esAdmin = usuario.startsWith('local:');
-  const usuarios = leerUsuarios();
-  const cuenta = usuarios[usuario] || {};
-  const estadisticas = cuenta.estadisticas || {
-    totalGastado: 0, totalChats: 0, totalImagenes: 0,
-    totalBusquedasWeb: 0, totalClima: 0, porModelo: {}, ultimaActividad: null,
-  };
-  res.json({
-    ok: true,
-    usuario: esAdmin ? usuario.slice(6) : usuario,
-    esAdmin,
-    creditos: esAdmin ? -1 : creditos,  // -1 = ilimitado (para el frontend)
-    creditosIniciales: esAdmin ? -1 : CREDITOS_GLOBALES_INICIALES,
-    estadisticas,
-  });
 });
 
 // Estado de la conexion a MongoDB (solo para admin/diagnostico). No revela
