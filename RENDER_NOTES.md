@@ -11,6 +11,9 @@ Configura estas variables en el dashboard de Render:
 - `EMAIL_USER`: Tu correo de Gmail para enviar códigos de verificación
 - `EMAIL_APP_PASSWORD`: Contraseña de aplicación de Gmail (NO tu contraseña normal)
 - `RESEND_API_KEY`: (opcional) Clave de API de Resend como alternativa a SMTP
+- `RESEND_FROM_EMAIL`: (opcional) Remitente a usar con Resend, ej: `Verbo AI <codigo@tudominio.com>`. Necesario para enviar a destinatarios distintos de tu propio correo (ver sección de Resend abajo)
+- `BREVO_API_KEY`: (opcional, recomendado si NO tenés dominio propio) Clave de API de Brevo
+- `BREVO_SENDER_EMAIL`: (opcional) Email verificado como remitente en Brevo (ej: tu Gmail). Si no lo configurás, se usa `EMAIL_USER`
 - `APP_USER`: Usuario admin para login (ej: admin)
 - `APP_PASS`: Contraseña para el usuario admin
 - `AUTH_SECRET`: Secreto aleatorio largo para firmar cookies (genera uno con: openssl rand -base64 32)
@@ -31,11 +34,50 @@ Tienes dos opciones para enviar correos:
 3. Configura `RESEND_API_KEY` en Render
 4. El sistema usará Resend automáticamente si SMTP falla
 
+**IMPORTANTE - modo sandbox:** con solo el API key, tu cuenta de Resend
+queda en modo de prueba y *solo* puede enviar correos a la dirección con la
+que te registraste (en este caso `mmodcat@gmail.com`). Cualquier otro
+destinatario va a fallar con `403 validation_error`. Para mandar códigos a
+usuarios reales tenés que:
+1. Ir a https://resend.com/domains y agregar un dominio propio (uno que ya
+   tengas, ej. `tudominio.com`).
+2. Cargar los registros DNS (SPF/DKIM) que Resend te indique, en el
+   proveedor donde compraste el dominio.
+3. Esperar a que el dominio quede verificado (puede tardar unos minutos a
+   pocas horas).
+4. En Render, agregar la variable `RESEND_FROM_EMAIL` con un remitente de
+   ese dominio, ej: `Verbo AI <codigo@tudominio.com>`.
+
+Si no tenés un dominio propio todavía, no hay atajo: Resend (y la mayoría
+de proveedores transaccionales tipo SendGrid/Mailgun) exigen dominio
+verificado para enviar a destinatarios arbitrarios. Mientras tanto podés
+seguir probando el registro solo con `mmodcat@gmail.com`.
+
+### Opción 3: Brevo API (recomendado si NO tenés dominio propio)
+A diferencia de Resend, Brevo te deja mandar correos a cualquier
+destinatario sin verificar un dominio — solo tenés que verificar tu propio
+email de remitente (por ejemplo tu Gmail) con un código de 6 dígitos.
+Gratis hasta 300 correos por día.
+
+1. Andá a https://www.brevo.com/ y creá una cuenta gratis.
+2. En el dashboard: Settings → Senders, Domains, IPs → Senders → Add a sender.
+3. Poné tu email (ej: `mmodcat@gmail.com`) y verificalo con el código de 6
+   dígitos que te llega a esa bandeja.
+4. Andá a SMTP & API → API Keys → Generate a new API key. Copiá esa clave.
+5. En Render, agregá las variables:
+   - `BREVO_API_KEY`: la clave que generaste
+   - `BREVO_SENDER_EMAIL`: el mismo email que verificaste como sender (ej:
+     `mmodcat@gmail.com`)
+6. El sistema va a usar Brevo automáticamente si SMTP y Resend fallan.
+
+Este es el camino más simple si no querés comprar un dominio.
+
 ## Nota sobre SMTP en Render
 Render puede bloquear conexiones SMTP salientes. El sistema tiene fallback automático:
 - Primero intenta SMTP (Gmail)
 - Si SMTP falla, usa Resend API
-- Si ambos fallan, el login con Google funcionará en modo directo sin código
+- Si Resend falla (o no está configurado), usa Brevo API
+- Si los tres fallan, el login con Google funcionará en modo directo sin código
 
 ## Persistencia con MongoDB (ya integrada)
 La app ahora guarda todo (historial de chats, usuarios y progreso de lectura

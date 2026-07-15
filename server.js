@@ -370,7 +370,7 @@ async function enviarCorreoConFallback(destinatario, asunto, texto, html) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: 'Verbo AI <onboarding@resend.dev>',
+          from: process.env.RESEND_FROM_EMAIL || 'Verbo AI <onboarding@resend.dev>',
           to: [destinatario],
           subject: asunto,
           html: html,
@@ -379,6 +379,13 @@ async function enviarCorreoConFallback(destinatario, asunto, texto, html) {
       
       if (!response.ok) {
         const error = await response.text();
+        // El error mas comun aca es que la cuenta de Resend sigue en modo
+        // sandbox: solo deja enviar al correo con el que te registraste,
+        // hasta que verifiques un dominio propio en resend.com/domains y
+        // configures RESEND_FROM_EMAIL con un remitente de ese dominio.
+        if (error.includes('You can only send testing emails')) {
+          console.error('[email] Resend esta en modo sandbox: verifica un dominio en https://resend.com/domains y configura RESEND_FROM_EMAIL (ej: "Verbo AI <codigo@tudominio.com>") para poder enviar a cualquier destinatario.');
+        }
         throw new Error(`Resend API error: ${error}`);
       }
       
@@ -390,7 +397,43 @@ async function enviarCorreoConFallback(destinatario, asunto, texto, html) {
     }
   }
 
-  throw new Error('No hay configuración de email disponible (SMTP ni Resend API)');
+  // Fallback a Brevo API (no requiere dominio propio: alcanza con verificar
+  // tu email de remitente con un codigo de 6 digitos en app.brevo.com)
+  if (process.env.BREVO_API_KEY) {
+    try {
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': process.env.BREVO_API_KEY,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: {
+            name: 'Verbo AI',
+            email: process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER,
+          },
+          to: [{ email: destinatario }],
+          subject: asunto,
+          htmlContent: html,
+          textContent: texto,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Brevo API error: ${error}`);
+      }
+
+      console.log('[email] Enviado via Brevo API');
+      return;
+    } catch (e) {
+      console.error('[email] Brevo API falló:', e.message);
+      throw e;
+    }
+  }
+
+  throw new Error('No hay configuración de email disponible (SMTP, Resend ni Brevo)');
 }
 
 app.post('/api/registro/solicitar', async (req, res) => {
