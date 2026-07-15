@@ -5,6 +5,8 @@ Configura estas variables en el dashboard de Render:
 - `GROQ_API_KEY`: Tu clave de API de Groq
 - `GROQ_MODEL`: (opcional) Modelo de texto, default: openai/gpt-oss-20b
 - `GROQ_MODEL_VISION`: (opcional) Modelo de visión, default: meta-llama/llama-4-scout-17b-16e-instruct
+- `MONGODB_URI`: Tu conexión de MongoDB Atlas
+- `MONGODB_DB_NAME`: (opcional) Nombre de la base de datos, default: biblia_ai
 - `EMAIL_USER`: Tu correo de Gmail para enviar códigos de verificación
 - `EMAIL_APP_PASSWORD`: Contraseña de aplicación de Gmail (NO tu contraseña normal)
 - `RESEND_API_KEY`: (opcional) Clave de API de Resend como alternativa a SMTP
@@ -56,4 +58,4 @@ Si no configuras `MONGODB_URI`, Render usa un sistema de archivos efímero:
 - El historial de chat y el progreso de lectura de la Biblia NO serán persistentes
 
 ## Nota de Deploy
-Última actualización: Fallback a Resend API implementado para solucionar bloqueos SMTP en Render.
+Última actualización: Código actualizado desde zip. Integración con MongoDB Atlas para persistencia de datos. Fallback a Resend API implementado para solucionar bloqueos SMTP en Render.

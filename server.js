@@ -6,7 +6,6 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
-const mongo = require('./db');
 
 const app = express();
 // Si la app corre detras de ngrok (u otro proxy), esto hace que Express
@@ -59,6 +58,89 @@ const MEMORY_FILE = path.join(MEMORY_DIR, 'historial.json');
 if (!fs.existsSync(MEMORY_DIR)) fs.mkdirSync(MEMORY_DIR, { recursive: true });
 if (!fs.existsSync(MEMORY_FILE)) fs.writeFileSync(MEMORY_FILE, JSON.stringify({ chats: [] }, null, 2));
 
+// Carpeta donde se guardan de forma persistente tanto las imagenes que manda
+// el usuario como las que la IA descarga de la web. Vive dentro de /public
+// para que express.static ya las sirva solas, sin rutas nuevas.
+const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+// Guarda un buffer de imagen a disco con nombre unico y devuelve la URL
+// relativa (algo como "/uploads/ab12cd34.jpg") para guardar en el historial.
+function guardarImagenDisco(buffer, mime) {
+  const ext = (mime && mime.split('/')[1] ? mime.split('/')[1].replace('jpeg', 'jpg') : 'jpg').slice(0, 5);
+  const nombre = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
+  fs.writeFileSync(path.join(UPLOADS_DIR, nombre), buffer);
+  return `/uploads/${nombre}`;
+}
+
+// Borra un archivo guardado por guardarImagenDisco a partir de su URL
+// relativa. Nunca tira si el archivo ya no existe (borrado doble, etc).
+function borrarImagenDisco(urlRelativa) {
+  if (!urlRelativa || !urlRelativa.startsWith('/uploads/')) return;
+  const nombreArchivo = path.basename(urlRelativa);
+  const rutaCompleta = path.join(UPLOADS_DIR, nombreArchivo);
+  if (rutaCompleta.startsWith(UPLOADS_DIR)) {
+    fs.unlink(rutaCompleta, () => {}); // async, no importa si falla (ya no esta, etc)
+  }
+}
+
+// Lee un archivo de /uploads y lo devuelve como data URL base64, para
+// volver a mandarselo al modelo (mantener "memoria visual" en turnos
+// siguientes de la misma conversacion).
+function imagenComoDataURL(urlRelativa, mimeFallback = 'image/jpeg') {
+  try {
+    const nombreArchivo = path.basename(urlRelativa);
+    const rutaCompleta = path.join(UPLOADS_DIR, nombreArchivo);
+    if (!rutaCompleta.startsWith(UPLOADS_DIR) || !fs.existsSync(rutaCompleta)) return null;
+    const buffer = fs.readFileSync(rutaCompleta);
+    const ext = path.extname(nombreArchivo).slice(1).toLowerCase();
+    const mime = ext === 'jpg' ? 'image/jpeg' : ext ? `image/${ext}` : mimeFallback;
+    return `data:${mime};base64,${buffer.toString('base64')}`;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Arma el historial que se le manda al modelo. Antes esto solo mandaba texto
+// (h.contenidoTexto) incluso para turnos que tenian imagenes, asi que el
+// modelo se "olvidaba" por completo de lo que habia en una foto apenas
+// pasaba un mensaje mas ("a que te referis con eso?"). Ahora, los turnos
+// recientes que tuvieron imagen las vuelven a mandar de verdad. Se limita a
+// las ultimas MAX_IMAGENES_RECORDADAS fotos (las mas nuevas primero) para no
+// disparar el tamano de cada pedido si la conversacion tiene muchas.
+const MAX_IMAGENES_RECORDADAS = 6;
+function construirHistorialParaModelo(historial) {
+  const ultimos = historial.slice(-20);
+
+  // Contamos cuantas imagenes hay en total en esa ventana, de atras para
+  // adelante, para saber desde que turno para atras ya no re-mandamos fotos.
+  let cupoImagenes = MAX_IMAGENES_RECORDADAS;
+  const permiteImagenPorIndice = new Array(ultimos.length).fill(false);
+  for (let i = ultimos.length - 1; i >= 0; i--) {
+    const h = ultimos[i];
+    if (h.role === 'user' && Array.isArray(h.imagenesUrls) && h.imagenesUrls.length) {
+      if (cupoImagenes > 0) {
+        permiteImagenPorIndice[i] = true;
+        cupoImagenes -= h.imagenesUrls.length;
+      }
+    }
+  }
+
+  return ultimos.map((h, i) => {
+    if (h.role === 'user' && permiteImagenPorIndice[i]) {
+      const partes = [
+        { type: 'text', text: h.contenidoTexto || 'Describe estas imagenes.' },
+        ...h.imagenesUrls
+          .map((url) => imagenComoDataURL(url))
+          .filter(Boolean)
+          .map((dataUrl) => ({ type: 'image_url', image_url: { url: dataUrl } })),
+      ];
+      return { role: 'user', content: partes };
+    }
+    return { role: h.role, content: h.contenidoTexto };
+  });
+}
+
 // Progreso de lectura de la Biblia completa: versiculos tachados (leidos),
 // marcador de "donde te quedaste" y nivel de zoom. Se guarda en el servidor,
 // separado POR USUARIO, para que cada quien tenga su propio progreso aunque
@@ -95,7 +177,6 @@ function guardarProgresoBiblia(usuario, p) {
   if (!raiz.usuarios) raiz.usuarios = {};
   raiz.usuarios[usuario] = p;
   fs.writeFileSync(BIBLIA_PROGRESO_FILE, JSON.stringify(raiz, null, 2));
-  mongo.guardarDocumento('biblia-progreso', raiz);
 }
 
 // API publica (RV1960) que usamos como fuente de la Biblia completa, para no
@@ -178,7 +259,6 @@ function leerUsuarios() {
 }
 function guardarUsuarios(usuarios) {
   fs.writeFileSync(USUARIOS_FILE, JSON.stringify({ usuarios }, null, 2));
-  mongo.guardarDocumento('usuarios', { usuarios });
 }
 function hashearClave(clave) {
   const sal = crypto.randomBytes(16).toString('hex');
@@ -557,27 +637,31 @@ app.post('/api/google/confirmar', (req, res) => {
 app.post('/api/google/reenviar', async (req, res) => {
   const email = verificarValorFirmado(leerCookie(req, 'verbo_google_pendiente'));
   if (!email) return res.status(400).json({ error: 'No hay un login con Google pendiente. Volve a intentar desde el boton de Google.' });
-  if (!transporterCorreo) return res.status(500).json({ error: 'El envio de correos no esta configurado en el servidor.' });
 
   const codigo = String(Math.floor(100000 + Math.random() * 900000));
   codigosPendientes.set(email, { codigo, expira: Date.now() + 10 * 60 * 1000, esGoogle: true });
 
   try {
-    await transporterCorreo.sendMail({
-      from: `"Verbo AI" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Tu codigo de verificacion - Verbo AI',
-      text: `Tu codigo de verificacion es: ${codigo}\n\nVence en 10 minutos.`,
-      html: `<div style="font-family:sans-serif;padding:20px;">
+    await enviarCorreoConFallback(
+      email,
+      'Tu codigo de verificacion - Verbo AI',
+      `Tu codigo de verificacion es: ${codigo}\n\nVence en 10 minutos.`,
+      `<div style="font-family:sans-serif;padding:20px;">
         <h2 style="color:#C9663A;">Verbo AI</h2>
-        <p>Tu codigo de verificacion es:</p>
+        <p>Para terminar de entrar con tu cuenta de Google, tu codigo de verificacion es:</p>
         <p style="font-size:32px;font-weight:bold;letter-spacing:4px;">${codigo}</p>
         <p style="color:#777;font-size:13px;">Vence en 10 minutos. Si no pediste esto, ignora este correo.</p>
-      </div>`,
-    });
+      </div>`
+    );
     res.json({ ok: true });
   } catch (e) {
-    console.error('[google-auth] Error reenviando el correo del codigo:', e.message);
+    console.error('[google-reenviar] Error enviando el correo:');
+    console.error('[google-reenviar] Mensaje:', e.message);
+    console.error('[google-reenviar] Código:', e.code);
+    console.error('[google-reenviar] Stack:', e.stack);
+    if (e.response) {
+      console.error('[google-reenviar] Respuesta SMTP:', e.response);
+    }
     codigosPendientes.delete(email);
     res.status(500).json({ error: 'No se pudo reenviar el correo.' });
   }
@@ -653,6 +737,23 @@ respuesta, en su propia linea, EXACTAMENTE este formato (sin explicarlo ni menci
 escribir ninguna URL tu mismo):
 [[BUSCAR::consulta corta de 2 a 4 palabras para buscar imagenes]]
 Puedes usar CUADERNO, BUSCAR e INVESTIGAR juntas si aplica, cada una en su propia linea al final.
+
+HERRAMIENTA "DESCARGAR" (SOLO cuando el usuario pide explicitamente descargar una imagen, guardarla, o que
+se la "mandes"/"pases"/"bajes" como archivo — no para simplemente mostrarla o verla, para eso usa BUSCAR):
+Esto es OBLIGATORIO cuando aplica, igual que CUADERNO. Si el usuario dice cosas como "descarga una imagen
+de...", "bajame una foto de...", "busca una imagen de X y mandamela", "quiero guardar/descargar esa
+imagen", "pasame esa foto como archivo", vos SIEMPRE agregas al FINAL de tu respuesta, en su propia linea,
+EXACTAMENTE este formato (sin explicarlo ni mencionarlo al usuario, sin escribir ninguna URL vos mismo, sin
+decir que no podes — vos SI podes, el servidor hace la descarga real):
+[[DESCARGAR::consulta corta de 2 a 4 palabras::cantidad de imagenes entre 1 y 4]]
+
+Ejemplo concreto — si el usuario escribe "descargame una foto de un atardecer", tu respuesta completa debe
+ser algo como:
+"Dale, ya te la bajo."
+[[DESCARGAR::atardecer::1]]
+
+Esto descarga imagenes reales al servidor y le da al usuario un link de descarga real para cada una; nunca
+inventes vos un link ni digas que no tenes esa capacidad. Si el usuario no especifica cuantas, usa 1.
 
 HERRAMIENTA "INVESTIGAR" (para contexto historico, arqueologico, cultural, o cuando quieras respaldar tu
 respuesta con informacion real y verificable en vez de solo tu conocimiento):
@@ -734,10 +835,6 @@ function leerDB() {
 
 function guardarDB(db) {
   fs.writeFileSync(MEMORY_FILE, JSON.stringify(db, null, 2));
-  // Se espeja a MongoDB en segundo plano (sin bloquear la respuesta al
-  // usuario). El archivo local ya quedo guardado arriba, asi que si Mongo
-  // no esta disponible en este momento no se pierde nada de todos modos.
-  mongo.guardarDocumento('historial', db);
 }
 
 function obtenerChat(db, chatId, usuario) {
@@ -997,6 +1094,48 @@ async function buscarImagenesWeb(query) {
   }
 }
 
+// ---------- Descarga real de imagenes (para la herramienta DESCARGAR) ----------
+// A diferencia de buscarImagenesWeb (que solo busca miniaturas chicas para
+// mostrar en el chat), esto pide una resolucion mas grande porque el
+// usuario se la va a llevar como archivo.
+async function buscarImagenesParaDescargar(query, cantidad) {
+  try {
+    const url = `https://es.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=${cantidad + 4}&prop=pageimages|info&piprop=thumbnail&pithumbsize=1400&inprop=url&format=json&origin=*`;
+    const resp = await fetch(url, { headers: HEADERS_BIBLIA });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    const paginas = data && data.query && data.query.pages;
+    if (!paginas) return [];
+    return Object.values(paginas)
+      .filter((p) => p.thumbnail && p.thumbnail.source)
+      .map((p) => ({ url: p.thumbnail.source, titulo: p.title }))
+      .slice(0, cantidad);
+  } catch (e) {
+    return [];
+  }
+}
+
+// Descarga de verdad el archivo (los bytes reales) de cada URL encontrada y
+// lo guarda a disco, devolviendo un link de descarga propio del servidor
+// (nunca el link crudo externo, para que funcione aunque el usuario este en
+// una red distinta y para poder borrarlo despues junto con el chat).
+async function descargarImagenAlDisco(item) {
+  try {
+    const resp = await fetch(item.url, { headers: HEADERS_BIBLIA });
+    if (!resp.ok) return null;
+    const mime = resp.headers.get('content-type') || 'image/jpeg';
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    const urlLocal = guardarImagenDisco(buffer, mime);
+    return {
+      url: urlLocal,
+      nombre: (item.titulo || 'imagen').slice(0, 60),
+      tamanoKB: Math.round(buffer.length / 1024),
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 // ---------- Lista de conversaciones guardadas (para el historial de chats) ----------
 app.get('/api/chats', (req, res) => {
   const db = leerDB();
@@ -1011,10 +1150,23 @@ app.post('/api/chats', (req, res) => {
   res.json({ id: chat.id, titulo: chat.titulo, creadoEn: chat.creadoEn, actualizadoEn: chat.actualizadoEn });
 });
 
+// Borra del disco todas las imagenes (subidas o descargadas por la IA)
+// referenciadas por los mensajes de un chat, para que "eliminar" un chat lo
+// borre de verdad y no deje archivos huerfanos ocupando espacio.
+function borrarImagenesDeMensajes(mensajes) {
+  if (!Array.isArray(mensajes)) return;
+  for (const m of mensajes) {
+    if (Array.isArray(m.imagenesUrls)) m.imagenesUrls.forEach(borrarImagenDisco);
+    if (Array.isArray(m.descargas)) m.descargas.forEach((d) => borrarImagenDisco(d.url));
+  }
+}
+
 // Elimina una conversacion completa (solo si es tuya)
 app.delete('/api/chats/:id', (req, res) => {
   const db = leerDB();
   const usuario = obtenerUsuarioActual(req);
+  const chat = db.chats.find((c) => c.id === req.params.id && c.usuario === usuario);
+  if (chat) borrarImagenesDeMensajes(chat.mensajes);
   db.chats = db.chats.filter((c) => !(c.id === req.params.id && c.usuario === usuario));
   guardarDB(db);
   res.json({ ok: true });
@@ -1050,7 +1202,10 @@ app.delete('/api/memoria', (req, res) => {
   const chatId = req.query.chatId;
   const db = leerDB();
   const chat = obtenerChat(db, chatId, obtenerUsuarioActual(req));
-  if (chat) chat.mensajes = [];
+  if (chat) {
+    borrarImagenesDeMensajes(chat.mensajes);
+    chat.mensajes = [];
+  }
   guardarDB(db);
   res.json({ ok: true });
 });
@@ -1159,8 +1314,12 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   let imagenes = [];
 
   if (req.files && req.files.length) {
-    imagenes = req.files.map((f) => ({ base64: f.buffer.toString('base64'), mime: f.mimetype }));
+    imagenes = req.files.map((f) => ({ base64: f.buffer.toString('base64'), mime: f.mimetype, buffer: f.buffer }));
   }
+  // Se guardan a disco ya mismo (no solo en memoria), asi la conversacion
+  // puede volver a "verlas" en turnos siguientes y al recargar la pagina,
+  // y quedan asociadas a un archivo real que se puede borrar despues.
+  const imagenesGuardadasUrls = imagenes.map((img) => guardarImagenDisco(img.buffer, img.mime));
 
   if (!mensajeOriginal && !imagenes.length) {
     return res.status(400).json({ error: 'Falta el mensaje o al menos una imagen.' });
@@ -1236,7 +1395,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
     const mensajesParaModelo = [
       { role: 'system', content: modoElegido === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT },
-      ...historial.slice(-20).map((h) => ({ role: h.role, content: h.contenidoTexto })),
+      ...construirHistorialParaModelo(historial),
       { role: 'user', content: contenidoUsuario },
     ];
 
@@ -1276,7 +1435,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let textoCompleto = '';
     let emitido = 0;
 
-    const MARCADORES = ['[[CUADERNO::', '[[BUSCAR::', '[[INVESTIGAR::'];
+    const MARCADORES = ['[[CUADERNO::', '[[BUSCAR::', '[[INVESTIGAR::', '[[DESCARGAR::'];
     function calcularCorte(buffer) {
       let corte = buffer.length;
       for (const m of MARCADORES) {
@@ -1336,6 +1495,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let cuaderno = null;
     let busquedaQuery = null;
     let investigarQuery = null;
+    let descargaQuery = null;
+    let descargaCantidad = 1;
 
     const reCuadernoG = /\[\[CUADERNO::(.+?)::([\s\S]*?)\]\]/g;
     const coincidenciasCuaderno = [...textoVisible.matchAll(reCuadernoG)];
@@ -1359,14 +1520,48 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       textoVisible = textoVisible.replace(reInvestigarG, '');
     }
 
+    // El numero de cantidad es opcional en el regex: si el modelo se olvida
+    // de ponerlo (pasa con modelos de texto que no siguen el formato al pie
+    // de la letra), igual queremos que la descarga funcione en vez de que la
+    // directiva quede sin reconocer y aparezca como texto crudo en el chat.
+    const reDescargarG = /\[\[DESCARGAR::([^:\]]+?)(?:::\s*(\d+))?\s*\]\]/g;
+    const coincidenciasDescargar = [...textoVisible.matchAll(reDescargarG)];
+    if (coincidenciasDescargar.length) {
+      descargaQuery = coincidenciasDescargar[0][1].trim();
+      descargaCantidad = Math.min(4, Math.max(1, parseInt(coincidenciasDescargar[0][2], 10) || 1));
+      textoVisible = textoVisible.replace(reDescargarG, '');
+    }
+
+    // Red de seguridad: a veces el modelo entiende el pedido pero se olvida
+    // de escribir la directiva [[DESCARGAR::...]] (mas comun en modelos de
+    // texto chicos). Si el mensaje del usuario tiene intencion clara de
+    // "descargar/bajar" una imagen/foto y el modelo no disparo nada, lo
+    // detectamos igual por patron de texto en vez de dejar que no pase nada.
+    if (!descargaQuery) {
+      const pideDescarga = /\b(descarg\w*|baj\w*)\b[\s\S]{0,40}\b(imagen\w*|foto\w*)\b|\b(imagen\w*|foto\w*)\b[\s\S]{0,40}\b(descarg\w*|baj\w*|mandame\w*|mandamela\w*|pasame\w*|pasamela\w*)\b/i;
+      if (pideDescarga.test(mensajeOriginal)) {
+        let query = mensajeOriginal
+          .replace(/\b(descarg\w*|baj\w*|quiero|puedes|podes|por favor|una?s?|algunas?|de|del|que|es[ae]|est[ae]|esto|imagen(?:es)?|foto(?:s)?|y|mandame\w*|pasame\w*|guardal\w*|guardame\w*|busca\w*)\b/gi, ' ')
+          .replace(/\d+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (query.length > 2) {
+          descargaQuery = query.slice(0, 60);
+          const numeroEnTexto = mensajeOriginal.match(/\b([1-4])\b/);
+          descargaCantidad = numeroEnTexto ? Math.min(4, parseInt(numeroEnTexto[1], 10)) : 1;
+        }
+      }
+    }
+
     textoVisible = textoVisible.trim();
 
     // Si quedo texto sin emitir (fuera de las directivas), lo mandamos ahora
     if (emitido < textoCompleto.length) {
       let restante = textoCompleto.slice(emitido);
-      restante = restante.replace(reCuadernoG, '').replace(reBuscarG, '').replace(reInvestigarG, '').trim();
+      restante = restante.replace(reCuadernoG, '').replace(reBuscarG, '').replace(reInvestigarG, '').replace(reDescargarG, '').trim();
       if (restante) enviar({ type: 'chunk', text: restante });
     }
+
 
     if (cuaderno) enviar({ type: 'notebook', referencia: cuaderno.referencia, texto: cuaderno.texto });
 
@@ -1412,16 +1607,43 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       enviar({ type: 'investigando_fin' });
     }
 
+    // Descarga real de imagenes: busca candidatas, y para cada una baja los
+    // bytes reales a disco. El tiempo que tarda es real (no fingido): cada
+    // descarga se muestra en su propio paso, asi que mientras mas imagenes
+    // pida el usuario, mas tarda de verdad, proporcional a la cantidad.
+    let descargasFinales = [];
+    if (descargaQuery) {
+      enviar({ type: 'investigando', query: `Descargando: ${descargaQuery}` });
+      enviar({ type: 'investigando_sitio', sitio: 'es.wikipedia.org (buscando imagenes)' });
+      const candidatas = await esperarMinimo(buscarImagenesParaDescargar(descargaQuery, descargaCantidad), 900);
+
+      for (let i = 0; i < candidatas.length; i++) {
+        enviar({ type: 'investigando_sitio', sitio: `Descargando imagen ${i + 1} de ${candidatas.length}...` });
+        const resultado = await esperarMinimo(descargarImagenAlDisco(candidatas[i]), 900);
+        if (resultado) descargasFinales.push(resultado);
+      }
+
+      enviar({ type: 'investigando_fin' });
+      if (descargasFinales.length) {
+        enviar({ type: 'descargas', items: descargasFinales });
+      } else {
+        enviar({ type: 'chunk', text: '\n\nNo pude encontrar ni descargar ninguna imagen para eso, perdon.' });
+        textoVisible = `${textoVisible}\n\nNo pude encontrar ni descargar ninguna imagen para eso, perdon.`.trim();
+      }
+    }
+
     historial.push({
       role: 'user',
       contenidoTexto: mensajeOriginal || '[Imagen enviada]',
       fecha: new Date().toISOString(),
       tuvoImagen: imagenes.length > 0,
+      imagenesUrls: imagenesGuardadasUrls.length ? imagenesGuardadasUrls : undefined,
     });
     historial.push({
       role: 'assistant',
       contenidoTexto: textoVisible || '(sin respuesta)',
       fecha: new Date().toISOString(),
+      descargas: descargasFinales.length ? descargasFinales : undefined,
     });
 
     // Titulo automatico de la conversacion, tomado del primer mensaje del usuario
@@ -1455,67 +1677,23 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   }
 });
 
-// Antes de levantar el servidor: conectar a MongoDB (si esta configurada) y
-// "hidratar" los archivos locales con lo ultimo que haya guardado en la
-// base de datos. Esto es lo que hace que los datos sobrevivan a un reinicio
-// del servicio en Render, donde el disco local se borra en cada deploy:
-// si Mongo tiene datos mas recientes que el archivo local (por ejemplo
-// porque el disco se acaba de borrar), se usan esos.
-async function hidratarDesdeMongo() {
-  if (!mongo.estaConectado()) return;
-
-  const historialRemoto = await mongo.leerDocumento('historial');
-  if (historialRemoto) {
-    fs.writeFileSync(MEMORY_FILE, JSON.stringify(historialRemoto, null, 2));
-  } else {
-    await mongo.guardarDocumento('historial', JSON.parse(fs.readFileSync(MEMORY_FILE, 'utf-8')));
-  }
-
-  const usuariosRemoto = await mongo.leerDocumento('usuarios');
-  if (usuariosRemoto) {
-    fs.writeFileSync(USUARIOS_FILE, JSON.stringify(usuariosRemoto, null, 2));
-  } else {
-    await mongo.guardarDocumento('usuarios', JSON.parse(fs.readFileSync(USUARIOS_FILE, 'utf-8')));
-  }
-
-  const progresoRemoto = await mongo.leerDocumento('biblia-progreso');
-  if (progresoRemoto) {
-    fs.writeFileSync(BIBLIA_PROGRESO_FILE, JSON.stringify(progresoRemoto, null, 2));
-  } else {
-    await mongo.guardarDocumento('biblia-progreso', JSON.parse(fs.readFileSync(BIBLIA_PROGRESO_FILE, 'utf-8')));
-  }
-
-  console.log('[mongodb] Datos locales sincronizados con la base de datos.');
-}
-
-async function iniciarServidor() {
-  await mongo.conectarMongo();
+app.listen(PORT, () => {
+  console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
   try {
-    await hidratarDesdeMongo();
-  } catch (err) {
-    console.error('[mongodb] Error al sincronizar datos iniciales:', err.message);
-  }
-
-  app.listen(PORT, () => {
-    console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
-    try {
-      const os = require('os');
-      const interfaces = os.networkInterfaces();
-      const ips = [];
-      Object.values(interfaces).forEach((lista) => {
-        (lista || []).forEach((info) => {
-          if (info.family === 'IPv4' && !info.internal) ips.push(info.address);
-        });
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    const ips = [];
+    Object.values(interfaces).forEach((lista) => {
+      (lista || []).forEach((info) => {
+        if (info.family === 'IPv4' && !info.internal) ips.push(info.address);
       });
-      if (ips.length) {
-        console.log('Para entrar desde tu celular (misma red WiFi):');
-        ips.forEach((ip) => console.log(`  http://${ip}:${PORT}`));
-        console.log('Importante: esa(s) URL tambien tienen que estar agregadas en');
-        console.log('Google Cloud Console -> Credenciales -> tu cliente OAuth -> "URIs de');
-        console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
-      }
-    } catch (e) { /* si falla, no pasa nada, el resto de la app funciona igual */ }
-  });
-}
-
-iniciarServidor();
+    });
+    if (ips.length) {
+      console.log('Para entrar desde tu celular (misma red WiFi):');
+      ips.forEach((ip) => console.log(`  http://${ip}:${PORT}`));
+      console.log('Importante: esa(s) URL tambien tienen que estar agregadas en');
+      console.log('Google Cloud Console -> Credenciales -> tu cliente OAuth -> "URIs de');
+      console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
+    }
+  } catch (e) { /* si falla, no pasa nada, el resto de la app funciona igual */ }
+});
