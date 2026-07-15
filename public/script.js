@@ -74,7 +74,7 @@ let modeloActual = localStorage.getItem('verboAiModelo') || 'NewserLite';
 let modelosDisponibles = [
   // Default hardcodeado por si /api/config tarda o falla: la UI sigue andando.
   { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20, rateLimitMaxWeb: 30 },
-  { nombre: 'NewserAvanced', descripcion: 'Mas potente (gpt-oss-120b). Razonamiento profundo, respuestas mas ricas. Rate limit mas estricto.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8 },
+  { nombre: 'NewserAvanced', descripcion: 'Mas potente. Razonamiento profundo, respuestas mas ricas. Rate limit mas estricto.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8 },
 ];
 let hayCuaderno = false;
 let chatIdActual = localStorage.getItem('verboAiChatId') || null;

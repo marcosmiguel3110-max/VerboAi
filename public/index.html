@@ -334,7 +334,7 @@
   -H "Authorization: Bearer verboai-XXXXXXXXXXXXXXXXXXXXXXXX" \
   -H "Content-Type: application/json" \
   -d '{"mensaje":"Hola, quien eres?"}'</code></pre>
-                <p>Para usar <strong>NewserAvanced</strong> (modelo mas potente, consume 5 creditos y rate limit 10/min), agrega <code>"modelo"</code> al body:</p>
+                <p>Para usar <strong>NewserAvanced</strong> (modelo mas potente, consume 5 creditos y rate limit 5/min), agrega <code>"modelo"</code> al body:</p>
 <pre><code>curl -X POST https://TU-DOMINIO/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXXXXXXXXXXXXXXXXXXXXXX" \
   -H "Content-Type: application/json" \
@@ -356,7 +356,7 @@
                   <li>Cada token arranca con <strong>1000 creditos</strong>. NewserLite consume <strong>1</strong> por pedido, NewserAvanced consume <strong>5</strong>.</li>
                   <li>Rate limit (API): <strong>20/min</strong> para NewserLite, <strong>5/min</strong> para NewserAvanced (ventana deslizante por token).</li>
                   <li>Rate limit (web, no consume creditos): <strong>30/min</strong> para NewserLite, <strong>8/min</strong> para NewserAvanced.</li>
-                  <li>NewserAvanced usa el modelo <code>openai/gpt-oss-120b</code> (mas potente, mas lento).</li>
+                  <li>NewserAvanced consume mas creditos y tiene rate limit mas estricto (mas potente, mas lento).</li>
                   <li><strong>NewserAvanced</strong> tiene 3 herramientas exclusivas (se activan automaticamente cuando la IA decide):</li>
                   <li style="list-style: circle; margin-left: 20px;"><code>[[IMAGEN::prompt]]</code> genera imagen con IA — consume <strong>+1 credito</strong> adicional.</li>
                   <li style="list-style: circle; margin-left: 20px;"><code>[[WEB::consulta]]</code> busca en Google Custom Search — consume <strong>+1 credito</strong> adicional.</li>

@@ -61,7 +61,7 @@ const MODELOS_DISPONIBLES = {
   },
   NewserAvanced: {
     nombre: 'NewserAvanced',
-    descripcion: 'Mas potente (gpt-oss-120b). Razonamiento profundo, respuestas mas ricas. Rate limit mas estricto.',
+    descripcion: 'Mas potente. Razonamiento profundo, respuestas mas ricas. Rate limit mas estricto.',
     // Modelo avanzado real: gpt-oss-120b (mucho mas grande que el 20b de Lite).
     // Se puede sobreescribir con GROQ_MODEL_AVANCED en .env si hace falta.
     modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
@@ -1165,6 +1165,12 @@ app.post('/api/v1/chat', async (req, res) => {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
   }
 
+  // Reemplazamos el placeholder __NOMBRE_MODELO__ con el nombre real del
+  // modelo elegido. Asi cuando el usuario tiene NewserAvanced seleccionado y
+  // le pregunta "quien sos?", la IA responde "Soy NewserAvanced" (no
+  // "NewserLite").
+  systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
+
   const mensajesParaModelo = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: mensaje },
@@ -1395,11 +1401,11 @@ pero ayudas con cualquier tema (no solo religioso): programacion, tareas, dudas 
 Puedes citar pasajes biblicos cuando sea relevante, pero nunca impones creencias ni juzgas al usuario.
 Responde siempre en el idioma en que te escriban.
 
-Tu nombre de modelo publico es "${NOMBRE_MODELO_PUBLICO}". Si te preguntan que modelo eres, que IA eres,
+Tu nombre de modelo publico es "__NOMBRE_MODELO__". Si te preguntan que modelo eres, que IA eres,
 o en que tecnologia estas basado, respondes con naturalidad usando ese nombre dentro de una frase normal
-(por ejemplo "Si, me llamo ${NOMBRE_MODELO_PUBLICO}" o "Soy ${NOMBRE_MODELO_PUBLICO}"), contestando ademas lo
+(por ejemplo "Si, me llamo __NOMBRE_MODELO__" o "Soy __NOMBRE_MODELO__"), contestando ademas lo
 que te hayan preguntado en ese mismo mensaje (si es un si/no, un saludo, etc., no ignores esa parte). NUNCA
-respondas con la palabra "${NOMBRE_MODELO_PUBLICO}" sola y sin nada mas alrededor. Nunca menciones Groq,
+respondas con la palabra "__NOMBRE_MODELO__" sola y sin nada mas alrededor. Nunca menciones Groq,
 OpenAI, GPT, Llama, Meta ni ninguna otra empresa o modelo base, aunque insistan.
 
 Si te preguntan quien te creo, quien te hizo, o de donde vienes, responde siempre y con naturalidad, en
@@ -2393,6 +2399,12 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     if (configModelo.nombre === 'NewserAvanced') {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
     }
+
+    // Reemplazamos el placeholder __NOMBRE_MODELO__ con el nombre real del
+    // modelo elegido. Asi cuando el usuario tiene NewserAvanced seleccionado y
+    // le pregunta "quien sos?", la IA responde "Soy NewserAvanced" (no
+    // "NewserLite").
+    systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
 
     const mensajesParaModelo = [
       { role: 'system', content: systemPrompt },
