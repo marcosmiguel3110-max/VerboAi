@@ -65,6 +65,59 @@ const elLightboxImg = document.getElementById('lightboxImg');
 const elLightboxCaption = document.getElementById('lightboxCaption');
 const btnCerrarLightbox = document.getElementById('btnCerrarLightbox');
 
+// ---------- Overlay de "Generando imagen..." con porcentaje ----------
+// Mientras la IA genera una imagen con pollinations, mostramos un overlay
+// gris medio oscuro en el centro de la pantalla con un porcentaje de progreso
+// simulado (porque pollinations no nos da progreso real). Los colores se
+// adaptan al tema activo (default / df-night) via CSS.
+const overlayGenerandoImagen = document.getElementById('overlayGenerandoImagen');
+const overlayGenerandoImagenPorcentaje = document.getElementById('overlayGenerandoImagenPorcentaje');
+const overlayGenerandoImagenBarra = document.getElementById('overlayGenerandoImagenBarra');
+const overlayGenerandoImagenPrompt = document.getElementById('overlayGenerandoImagenPrompt');
+let overlayGenerandoImagenInterval = null;
+let overlayGenerandoImagenProgreso = 0;
+
+function mostrarOverlayGenerandoImagen(prompt) {
+  if (!overlayGenerandoImagen) return;
+  overlayGenerandoImagenProgreso = 0;
+  if (overlayGenerandoImagenPorcentaje) overlayGenerandoImagenPorcentaje.textContent = '0%';
+  if (overlayGenerandoImagenBarra) overlayGenerandoImagenBarra.style.width = '0%';
+  if (overlayGenerandoImagenPrompt) overlayGenerandoImagenPrompt.textContent = prompt ? `"${prompt}"` : '';
+  overlayGenerandoImagen.classList.remove('oculto');
+
+  // Simulamos progreso: arranca rapido (5% cada 500ms) y despues va mas lento
+  // a medida que se acerca al 90% (para que no llegue a 100% antes de que
+  // termine de verdad). Cuando termina, el handler de 'descargas' o 'done'
+  // llama a ocultarOverlayGenerandoImagen() que pone 100% y despues lo cierra.
+  if (overlayGenerandoImagenInterval) clearInterval(overlayGenerandoImagenInterval);
+  overlayGenerandoImagenInterval = setInterval(() => {
+    // Mas lento a medida que se acerca a 90
+    const incremento = overlayGenerandoImagenProgreso < 50 ? 3
+      : overlayGenerandoImagenProgreso < 80 ? 1.5
+      : overlayGenerandoImagenProgreso < 90 ? 0.5
+      : 0;
+    if (incremento === 0) return; // arriba de 90% esperamos a que termine
+    overlayGenerandoImagenProgreso = Math.min(90, overlayGenerandoImagenProgreso + incremento);
+    if (overlayGenerandoImagenPorcentaje) overlayGenerandoImagenPorcentaje.textContent = Math.floor(overlayGenerandoImagenProgreso) + '%';
+    if (overlayGenerandoImagenBarra) overlayGenerandoImagenBarra.style.width = overlayGenerandoImagenProgreso + '%';
+  }, 500);
+}
+
+function ocultarOverlayGenerandoImagen() {
+  if (!overlayGenerandoImagen) return;
+  // Ponemos 100% por un instante para que se sienta que termino bien
+  if (overlayGenerandoImagenPorcentaje) overlayGenerandoImagenPorcentaje.textContent = '100%';
+  if (overlayGenerandoImagenBarra) overlayGenerandoImagenBarra.style.width = '100%';
+  if (overlayGenerandoImagenInterval) {
+    clearInterval(overlayGenerandoImagenInterval);
+    overlayGenerandoImagenInterval = null;
+  }
+  // Pequeña pausa para que se vea el 100% antes de cerrar
+  setTimeout(() => {
+    overlayGenerandoImagen.classList.add('oculto');
+  }, 300);
+}
+
 let imagenesSeleccionadas = [];
 let modoActual = localStorage.getItem('verboAiModo') || 'general';
 // Modelo activo en el selector del chat. Se persiste en localStorage para
@@ -1558,6 +1611,24 @@ elForm.addEventListener('submit', async (ev) => {
   elInputTexto.value = '';
   elIndicador.classList.remove('oculto');
 
+  // Si el mensaje empieza con "Generame", "Genera", "Dibujame", etc. Y el
+  // modelo es NewserAvanced, mostramos el overlay de "Generando imagen..."
+  // con porcentaje simulado. El server va a tardar 10-60s en generar la
+  // imagen, y sin el overlay el usuario no sabe si esta pasando algo.
+  // Usamos la misma regex que el server para detectar la intencion.
+  const _esGeneracionImagen = (() => {
+    if (modeloActual !== 'NewserAvanced') return false;
+    const re = /^\s*(generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé)\s+/i;
+    return re.test(texto);
+  })();
+  if (_esGeneracionImagen) {
+    // Extraemos el prompt (lo que viene despues del verbo) para mostrarlo
+    const re = /^\s*(?:generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé)\s+(?:una\s+imagen\s+(?:de|del|de la|de un|de una)\s*|una\s+foto\s+(?:de|del|de la|de un|de una)\s*|un\s+dibujo\s+(?:de|del|de la|de un|de una)\s*|imagen\s+(?:de|del|de la|de un|de una)\s*|foto\s+(?:de|del|de la|de un|de una)\s*)?(.+)$/i;
+    const m = texto.match(re);
+    const prompt = m ? m[1].trim() : texto;
+    mostrarOverlayGenerandoImagen(prompt);
+  }
+
   const formData = new FormData();
   formData.append('mensaje', texto);
   if (chatIdActual) formData.append('chatId', chatIdActual);
@@ -1694,6 +1765,7 @@ elForm.addEventListener('submit', async (ev) => {
           }
         } else if (evt.type === 'error') {
           ocultarReintento();
+          ocultarOverlayGenerandoImagen(); // por si estaba generando imagen
           if (escritor) escritor.detener();
           if (burbujaIA) {
             burbujaIA.remove();
@@ -1702,6 +1774,9 @@ elForm.addEventListener('submit', async (ev) => {
           if (frameInvestigando) { frameInvestigando.finalizar(); frameInvestigando = null; }
           pintarMensajeCompleto('assistant', evt.message || 'Ocurrio un error.', null, true);
         } else if (evt.type === 'done') {
+          // Ocultamos el overlay de generando imagen (si estaba activo)
+          // antes de finalizar la burbuja.
+          ocultarOverlayGenerandoImagen();
           await new Promise((resolve) => {
             const finalizar = () => {
               if (escritor) escritor.detener();
@@ -1730,9 +1805,11 @@ elForm.addEventListener('submit', async (ev) => {
       // El usuario pauso a proposito: no es un error, solo dejamos de tipear
       // lo que ya se alcanzo a mostrar (el servidor igual guarda lo generado
       // hasta ese momento en el historial).
+      ocultarOverlayGenerandoImagen();
       if (escritor) escritor.detener();
       if (burbujaIA) actualizarBurbujaPreservandoImagenes(burbujaIA, textoAcumulado.trim());
     } else {
+      ocultarOverlayGenerandoImagen();
       if (escritor) escritor.detener();
       if (burbujaIA) burbujaIA.remove();
       pintarMensajeCompleto('assistant', 'Error de conexion con el servidor.', null, true);

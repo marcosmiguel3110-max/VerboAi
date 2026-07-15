@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
 <title>Verbo AI</title>
-<link rel="stylesheet" href="style.css?v=5" />
+<link rel="stylesheet" href="style.css?v=6" />
 <script>
   // Se aplica antes de pintar la pagina para que no se vea un flash del tema claro
   try { if (localStorage.getItem('verboAiTema') === 'df-night') document.documentElement.classList.add('tema-night'); } catch (e) {}
@@ -524,8 +524,19 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
     <img id="lightboxImg" src="" alt="" />
     <p id="lightboxCaption" class="lightbox-caption"></p>
   </div>
+
+  <!-- Overlay de carga mientras se genera una imagen con IA -->
+  <div id="overlayGenerandoImagen" class="overlay-generando-imagen oculto">
+    <div class="overlay-generando-imagen-cuerpo">
+      <div class="overlay-generando-imagen-spinner"></div>
+      <div class="overlay-generando-imagen-porcentaje" id="overlayGenerandoImagenPorcentaje">0%</div>
+      <div class="overlay-generando-imagen-barra"><div id="overlayGenerandoImagenBarra"></div></div>
+      <div class="overlay-generando-imagen-texto">Generando imagen...</div>
+      <div class="overlay-generando-imagen-prompt" id="overlayGenerandoImagenPrompt"></div>
+    </div>
+  </div>
 </div>
 
-<script src="script.js?v=5"></script>
+<script src="script.js?v=6"></script>
 </body>
 </html>
