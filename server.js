@@ -1697,3 +1697,32 @@ app.listen(PORT, () => {
     }
   } catch (e) { /* si falla, no pasa nada, el resto de la app funciona igual */ }
 });
+
+// Endpoint de prueba para BTATESTERS_KEY (sin revelar URL de Groq)
+app.get('/api/test-btatesters', async (req, res) => {
+  try {
+    if (!BTATESTERS_KEY) {
+      return res.json({ ok: false, error: 'BTATESTERS_KEY no configurado' });
+    }
+    const respuesta = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${BTATESTERS_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'openai/gpt-oss-20b',
+        messages: [{ role: 'user', content: 'Hola, responde en una frase corta.' }],
+        max_tokens: 50,
+      }),
+    });
+    const data = await respuesta.json();
+    if (data.choices && data.choices[0]) {
+      res.json({ ok: true, respuesta: data.choices[0].message.content });
+    } else {
+      res.json({ ok: false, error: 'Sin respuesta de la IA' });
+    }
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
