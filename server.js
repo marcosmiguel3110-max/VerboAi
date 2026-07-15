@@ -389,7 +389,7 @@ function obtenerUsuarioActual(req) {
   return verificarValorFirmado(leerCookie(req, 'verbo_auth'));
 }
 
-const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info']);
+const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/info.html', '/info']);
 app.use((req, res, next) => {
   if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/')) return next();
   if (estaAutenticado(req)) return next();
@@ -2154,9 +2154,11 @@ async function generarImagenPollinations(prompt, seed) {
   if (!promptLimpio) return null;
   const seedFinal = (typeof seed === 'number' && seed > 0) ? seed : Math.floor(Math.random() * 1000000);
 
-  // 3 intentos con timeout creciente: 90s, 120s, 150s. Pollinations a veces
-  // tarda bastante la primera vez que genera un prompt nuevo.
-  const timeouts = [90000, 120000, 150000];
+  // 3 intentos con timeout razonable: 30s, 45s, 60s. Pollinations a veces
+  // tarda la primera vez, pero si pasa de 60s es que algo anda mal y no tiene
+  // sentido seguir esperando (el navegador ya va a haber cortado la conexion).
+  // Total maximo de espera: 30+45+60 = 135s (2.25 min) — aguanta bien.
+  const timeouts = [30000, 45000, 60000];
   let ultimoError = null;
 
   for (let intento = 0; intento < timeouts.length; intento++) {
@@ -2664,10 +2666,15 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
           descargas: [{ url: img.url, nombre: img.prompt, tamanoKB: img.tamanoKB }],
         });
       } else {
-        enviarGen({ type: 'chunk', text: '\n\nNo pude generar la imagen en este momento. Probá de nuevo en un rato.' });
+        // Si pollinations fallo despues de todos los reintentos, le avisamos al
+        // usuario con un mensaje claro. El log del servidor ya tiene el detalle
+        // del error real (HTTP status, timeout, etc.) para que el admin pueda
+        // debuguear.
+        console.error('[chat-generar-imagen] Pollinations fallo despues de 3 intentos. Ultimo error:', ultimoError);
+        enviarGen({ type: 'chunk', text: '\n\nNo pude generar la imagen en este momento. El servicio de generacion de imagenes esta caido o sobrecargado. Probá de nuevo en unos minutos.' });
         chatGen.mensajes.push({
           role: 'assistant',
-          contenidoTexto: 'No pude generar la imagen en este momento. Probá de nuevo en un rato.',
+          contenidoTexto: 'No pude generar la imagen en este momento. El servicio de generacion de imagenes esta caido o sobrecargado. Probá de nuevo en unos minutos.',
           fecha: new Date().toISOString(),
         });
       }

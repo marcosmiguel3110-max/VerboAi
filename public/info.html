@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Verbo AI - Documentación API</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f1419;
+    color: #e6e6e6;
+    line-height: 1.6;
+    padding: 20px;
+  }
+  .container { max-width: 1000px; margin: 0 auto; }
+  header {
+    text-align: center;
+    padding: 40px 20px;
+    background: linear-gradient(135deg, #C9663A 0%, #B0552E 100%);
+    border-radius: 16px;
+    margin-bottom: 30px;
+    color: white;
+  }
+  header h1 { font-size: 32px; margin-bottom: 8px; }
+  header p { opacity: 0.9; font-size: 15px; }
+  section {
+    background: #1a1f2e;
+    border: 1px solid #2a3041;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  h2 { color: #C9663A; margin-bottom: 12px; font-size: 20px; }
+  h3 { color: #e6e6e6; margin: 16px 0 8px; font-size: 16px; }
+  p { margin-bottom: 12px; color: #b0b0b0; }
+  code {
+    background: #0f1419;
+    color: #a5d6ff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+  pre {
+    background: #0f1419;
+    border: 1px solid #2a3041;
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    margin: 12px 0;
+    position: relative;
+  }
+  pre code {
+    background: none;
+    color: #c9d1d9;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #C9663A;
+    color: white;
+    border: none;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: inherit;
+  }
+  .copy-btn:hover { background: #B0552E; }
+  .copy-btn.copied { background: #2E8B57; }
+  ul { margin: 12px 0; padding-left: 24px; color: #b0b0b0; }
+  li { margin: 6px 0; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+  .badge-blue { background: #1f6feb; color: white; }
+  .badge-green { background: #2E8B57; color: white; }
+  .badge-orange { background: #C9663A; color: white; }
+
+  /* Tester interactivo */
+  .tester {
+    background: #1a1f2e;
+    border: 1px solid #2a3041;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .tester input, .tester textarea, .tester select {
+    width: 100%;
+    background: #0f1419;
+    border: 1px solid #2a3041;
+    color: #e6e6e6;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+  .tester input:focus, .tester textarea:focus, .tester select:focus {
+    outline: none;
+    border-color: #C9663A;
+  }
+  .tester button {
+    background: #C9663A;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    margin-right: 8px;
+  }
+  .tester button:hover { background: #B0552E; }
+  .tester button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .tester-result {
+    background: #0f1419;
+    border: 1px solid #2a3041;
+    border-radius: 6px;
+    padding: 16px;
+    margin-top: 12px;
+    min-height: 80px;
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #c9d1d9;
+  }
+  .tester-result.error { color: #ff7b72; border-color: #ff7b72; }
+  .tester-result.ok { color: #7ee787; border-color: #7ee787; }
+  .tester img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin-top: 12px;
+    border: 1px solid #2a3041;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 768px) {
+    .grid-2 { grid-template-columns: 1fr; }
+  }
+  details {
+    background: #0f1419;
+    border: 1px solid #2a3041;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 12px 0;
+  }
+  details summary {
+    cursor: pointer;
+    color: #C9663A;
+    font-weight: 600;
+    user-select: none;
+  }
+  details[open] summary { margin-bottom: 12px; }
+  .info-card {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .info-card .item {
+    background: #0f1419;
+    border: 1px solid #2a3041;
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+  }
+  .info-card .item .num { font-size: 24px; font-weight: 700; color: #C9663A; }
+  .info-card .item .label { font-size: 12px; color: #b0b0b0; margin-top: 4px; }
+  footer {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+    font-size: 13px;
+  }
+  a { color: #C9663A; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Verbo AI — Documentación API</h1>
+    <p>Conectá tu app, bot o script a Verbo AI usando un token <code style="background:rgba(255,255,255,0.2);color:white">verboai-XXXX</code></p>
+  </header>
+
+  <!-- Tester en vivo -->
+  <div class="tester">
+    <h2 style="margin-top:0">🧪 Probar la API en vivo</h2>
+    <p>Pegá tu token y un mensaje. Podés probar generar imágenes escribiendo "Generame [algo]" con NewserAvanced.</p>
+
+    <div class="grid-2">
+      <input type="text" id="token" placeholder="verboai-XXXXXXXXXXXX" />
+      <select id="modelo">
+        <option value="NewserLite">NewserLite (1 crédito, rápido)</option>
+        <option value="NewserAvanced">NewserAvanced (5 créditos, potente + imágenes)</option>
+      </select>
+    </div>
+    <textarea id="mensaje" rows="2" placeholder="Escribí tu mensaje acá... (proba: 'Generame un leon descansando' con NewserAvanced)">Hola, quien eres?</textarea>
+    <button id="btnProbar">Probar petición</button>
+    <button id="btnLimpiar" style="background:#454F6B">Limpiar</button>
+
+    <div class="info-card" id="infoCard" style="display:none">
+      <div class="item"><div class="num" id="rModelo">-</div><div class="label">Modelo usado</div></div>
+      <div class="item"><div class="num" id="rCosto">-</div><div class="label">Créditos consumidos</div></div>
+      <div class="item"><div class="num" id="rRestantes">-</div><div class="label">Créditos restantes</div></div>
+      <div class="item"><div class="num" id="rTiempo">-</div><div class="label">Tiempo (ms)</div></div>
+    </div>
+
+    <div class="tester-result" id="resultado">Los resultados van a aparecer acá...</div>
+    <div id="imagenContainer"></div>
+  </div>
+
+  <!-- Cómo obtener un token -->
+  <section>
+    <h2>1. Obtener un token</h2>
+    <p>Para usar la API necesitás un token tipo <code>verboai-XXXXXXXXXXXX</code>. Para conseguirlo:</p>
+    <ul>
+      <li>Entrá a <a href="/" target="_blank">la app</a> e iniciá sesión</li>
+      <li>Andá a <strong>Settings → Clave API</strong></li>
+      <li>Hacé clic en <strong>"Generar API token"</strong></li>
+      <li><strong>Copialo AHORA</strong>: solo se muestra una vez, después solo ves los últimos 4 dígitos</li>
+    </ul>
+    <p>Si no ves la sección "Clave API" en Settings, tu cuenta todavía no tiene acceso (mensaje "Próximamente"). Pedile al admin que te agregue.</p>
+  </section>
+
+  <!-- Endpoints -->
+  <section>
+    <h2>2. Endpoints disponibles</h2>
+
+    <h3><code>POST /api/v1/chat</code> <span class="badge badge-blue">principal</span></h3>
+    <p>Envía un mensaje y recibe la respuesta. Consume créditos según el modelo.</p>
+    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXX" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mensaje": "Hola, quien eres?",
+    "modelo": "NewserLite"
+  }'</code></pre>
+
+    <p><strong>Respuesta:</strong></p>
+    <pre><code>{
+  "ok": true,
+  "respuesta": "Hola, soy NewserLite...",
+  "modelo": "NewserLite",
+  "modeloUsado": "NewserLite",
+  "costoCreditos": 1,
+  "creditosRestantes": 999,
+  "rateLimitMax": 20,
+  "rateLimitVentanaMs": 60000
+}</code></pre>
+
+    <h3><code>GET /api/v1/info</code> <span class="badge badge-green">gratis</span></h3>
+    <p>Devuelve info del token (créditos restantes, modelos disponibles). No consume créditos.</p>
+    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
+  https://verboai.duckdns.org/api/v1/info</code></pre>
+
+    <h3><code>GET /api/mongo-status</code> <span class="badge badge-orange">admin</span></h3>
+    <p>Verifica el estado de MongoDB (requiere sesión iniciada).</p>
+  </section>
+
+  <!-- Modelos -->
+  <section>
+    <h2>3. Modelos disponibles</h2>
+    <div class="info-card">
+      <div class="item">
+        <div class="num">NewserLite</div>
+        <div class="label">Rápido y liviano<br>1 crédito/pedido<br>20 req/min (API)<br>30 req/min (web)</div>
+      </div>
+      <div class="item">
+        <div class="num">NewserAvanced</div>
+        <div class="label">Potente + imágenes<br>5 créditos/pedido<br>5 req/min (API)<br>8 req/min (web)</div>
+      </div>
+    </div>
+    <p>Si mandás un <code>"modelo"</code> inválido o vacío, cae automáticamente a NewserLite (no rompe).</p>
+  </section>
+
+  <!-- Generar imágenes -->
+  <section>
+    <h2>4. Generar imágenes con IA 🎨</h2>
+    <p>Si el mensaje empieza con <code>Generame</code>, <code>Genera</code>, <code>Dibujame</code>, etc., se genera una imagen con IA automáticamente (sin pasar por el modelo de texto). Solo funciona con <strong>NewserAvanced</strong>.</p>
+    <ul>
+      <li>Consume <strong>+1 crédito</strong> adicional (encima del costo del modelo)</li>
+      <li>La imagen se devuelve como URL en el campo <code>imagen.url</code></li>
+      <li>La URL es relativa: <code>/uploads/xxxxx.jpg</code> — hay que prependear el dominio</li>
+    </ul>
+    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXX" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mensaje": "Generame un leon descansando al atardecer",
+    "modelo": "NewserAvanced"
+  }'</code></pre>
+    <p><strong>Respuesta:</strong></p>
+    <pre><code>{
+  "ok": true,
+  "respuesta": "Imagen generada: un leon descansando al atardecer",
+  "modelo": "NewserAvanced",
+  "costoCreditos": 6,
+  "costoBase": 5,
+  "costoExtraHerramientas": 1,
+  "imagen": {
+    "url": "/uploads/1234567890-abcdef.jpg",
+    "prompt": "un leon descansando al atardecer",
+    "tamanoKB": 102
+  },
+  "creditosRestantes": 994
+}</code></pre>
+    <p>Para descargar la imagen, prependeá el dominio: <code>https://verboai.duckdns.org/uploads/1234567890-abcdef.jpg</code></p>
+  </section>
+
+  <!-- Códigos en distintos lenguajes -->
+  <section>
+    <h2>5. Código completo para tu app</h2>
+    <p>Copiá el que corresponda a tu lenguaje. Reemplazá <code>verboai-XXXX</code> por tu token.</p>
+
+    <details open>
+      <summary>JavaScript (Node.js 18+ o navegador)</summary>
+      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>const TOKEN = "verboai-XXXX";
+const URL = "https://verboai.duckdns.org/api/v1/chat";
+
+async function preguntar(mensaje, modelo = "NewserLite") {
+  const resp = await fetch(URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ mensaje, modelo }),
+  });
+  const data = await resp.json();
+  if (!data.ok) throw new Error(data.error);
+  return data;
+}
+
+// Ejemplo: chat básico
+const r = await preguntar("Hola, quien eres?", "NewserLite");
+console.log(r.respuesta, "créditos:", r.creditosRestantes);
+
+// Ejemplo: generar imagen
+const r2 = await preguntar("Generame un leon", "NewserAvanced");
+if (r2.imagen) {
+  const url = "https://verboai.duckdns.org" + r2.imagen.url;
+  console.log("Imagen:", url);
+}</code></pre>
+    </details>
+
+    <details>
+      <summary>Python 3.7+ (sin dependencias)</summary>
+      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>import json
+import urllib.request
+
+TOKEN = "verboai-XXXX"
+URL = "https://verboai.duckdns.org/api/v1/chat"
+
+def preguntar(mensaje, modelo="NewserLite"):
+    body = json.dumps({"mensaje": mensaje, "modelo": modelo}).encode()
+    req = urllib.request.Request(URL, data=body, method="POST")
+    req.add_header("Authorization", f"Bearer {TOKEN}")
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        data = json.loads(resp.read().decode())
+    if not data.get("ok"):
+        raise Exception(data.get("error"))
+    return data
+
+# Ejemplo: chat básico
+r = preguntar("Hola, quien eres?", "NewserLite")
+print(r["respuesta"], "creditos:", r["creditosRestantes"])
+
+# Ejemplo: generar imagen
+r = preguntar("Generame un leon", "NewserAvanced")
+if r.get("imagen"):
+    print("Imagen:", "https://verboai.duckdns.org" + r["imagen"]["url"])</code></pre>
+    </details>
+
+    <details>
+      <summary>PHP 5.6+ (con cURL)</summary>
+      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>&lt;?php
+$TOKEN = "verboai-XXXX";
+$URL = "https://verboai.duckdns.org/api/v1/chat";
+
+function preguntar($mensaje, $modelo = "NewserLite") {
+    global $TOKEN, $URL;
+    $body = json_encode(["mensaje" => $mensaje, "modelo" => $modelo]);
+    $ch = curl_init($URL);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "Authorization: Bearer $TOKEN",
+        "Content-Type: application/json",
+    ]);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+    $resp = curl_exec($ch);
+    curl_close($ch);
+    return json_decode($resp, true);
+}
+
+// Ejemplo
+$r = preguntar("Hola, quien eres?", "NewserLite");
+echo $r["respuesta"] . "\n";
+?&gt;</code></pre>
+    </details>
+
+    <details>
+      <summary>cURL (bash / terminal)</summary>
+      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code># Chat básico
+curl -X POST https://verboai.duckdns.org/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXX" \
+  -H "Content-Type: application/json" \
+  -d '{"mensaje":"Hola, quien eres?"}'
+
+# Con NewserAvanced
+curl -X POST https://verboai.duckdns.org/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXX" \
+  -H "Content-Type: application/json" \
+  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAvanced"}'
+
+# Generar imagen
+curl -X POST https://verboai.duckdns.org/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXX" \
+  -H "Content-Type: application/json" \
+  -d '{"mensaje":"Generame un leon","modelo":"NewserAvanced"}'
+
+# Info del token (no gasta créditos)
+curl -H "Authorization: Bearer verboai-XXXX" \
+  https://verboai.duckdns.org/api/v1/info</code></pre>
+    </details>
+  </section>
+
+  <!-- Errores comunes -->
+  <section>
+    <h2>6. Códigos de error</h2>
+    <ul>
+      <li><code>401</code> — Token inválido, revocado, o falta el header <code>Authorization</code></li>
+      <li><code>402</code> — No tenés créditos suficientes (ej: NewserAvanced necesita 5)</li>
+      <li><code>429</code> — Rate limit alcanzado (demasiados pedidos por minuto)</li>
+      <li><code>400</code> — Body mal formado o falta <code>"mensaje"</code></li>
+      <li><code>502</code> — El proveedor de IA no responde (probá de nuevo en unos minutos)</li>
+    </ul>
+  </section>
+
+  <!-- CLI de terminal -->
+  <section>
+    <h2>7. CLI de terminal (opcional)</h2>
+    <p>Si preferís usar Verbo AI desde la terminal, descargá el archivo <code>cli/verboai.py</code> del repositorio y ejecutá:</p>
+    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code># Guardar el token (una sola vez)
+python verboai.py login verboai-XXXX
+
+# Iniciar chat interactivo
+python verboai.py run
+
+# Ver info del token
+python verboai.py info</code></pre>
+    <p>El CLI levanta un servidor proxy local en <code>http://127.0.0.1:7788</code> (alta seguridad, el token no se expone). Comandos dentro del chat: <code>/modelo</code>, <code>/creditos</code>, <code>/info</code>, <code>/salir</code>.</p>
+  </section>
+
+  <footer>
+    Verbo AI — Documentación API · <a href="/">Volver a la app</a>
+  </footer>
+</div>
+
+<script>
+  // Tester en vivo
+  const btnProbar = document.getElementById('btnProbar');
+  const btnLimpiar = document.getElementById('btnLimpiar');
+  const resultado = document.getElementById('resultado');
+  const imagenContainer = document.getElementById('imagenContainer');
+  const infoCard = document.getElementById('infoCard');
+
+  btnProbar.addEventListener('click', async () => {
+    const token = document.getElementById('token').value.trim();
+    const modelo = document.getElementById('modelo').value;
+    const mensaje = document.getElementById('mensaje').value.trim();
+
+    if (!token) {
+      resultado.className = 'tester-result error';
+      resultado.textContent = 'Error: falta el token';
+      return;
+    }
+    if (!mensaje) {
+      resultado.className = 'tester-result error';
+      resultado.textContent = 'Error: falta el mensaje';
+      return;
+    }
+
+    btnProbar.disabled = true;
+    btnProbar.textContent = 'Enviando...';
+    resultado.className = 'tester-result';
+    resultado.textContent = 'Enviando petición...';
+    imagenContainer.innerHTML = '';
+    infoCard.style.display = 'none';
+
+    const inicio = Date.now();
+    try {
+      const resp = await fetch('/api/v1/chat', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ mensaje, modelo }),
+      });
+      const data = await resp.json();
+      const tiempo = Date.now() - inicio;
+
+      if (!resp.ok || !data.ok) {
+        resultado.className = 'tester-result error';
+        resultado.textContent = `Error ${resp.status}: ${data.error || 'desconocido'}`;
+        btnProbar.disabled = false;
+        btnProbar.textContent = 'Probar petición';
+        return;
+      }
+
+      resultado.className = 'tester-result ok';
+      resultado.textContent = JSON.stringify(data, null, 2);
+
+      // Info card
+      infoCard.style.display = 'grid';
+      document.getElementById('rModelo').textContent = data.modeloUsado || '-';
+      document.getElementById('rCosto').textContent = data.costoCreditos || '-';
+      document.getElementById('rRestantes').textContent = data.creditosRestantes != null ? data.creditosRestantes : '-';
+      document.getElementById('rTiempo').textContent = tiempo;
+
+      // Si trajo imagen, mostrarla
+      if (data.imagen && data.imagen.url) {
+        const url = data.imagen.url.startsWith('http') ? data.imagen.url : data.imagen.url;
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = data.imagen.prompt || 'imagen generada';
+        imagenContainer.appendChild(img);
+      }
+    } catch (e) {
+      resultado.className = 'tester-result error';
+      resultado.textContent = 'Error de red: ' + e.message;
+    }
+    btnProbar.disabled = false;
+    btnProbar.textContent = 'Probar petición';
+  });
+
+  btnLimpiar.addEventListener('click', () => {
+    document.getElementById('mensaje').value = '';
+    resultado.className = 'tester-result';
+    resultado.textContent = 'Los resultados van a aparecer acá...';
+    imagenContainer.innerHTML = '';
+    infoCard.style.display = 'none';
+  });
+
+  // Copiar código
+  function copiar(btn) {
+    const code = btn.parentElement.querySelector('code').textContent;
+    navigator.clipboard.writeText(code).then(() => {
+      btn.textContent = 'Copiado ✓';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'Copiar';
+        btn.classList.remove('copied');
+      }, 1800);
+    });
+  }
+</script>
+</body>
+</html>
