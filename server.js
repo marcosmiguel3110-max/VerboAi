@@ -13,7 +13,16 @@ const app = express();
 // aunque por detras le hable a este servidor por http normal.
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
-const BTATESTERS_KEY = process.env.BTATESTERS_KEY || process.env.GROQ_API_KEY;
+
+// La clave real de Groq es GROQ_API_KEY (la que esta en tu .env). BTATESTERS_KEY
+// se deja solo como alias de compatibilidad con Render (por si alguien la
+// configuro asi alla), pero ya NO tiene prioridad: si esa quedo vieja, vencida
+// o sin creditos (eso es lo que tira el error 402), ni se intenta primero, asi
+// que no bloquea nada. Si llegaras a tener las dos configuradas y una falla
+// por auth/creditos, el sistema prueba automaticamente con la otra antes de
+// rendirse (ver llamarGroqConReintentos).
+const CLAVES_GROQ = [...new Set([process.env.GROQ_API_KEY, process.env.BTATESTERS_KEY].filter(Boolean))];
+const BTATESTERS_KEY = CLAVES_GROQ[0]; // nombre viejo, se deja para no tocar el resto del archivo
 
 // Modelo de texto (rapido) y modelo de vision (para imagenes).
 // gpt-oss-20b NO soporta imagenes en Groq -> por eso fallaba el envio de imagenes.
@@ -33,23 +42,58 @@ function esperarMinimo(promesa, ms) {
   return Promise.all([promesa, new Promise((resolve) => setTimeout(resolve, ms))]).then(([resultado]) => resultado);
 }
 
-// Llama a Groq y reintenta automaticamente si responde 429 (limite de uso
+// Llama a Groq. Reintenta automaticamente si responde 429 (limite de uso
 // alcanzado), avisando al cliente cuantos segundos va a esperar antes de
-// reintentar, en vez de simplemente fallar.
-async function llamarGroqConReintentos(opciones, enviar, maxIntentos = 4) {
-  for (let intento = 1; intento <= maxIntentos; intento++) {
-    const r = await fetch(GROQ_URL, opciones);
-    if (r.status !== 429) return r;
-    if (intento >= maxIntentos) return r;
+// reintentar, en vez de simplemente fallar. Ademas, si la clave activa falla
+// por auth o creditos (401/402/403), prueba con la siguiente clave de
+// CLAVES_GROQ antes de rendirse (asi una BTATESTERS_KEY vencida en Render no
+// tumba todo si hay una GROQ_API_KEY valida configurada tambien). Nunca
+// devuelve al llamador el texto crudo de error de Groq: eso se resuelve
+// afuera con mensajeErrorAmigableIA(), para no filtrar datos del proveedor.
+async function llamarGroqConReintentos(opcionesBase, enviar, maxIntentos = 4) {
+  const claves = CLAVES_GROQ.length ? CLAVES_GROQ : [undefined];
+  let ultimaRespuesta = null;
 
-    let espera = 5;
-    const retryAfter = r.headers.get('retry-after');
-    if (retryAfter && !isNaN(Number(retryAfter))) espera = Math.ceil(Number(retryAfter));
-    else espera = Math.min(20, 4 * intento);
+  for (const clave of claves) {
+    const headers = { ...(opcionesBase.headers || {}) };
+    delete headers.Authorization; // por si el llamador ya la puso, la pisamos
+    if (clave) headers.Authorization = `Bearer ${clave}`;
+    const opciones = { ...opcionesBase, headers };
 
-    enviar({ type: 'retry', intento, maxIntentos, espera });
-    await new Promise((resolve) => setTimeout(resolve, espera * 1000));
+    for (let intento = 1; intento <= maxIntentos; intento++) {
+      const r = await fetch(GROQ_URL, opciones);
+
+      if (r.status === 401 || r.status === 402 || r.status === 403) {
+        // Esta clave no sirve (vencida / invalida / sin creditos). Si hay
+        // otra clave configurada, la probamos antes de rendirnos.
+        ultimaRespuesta = r;
+        break;
+      }
+      if (r.status !== 429) return r;
+      if (intento >= maxIntentos) return r;
+
+      let espera = 5;
+      const retryAfter = r.headers.get('retry-after');
+      if (retryAfter && !isNaN(Number(retryAfter))) espera = Math.ceil(Number(retryAfter));
+      else espera = Math.min(20, 4 * intento);
+
+      enviar({ type: 'retry', intento, maxIntentos, espera });
+      await new Promise((resolve) => setTimeout(resolve, espera * 1000));
+    }
   }
+  return ultimaRespuesta;
+}
+
+// Traduce un status HTTP del proveedor de IA a un mensaje generico para el
+// cliente, SIN exponer nunca el texto/JSON crudo que manda Groq (que puede
+// incluir detalles de la cuenta, del plan, o mencionar "groq" directamente).
+// Los detalles reales solo se loguean en el servidor (consola de Render).
+function mensajeErrorAmigableIA(status) {
+  if (status === 429) return 'El modelo esta saturado ahora mismo (limite de uso alcanzado). Intenta de nuevo en unos minutos.';
+  if (status === 402) return 'El servicio de IA no tiene creditos disponibles en este momento. Avisale al administrador.';
+  if (status === 401 || status === 403) return 'Hubo un problema de autenticacion con el servicio de IA. Avisale al administrador.';
+  if (status >= 500) return 'El servicio de IA no esta disponible en este momento. Intenta de nuevo en unos minutos.';
+  return 'Error al conectar con el modelo. Intenta de nuevo en unos minutos.';
 }
 
 const MEMORY_DIR = path.join(__dirname, 'memory');
@@ -1043,7 +1087,7 @@ async function sintetizarInvestigacion(query, wiki, versiculos) {
 
     const resp = await llamarGroqConReintentos({
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BTATESTERS_KEY}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: GROQ_MODEL_TEXTO,
         messages: [
@@ -1403,7 +1447,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${BTATESTERS_KEY}`,
       },
       body: JSON.stringify({
         model: modeloElegido,
@@ -1415,17 +1458,15 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       signal: controladorGroq.signal,
     }, enviar);
 
-    if (!respuestaGroq.ok || !respuestaGroq.body) {
-      let msjError = 'Error al conectar con el modelo.';
-      if (respuestaGroq.status === 429) {
-        msjError = 'El modelo esta saturado ahora mismo (limite de uso alcanzado). Intenta de nuevo en unos minutos.';
-      } else {
-        try {
-          const data = await respuestaGroq.json();
-          msjError = (data.error && data.error.message) || msjError;
-        } catch (e) { /* sin cuerpo json */ }
-      }
-      enviar({ type: 'error', message: msjError });
+    if (!respuestaGroq || !respuestaGroq.ok || !respuestaGroq.body) {
+      const status = respuestaGroq ? respuestaGroq.status : 0;
+      // El detalle real (que puede mencionar al proveedor, la cuenta, etc.)
+      // solo se loguea en el servidor. Al cliente nunca le llega ese texto.
+      try {
+        const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
+        console.error(`[chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
+      } catch (e) { /* no se pudo leer el cuerpo, no pasa nada */ }
+      enviar({ type: 'error', message: mensajeErrorAmigableIA(status) });
       return res.end();
     }
 
@@ -1669,7 +1710,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
     console.error(err);
     try {
-      enviar({ type: 'error', message: 'Error interno del servidor: ' + err.message });
+      enviar({ type: 'error', message: 'Error interno del servidor. Intenta de nuevo en unos minutos.' });
       res.end();
     } catch (e2) {
       res.end();
@@ -1698,35 +1739,42 @@ app.listen(PORT, () => {
   } catch (e) { /* si falla, no pasa nada, el resto de la app funciona igual */ }
 });
 
-// Endpoint de prueba para BTATESTERS_KEY (sin revelar URL de Groq)
+// Endpoint de prueba de conexion con el modelo de IA. Requiere sesion
+// iniciada (lo exige el middleware global de arriba). No revela nunca el
+// proveedor (Groq), la URL, la clave, ni el texto/JSON crudo de error: eso
+// solo queda en los logs del servidor. Al que lo llame solo le llega "ok" o
+// un mensaje generico.
 app.get('/api/test-btatesters', async (req, res) => {
+  if (!CLAVES_GROQ.length) {
+    return res.json({ ok: false, error: 'No hay ninguna clave de API configurada en el servidor.' });
+  }
   try {
-    if (!BTATESTERS_KEY) {
-      return res.json({ ok: false, error: 'No hay clave de API configurada (BTATESTERS_KEY ni GROQ_API_KEY)' });
-    }
-    const respuesta = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const respuesta = await llamarGroqConReintentos({
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${BTATESTERS_KEY}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'openai/gpt-oss-20b',
         messages: [{ role: 'user', content: 'Hola, responde en una frase corta.' }],
         max_tokens: 50,
       }),
-    });
-    if (!respuesta.ok) {
-      const errorText = await respuesta.text();
-      return res.json({ ok: false, error: `Error de API: ${respuesta.status} - ${errorText}` });
+    }, () => {});
+
+    if (!respuesta || !respuesta.ok) {
+      const status = respuesta ? respuesta.status : 0;
+      try {
+        const detalle = respuesta ? await respuesta.clone().text() : '(sin respuesta)';
+        console.error(`[test-btatesters] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
+      } catch (e) { /* no se pudo leer el cuerpo */ }
+      return res.json({ ok: false, error: mensajeErrorAmigableIA(status) });
     }
     const data = await respuesta.json();
     if (data.choices && data.choices[0]) {
       res.json({ ok: true, respuesta: data.choices[0].message.content });
     } else {
-      res.json({ ok: false, error: 'Sin respuesta de la IA', data });
+      res.json({ ok: false, error: 'El servicio de IA no devolvio una respuesta valida.' });
     }
   } catch (e) {
-    res.json({ ok: false, error: e.message });
+    console.error('[test-btatesters] Error:', e.message);
+    res.json({ ok: false, error: 'Error al conectar con el servicio de IA.' });
   }
 });
