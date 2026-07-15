@@ -1702,7 +1702,7 @@ app.listen(PORT, () => {
 app.get('/api/test-btatesters', async (req, res) => {
   try {
     if (!BTATESTERS_KEY) {
-      return res.json({ ok: false, error: 'BTATESTERS_KEY no configurado' });
+      return res.json({ ok: false, error: 'No hay clave de API configurada (BTATESTERS_KEY ni GROQ_API_KEY)' });
     }
     const respuesta = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -1716,11 +1716,15 @@ app.get('/api/test-btatesters', async (req, res) => {
         max_tokens: 50,
       }),
     });
+    if (!respuesta.ok) {
+      const errorText = await respuesta.text();
+      return res.json({ ok: false, error: `Error de API: ${respuesta.status} - ${errorText}` });
+    }
     const data = await respuesta.json();
     if (data.choices && data.choices[0]) {
       res.json({ ok: true, respuesta: data.choices[0].message.content });
     } else {
-      res.json({ ok: false, error: 'Sin respuesta de la IA' });
+      res.json({ ok: false, error: 'Sin respuesta de la IA', data });
     }
   } catch (e) {
     res.json({ ok: false, error: e.message });
