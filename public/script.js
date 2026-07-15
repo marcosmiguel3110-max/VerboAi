@@ -67,6 +67,15 @@ const btnCerrarLightbox = document.getElementById('btnCerrarLightbox');
 
 let imagenesSeleccionadas = [];
 let modoActual = localStorage.getItem('verboAiModo') || 'general';
+// Modelo activo en el selector del chat. Se persiste en localStorage para
+// que el usuario no tenga que volver a elegirlo cada vez que entra. Se carga
+// la lista completa de modelos disponibles desde /api/config al arrancar.
+let modeloActual = localStorage.getItem('verboAiModelo') || 'NewserLite';
+let modelosDisponibles = [
+  // Default hardcodeado por si /api/config tarda o falla: la UI sigue andando.
+  { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20 },
+  { nombre: 'NewserAvanced', descripcion: 'Mas potente. Razonamiento mas profundo, respuestas mas ricas.', costoCreditos: 5, rateLimitMax: 10 },
+];
 let hayCuaderno = false;
 let chatIdActual = localStorage.getItem('verboAiChatId') || null;
 
@@ -524,6 +533,142 @@ if (btnCopiarTokenRecien) btnCopiarTokenRecien.addEventListener('click', async (
     alert('No se pudo copiar. Copialo a mano: ' + texto);
   }
 });
+
+// ---------- Selector de modelo (NewserLite / NewserAvanced) ----------
+// Boton "Nombre + flecha" que va al lado del microfono en el input del chat.
+// Al click lo abre, la flecha rota (apunta arriba), el form se empuja hacia
+// abajo para que el menu no tape los mensajes, y se muestran las opciones
+// con su costo en creditos. La seleccion se persiste en localStorage.
+const btnSelectorModelo = document.getElementById('btnSelectorModelo');
+const selectorModeloMenu = document.getElementById('selectorModeloMenu');
+const selectorModeloNombre = document.getElementById('selectorModeloNombre');
+const formChat = document.getElementById('formChat');
+
+function renderOpcionesModelo() {
+  if (!selectorModeloMenu) return;
+  selectorModeloMenu.innerHTML = modelosDisponibles.map((m) => {
+    const activa = m.nombre === modeloActual;
+    // Badge de costo en creditos: 1 = "1 credito", 5 = "5 creditos". Para
+    // que el usuario vea el "precio" antes de elegir.
+    const badges = [];
+    if (m.costoCreditos && m.costoCreditos > 1) {
+      badges.push(`<span class="opcion-modelo-badge">${m.costoCreditos} creditos</span>`);
+    }
+    if (m.nombre === 'NewserAvanced') {
+      badges.push(`<span class="opcion-modelo-badge opcion-modelo-badge-beta">Beta</span>`);
+    }
+    return `
+      <button type="button" class="opcion-modelo ${activa ? 'activa' : ''}" data-modelo="${escapeHtml(m.nombre)}" role="option" aria-selected="${activa}">
+        <div class="opcion-modelo-fila">
+          <span class="opcion-modelo-nombre">
+            ${escapeHtml(m.nombre)}
+          </span>
+          <span class="opcion-modelo-badges">
+            ${badges.join('')}
+            <svg class="opcion-modelo-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </div>
+        <span class="opcion-modelo-desc">${escapeHtml(m.descripcion || '')}</span>
+      </button>
+    `;
+  }).join('');
+
+  selectorModeloMenu.querySelectorAll('.opcion-modelo').forEach((op) => {
+    op.addEventListener('click', () => {
+      modeloActual = op.dataset.modelo;
+      localStorage.setItem('verboAiModelo', modeloActual);
+      aplicarModeloUI();
+      cerrarSelectorModelo();
+    });
+  });
+}
+
+function aplicarModeloUI() {
+  if (selectorModeloNombre) selectorModeloNombre.textContent = modeloActual;
+  if (selectorModeloMenu) {
+    selectorModeloMenu.querySelectorAll('.opcion-modelo').forEach((op) => {
+      const activa = op.dataset.modelo === modeloActual;
+      op.classList.toggle('activa', activa);
+      op.setAttribute('aria-selected', String(activa));
+    });
+  }
+}
+
+function abrirSelectorModelo() {
+  if (!selectorModeloMenu || !btnSelectorModelo) return;
+  selectorModeloMenu.classList.remove('oculto');
+  btnSelectorModelo.classList.add('abierto');
+  btnSelectorModelo.setAttribute('aria-expanded', 'true');
+  if (formChat) formChat.classList.add('selector-abierto');
+  aplicarModeloUI();
+}
+
+function cerrarSelectorModelo() {
+  if (!selectorModeloMenu || !btnSelectorModelo) return;
+  selectorModeloMenu.classList.add('oculto');
+  btnSelectorModelo.classList.remove('abierto');
+  btnSelectorModelo.setAttribute('aria-expanded', 'false');
+  if (formChat) formChat.classList.remove('selector-abierto');
+}
+
+function toggleSelectorModelo() {
+  if (!selectorModeloMenu) return;
+  if (selectorModeloMenu.classList.contains('oculto')) abrirSelectorModelo();
+  else cerrarSelectorModelo();
+}
+
+if (btnSelectorModelo) {
+  btnSelectorModelo.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    toggleSelectorModelo();
+  });
+}
+
+// Click fuera del selector -> lo cierra
+document.addEventListener('click', (ev) => {
+  if (!selectorModeloMenu || selectorModeloMenu.classList.contains('oculto')) return;
+  const contenedor = document.getElementById('selectorModelo');
+  if (contenedor && !contenedor.contains(ev.target)) cerrarSelectorModelo();
+});
+
+// Escape -> cierra el selector (mismo patron que el panel de Settings)
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && selectorModeloMenu && !selectorModeloMenu.classList.contains('oculto')) {
+    cerrarSelectorModelo();
+  }
+});
+
+// Carga la lista real de modelos desde el servidor. Si falla, no pasa nada:
+// seguimos con la lista hardcodeada de arriba (NewserLite + NewserAvanced).
+async function cargarModelosDisponibles() {
+  try {
+    const r = await fetch('/api/config');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (Array.isArray(d.modelos) && d.modelos.length) {
+      modelosDisponibles = d.modelos;
+      // Si el modelo guardado en localStorage ya no existe en la nueva lista
+      // (porque lo sacamos del servidor), caemos al default.
+      if (!modelosDisponibles.some((m) => m.nombre === modeloActual)) {
+        modeloActual = d.modeloDefault || 'NewserLite';
+        localStorage.setItem('verboAiModelo', modeloActual);
+      }
+    }
+    if (d.modeloDefault && !localStorage.getItem('verboAiModelo')) {
+      modeloActual = d.modeloDefault;
+    }
+    renderOpcionesModelo();
+    aplicarModeloUI();
+  } catch (e) {
+    // Sin conexion o error: seguimos con los defaults
+    renderOpcionesModelo();
+    aplicarModeloUI();
+  }
+}
+
+// Render inicial con los defaults, despues actualizamos desde el servidor.
+renderOpcionesModelo();
+aplicarModeloUI();
 
 // ---------- Fondo (tema claro/oscuro), se guarda en localStorage ----------
 let temaActual = localStorage.getItem('verboAiTema') || 'default';
@@ -1395,6 +1540,10 @@ elForm.addEventListener('submit', async (ev) => {
   formData.append('mensaje', texto);
   if (chatIdActual) formData.append('chatId', chatIdActual);
   formData.append('modo', modoActual);
+  // Mandamos el modelo elegido en el selector (NewserLite o NewserAvanced).
+  // Si por algun motivo no se cargo la config, mandamos el default y el
+  // servidor lo resuelve igual.
+  formData.append('modelo', modeloActual);
   imagenesSeleccionadas.forEach((f) => formData.append('imagenes', f));
   imagenesSeleccionadas = [];
   elInputImagen.value = '';
@@ -1569,6 +1718,10 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
   // Verifica si el usuario actual tiene acceso a la seccion "Clave API".
   // Es no-bloqueante: si tarda o falla, el resto de la app sigue igual.
   verificarAccesoClaveApi();
+
+  // Carga la lista de modelos disponibles desde el servidor (para el selector
+  // del chat). No bloquea el arranque: si tarda, ya tenemos defaults.
+  cargarModelosDisponibles();
 
   let chats = [];
   try {

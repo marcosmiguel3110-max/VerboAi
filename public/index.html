@@ -124,6 +124,17 @@
         </svg>
       </button>
 
+      <!-- Selector de modelo: boton "NewserLite + flecha" que abre un menu -->
+      <div class="selector-modelo" id="selectorModelo">
+        <button type="button" id="btnSelectorModelo" class="btn-selector-modelo" title="Cambiar modelo" aria-haspopup="listbox" aria-expanded="false">
+          <span class="selector-modelo-nombre" id="selectorModeloNombre">NewserLite</span>
+          <svg class="selector-modelo-flecha" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="selector-modelo-menu oculto" id="selectorModeloMenu" role="listbox">
+          <!-- Las opciones se rellenan dinamicamente desde /api/config -->
+        </div>
+      </div>
+
       <button type="submit" id="btnEnviar" class="btn-icono btn-enviar" title="Enviar">
         <svg class="icono-enviar" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 2 11 13" stroke-linecap="round"/>
@@ -318,25 +329,33 @@
             <details class="clave-api-doc">
               <summary>Como usar el token</summary>
               <div class="clave-api-doc-cuerpo">
-                <p>Usa el token en el header <code>Authorization</code> como Bearer. Ejemplo:</p>
+                <p>Usa el token en el header <code>Authorization</code> como Bearer. Ejemplo basico (usa NewserLite, 1 credito):</p>
 <pre><code>curl -X POST https://TU-DOMINIO/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXXXXXXXXXXXXXXXXXXXXXX" \
   -H "Content-Type: application/json" \
   -d '{"mensaje":"Hola, quien eres?"}'</code></pre>
+                <p>Para usar <strong>NewserAvanced</strong> (modelo mas potente, consume 5 creditos y rate limit 10/min), agrega <code>"modelo"</code> al body:</p>
+<pre><code>curl -X POST https://TU-DOMINIO/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXXXXXXXXXXXXXXXXXXXXXX" \
+  -H "Content-Type: application/json" \
+  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAvanced"}'</code></pre>
                 <p>Respuesta (JSON):</p>
 <pre><code>{
   "ok": true,
   "respuesta": "Hola, soy NewserLite...",
   "modelo": "NewserLite",
+  "modeloUsado": "NewserLite",
+  "costoCreditos": 1,
   "creditosRestantes": 999,
   "rateLimitMax": 20,
   "rateLimitVentanaMs": 60000
 }</code></pre>
-                <p>Tambien podes consultar el estado del token sin gastar creditos con <code>GET /api/v1/info</code>:</p>
+                <p>Tambien podes consultar el estado del token y la lista de modelos disponibles con <code>GET /api/v1/info</code> (no gasta creditos):</p>
 <pre><code>curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</code></pre>
                 <ul>
-                  <li>Cada token arranca con <strong>1000 creditos</strong>. Cada peticion a <code>/api/v1/chat</code> consume 1.</li>
-                  <li>Rate limit: <strong>20 peticiones por minuto</strong> por token (ventana deslizante).</li>
+                  <li>Cada token arranca con <strong>1000 creditos</strong>. NewserLite consume <strong>1</strong> por pedido, NewserAvanced consume <strong>5</strong>.</li>
+                  <li>Rate limit: <strong>20/min</strong> para NewserLite, <strong>10/min</strong> para NewserAvanced (ventana deslizante por token).</li>
+                  <li>Si mandas un <code>"modelo"</code> invalido o vacio, cae automaticamente a NewserLite (no rompe).</li>
                   <li>Cuando se acaban los creditos, el token devuelve <code>402</code>. Si queres mas, avisale al admin.</li>
                   <li>Borrar un token lo revoca de inmediato: cualquier peticion posterior con ese token devuelve <code>401</code>.</li>
                 </ul>

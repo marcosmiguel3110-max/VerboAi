@@ -33,6 +33,54 @@ const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 // Nombre publico del modelo (lo unico que la IA debe admitir que es).
 const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 
+// ---------- Modelos disponibles ----------
+// Cada "modelo publico" mapea a uno o dos modelos reales de Groq (texto y
+// vision) y define cuanto cuesta en creditos y cual es su rate limit. Esto es
+// lo que ve el usuario en el selector del chat y lo que se puede forzar desde
+// la API mandando { "modelo": "NewserAvanced" } en el body.
+//
+// NewserLite  -> rapido, 1 credito/pedido, 20 req/min (default)
+// NewserAvanced -> modelo mas grande/potente, 5 creditos/pedido, 10 req/min
+const MODELOS_DISPONIBLES = {
+  NewserLite: {
+    nombre: 'NewserLite',
+    descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.',
+    modeloTexto: GROQ_MODEL_TEXTO,
+    modeloVision: GROQ_MODEL_VISION,
+    costoCreditos: 1,
+    rateLimitMax: 20,
+    maxTokens: 1024,
+  },
+  NewserAvanced: {
+    nombre: 'NewserAvanced',
+    descripcion: 'Mas potente. Razonamiento mas profundo, respuestas mas ricas.',
+    // Para el modo "avanzado" usamos un modelo de texto mas capaz si esta
+    // configurado en .env; si no, cae al mismo de Lite (asi no rompe si el
+    // entorno no tiene la clave nueva).
+    modeloTexto: process.env.GROQ_MODEL_AVANCED || 'meta-llama/llama-4-scout-17b-16e-instruct',
+    modeloVision: GROQ_MODEL_VISION,
+    costoCreditos: 5,
+    rateLimitMax: 10,
+    maxTokens: 2048,
+  },
+};
+const MODELO_DEFAULT = 'NewserLite';
+
+// Normaliza el nombre de modelo que viene del cliente y devuelve su config.
+// Si viene cualquier cosa (inexistente, vacio, no-string), cae al default.
+// Esto evita que alguien mande { "modelo": "GPT-4" } o { "modelo": 123 } y
+// rompa algo: siempre termina en un modelo valido o en NewserLite.
+function resolverModelo(valor) {
+  if (typeof valor !== 'string') return MODELOS_DISPONIBLES[MODELO_DEFAULT];
+  const limpio = valor.trim();
+  if (!limpio) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
+  // Case-insensitive: "newseravanced", "NEWSERAVANCED", "NewserAvanced" -> ok
+  const clave = Object.keys(MODELOS_DISPONIBLES).find(
+    (k) => k.toLowerCase() === limpio.toLowerCase()
+  );
+  return MODELOS_DISPONIBLES[clave || MODELO_DEFAULT];
+}
+
 // Las consultas reales (Wikipedia, busqueda biblica) a veces tardan menos de
 // medio segundo, y el frame de "investigando" pasaba de largo sin que se
 // alcanzara a ver. Esto obliga a que cada paso se muestre al menos "ms" en
@@ -372,35 +420,57 @@ function buscarTokenPorValor(valor) {
 
 // Registra una peticion contra un token: descuenta credito y revisa el rate
 // limit. Devuelve { ok: true } o { ok: false, status, error }.
-function registrarUsoToken(token) {
+//
+// Opciones:
+//   - costo (numero, default 1): cuantos creditos consume esta peticion.
+//     NewserAvanced por ejemplo pasa 5 aca.
+//   - rateLimitMax (numero, default TOKEN_RATE_LIMIT_MAX): limite de peticiones
+//     por minuto que aplica a esta llamada. NewserAvanced pasa 10.
+//
+// El rate limit es por-token y por-ventana: contamos cuantas peticiones hizo
+// este token en los ultimos 60s y lo bloqueamos si se pasa. Como el costo y
+// el limite dependen del modelo, los pasamos como parametro en vez de tenerlos
+// fijos en el token.
+function registrarUsoToken(token, opciones = {}) {
+  const costo = (typeof opciones.costo === 'number' && opciones.costo > 0) ? opciones.costo : 1;
+  const rateLimitMax = (typeof opciones.rateLimitMax === 'number' && opciones.rateLimitMax > 0)
+    ? opciones.rateLimitMax
+    : TOKEN_RATE_LIMIT_MAX;
+
   const tokens = leerApiTokens();
   const idx = tokens.findIndex((t) => t.id === token.id);
   if (idx === -1) return { ok: false, status: 401, error: 'Token invalido.' };
 
   const t = tokens[idx];
   if (t.activo === false) return { ok: false, status: 401, error: 'Token revocado.' };
-  if (typeof t.creditos !== 'number' || t.creditos <= 0) {
-    return { ok: false, status: 402, error: 'El token se quedo sin creditos.' };
+  if (typeof t.creditos !== 'number' || t.creditos < costo) {
+    return {
+      ok: false,
+      status: 402,
+      error: costo > 1
+        ? `El token no tiene creditos suficientes para este modelo (necesita ${costo}, le quedan ${t.creditos || 0}).`
+        : 'El token se quedo sin creditos.',
+    };
   }
 
   const ahora = Date.now();
   // Limpia el historial de la ventana actual (mas viejos que VENTANA_MS)
   if (!Array.isArray(t.usos)) t.usos = [];
   t.usos = t.usos.filter((ts) => ahora - ts < TOKEN_RATE_LIMIT_VENTANA_MS);
-  if (t.usos.length >= TOKEN_RATE_LIMIT_MAX) {
+  if (t.usos.length >= rateLimitMax) {
     return {
       ok: false,
       status: 429,
-      error: `Rate limit del token alcanzado: max ${TOKEN_RATE_LIMIT_MAX} peticiones por minuto.`,
+      error: `Rate limit del token alcanzado: max ${rateLimitMax} peticiones por minuto para este modelo.`,
     };
   }
 
   t.usos.push(ahora);
-  t.creditos = t.creditos - 1;
+  t.creditos = t.creditos - costo;
   t.ultimoUso = new Date(ahora).toISOString();
   tokens[idx] = t;
   guardarApiTokens(tokens);
-  return { ok: true };
+  return { ok: true, creditosRestantes: t.creditos };
 }
 
 // Devuelve una version "sanitizada" del token para mandarle al frontend: SIN
@@ -988,8 +1058,13 @@ function leerBearerToken(req) {
 }
 
 // Hace lo mismo que el /api/chat pero SIN streaming, SIN imagenes, SIN
-// historial: recibe { mensaje, modo } y devuelve { ok, respuesta }. Pensado
-// para integraciones programaticas (curl, fetch, SDKs).
+// historial: recibe { mensaje, modo, modelo } y devuelve { ok, respuesta }.
+// Pensado para integraciones programaticas (curl, fetch, SDKs).
+//
+// El campo "modelo" es opcional y por default es "NewserLite". Si mandas
+// "NewserAvanced" (o cualquiera de las variantes case-insensitive), se usa el
+// modelo avanzado: consume 5 creditos en vez de 1 y tiene rate limit de 10/min
+// en vez de 20/min. Cualquier otro valor cae a NewserLite de forma segura.
 app.post('/api/v1/chat', async (req, res) => {
   const valorToken = leerBearerToken(req);
   if (!valorToken) {
@@ -998,11 +1073,6 @@ app.post('/api/v1/chat', async (req, res) => {
   const token = buscarTokenPorValor(valorToken);
   if (!token) {
     return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
-  }
-
-  const controlUso = registrarUsoToken(token);
-  if (!controlUso.ok) {
-    return res.status(controlUso.status).json({ ok: false, error: controlUso.error });
   }
 
   // Validacion estricta de tipos: rechazamos arrays, objetos, numeros, etc.
@@ -1027,6 +1097,21 @@ app.post('/api/v1/chat', async (req, res) => {
   // otro valor (o tipo no-string) cae a "general" para no romper.
   const modo = (typeof req.body.modo === 'string' && req.body.modo.trim() === 'catolico') ? 'catolico' : 'general';
 
+  // Modelo opcional: resolverModelo ya valida y cae al default si viene cualquier
+  // cosa rara (numero, objeto, nombre inexistente). Asi nunca rompe.
+  const configModelo = resolverModelo(req.body.modelo);
+
+  // Registramos el uso CON el costo y rate limit que corresponden al modelo
+  // elegido. Si el token no tiene creditos suficientes (NewserAvanced pide 5)
+  // o se paso del rate limit, aca se corta y devolvemos el error.
+  const controlUso = registrarUsoToken(token, {
+    costo: configModelo.costoCreditos,
+    rateLimitMax: configModelo.rateLimitMax,
+  });
+  if (!controlUso.ok) {
+    return res.status(controlUso.status).json({ ok: false, error: controlUso.error });
+  }
+
   const mensajesParaModelo = [
     { role: 'system', content: modo === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT },
     { role: 'user', content: mensaje },
@@ -1037,10 +1122,10 @@ app.post('/api/v1/chat', async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: GROQ_MODEL_TEXTO,
+        model: configModelo.modeloTexto,
         messages: mensajesParaModelo,
         temperature: 0.7,
-        max_tokens: 1024,
+        max_tokens: configModelo.maxTokens,
         stream: false,
       }),
     }, () => {});
@@ -1069,14 +1154,18 @@ app.post('/api/v1/chat', async (req, res) => {
       .trim();
 
     // Le devolvemos tambien cuantos creditos le quedan al token, asi el
-    // integrador puede avisarle al usuario o cortar a tiempo.
+    // integrador puede avisarle al usuario o cortar a tiempo. Mandamos el
+    // modelo que efectivamente se uso (por si cayo al default) y el costo
+    // que cobramos, para que el cliente pueda mostrarlo.
     const actualizado = buscarTokenPorValor(valorToken);
     res.json({
       ok: true,
       respuesta: textoLimpio,
-      modelo: NOMBRE_MODELO_PUBLICO,
-      creditosRestantes: actualizado ? actualizado.creditos : null,
-      rateLimitMax: TOKEN_RATE_LIMIT_MAX,
+      modelo: configModelo.nombre,
+      modeloUsado: configModelo.nombre,
+      costoCreditos: configModelo.costoCreditos,
+      creditosRestantes: actualizado ? actualizado.creditos : (controlUso.creditosRestantes != null ? controlUso.creditosRestantes : null),
+      rateLimitMax: configModelo.rateLimitMax,
       rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
     });
   } catch (e) {
@@ -1086,34 +1175,34 @@ app.post('/api/v1/chat', async (req, res) => {
 });
 
 // Info del token: util para que el integrador sepa cuantos creditos le
-// quedan sin tener que hacer una peticion de chat real.
+// quedan sin tener que hacer una peticion de chat real. Tambien lista los
+// modelos disponibles y sus costos, asi el cliente sabe qué valores puede
+// mandar en el campo "modelo" de /api/v1/chat.
 app.get('/api/v1/info', (req, res) => {
   const valorToken = leerBearerToken(req);
   if (!valorToken) return res.status(401).json({ ok: false, error: 'Falta Authorization: Bearer verboai-XXXX' });
   const token = buscarTokenPorValor(valorToken);
   if (!token) return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
-  // NO consumimos creditos por esta llamada: solo informativa. Pero si igual
-  // aplicamos rate limit para que no lo spameen.
-  const controlUso = registrarUsoToken(token);
-  if (!controlUso.ok) {
-    return res.status(controlUso.status).json({ ok: false, error: controlUso.error });
-  }
-  // Como registrarUsoToken resto 1 credito, lo volvemos a sumar: la info no
-  // deberia consumir. Es un poco ostra pero asi queda simple el codigo de arriba.
-  const tokens = leerApiTokens();
-  const idx = tokens.findIndex((t) => t.id === token.id);
-  if (idx !== -1) {
-    tokens[idx].creditos = (tokens[idx].creditos || 0) + 1;
-    guardarApiTokens(tokens);
-  }
+
+  // Devolvemos la lista de modelos disponibles con su costo y rate limit,
+  // para que el integrador pueda elegir y mostrar en su UI.
+  const modelos = Object.values(MODELOS_DISPONIBLES).map((m) => ({
+    nombre: m.nombre,
+    descripcion: m.descripcion,
+    costoCreditos: m.costoCreditos,
+    rateLimitMax: m.rateLimitMax,
+    rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
+    maxTokens: m.maxTokens,
+  }));
+
   res.json({
     ok: true,
     nombre: token.nombre,
-    creditos: tokens[idx] ? tokens[idx].creditos : token.creditos,
+    creditos: token.creditos,
     creditosIniciales: token.creditosIniciales || token.creditos,
-    rateLimit: TOKEN_RATE_LIMIT_MAX,
     rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
-    modelo: NOMBRE_MODELO_PUBLICO,
+    modeloDefault: MODELO_DEFAULT,
+    modelos,
     creadoEn: token.creadoEn,
     ultimoUso: token.ultimoUso,
   });
@@ -1646,7 +1735,21 @@ app.get('/api/memoria', (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
-  res.json({ modelo: NOMBRE_MODELO_PUBLICO });
+  // Devuelve la lista de modelos disponibles (para que el selector del chat
+  // se renderice solo, sin tener que tocar el frontend si mañana agregamos
+  // otro). Incluye costo en creditos y rate limit de cada uno, asi la UI
+  // puede mostrarle al usuario cuánto "gasta" cada modelo.
+  const modelos = Object.values(MODELOS_DISPONIBLES).map((m) => ({
+    nombre: m.nombre,
+    descripcion: m.descripcion,
+    costoCreditos: m.costoCreditos,
+    rateLimitMax: m.rateLimitMax,
+  }));
+  res.json({
+    modelo: MODELO_DEFAULT,
+    modeloDefault: MODELO_DEFAULT,
+    modelos,
+  });
 });
 
 // Borra los mensajes de UNA conversacion (no todas, y solo si es tuya)
@@ -1763,6 +1866,9 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   const mensajeOriginal = (req.body.mensaje || '').trim();
   const chatId = (req.body.chatId || '').trim();
   const modoElegido = (req.body.modo || 'general').trim();
+  // Modelo opcional desde el frontend (selector del chat). resolverModelo
+  // valida y cae al default si viene cualquier cosa rara.
+  const configModelo = resolverModelo(req.body.modelo);
   let imagenes = [];
 
   if (req.files && req.files.length) {
@@ -1833,7 +1939,11 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let chat = chatId ? obtenerChat(db, chatId, usuarioActual) : null;
     if (!chat) chat = crearChat(db, usuarioActual);
     const historial = chat.mensajes;
-    const modeloElegido = imagenes.length ? GROQ_MODEL_VISION : GROQ_MODEL_TEXTO;
+    // Si hay imagenes usamos el modelo de vision (que soporta multimodal);
+    // si no, el de texto del modelo elegido en el selector del chat.
+    // Esto permite que NewserAvanced tambien procese imagenes (cae al modelo
+    // de vision que si soporta multimodal) sin romper.
+    const modeloElegido = imagenes.length ? configModelo.modeloVision : configModelo.modeloTexto;
 
     let contenidoUsuario;
     if (imagenes.length) {
@@ -1860,7 +1970,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         model: modeloElegido,
         messages: mensajesParaModelo,
         temperature: 0.7,
-        max_tokens: 1024,
+        max_tokens: configModelo.maxTokens,
         stream: true,
       }),
       signal: controladorGroq.signal,

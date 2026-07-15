@@ -1232,6 +1232,14 @@ html.tema-night .btn-cuaderno-toggle:hover { background: var(--hover-noche); }
   background: white;
   border: 1px solid var(--borde);
   border-radius: 14px;
+  transition: margin 0.2s ease;
+}
+
+/* Cuando el selector de modelo esta abierto, empujamos el input hacia arriba
+   para que el menu no tape los mensajes recientes. El valor cubre el alto
+   del menu (aprox 180px con dos opciones). */
+.entrada.selector-abierto {
+  margin-bottom: 200px;
 }
 
 #inputTexto {
@@ -1281,6 +1289,161 @@ html.tema-night .btn-icono:hover { background: var(--hover-noche); color: var(--
 
 html.tema-night .btn-enviar { background: var(--boton-nuevo-noche); }
 html.tema-night .btn-enviar:hover { background: var(--boton-nuevo-noche-hover); filter: none; }
+
+/* ---------- Selector de modelo (boton "NewserLite + flecha" en el input) ---------- */
+.selector-modelo {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.btn-selector-modelo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 10px 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--borde);
+  background: var(--crema-oscuro);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-selector-modelo:hover {
+  background: var(--acento-suave);
+  border-color: var(--acento);
+  color: var(--acento);
+}
+.btn-selector-modelo.abierto {
+  background: var(--acento-suave);
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+html.tema-night .btn-selector-modelo {
+  background: var(--hover-noche);
+  border-color: var(--borde-noche, #2A2E40);
+  color: var(--texto);
+}
+html.tema-night .btn-selector-modelo:hover,
+html.tema-night .btn-selector-modelo.abierto {
+  background: var(--chat-activo-noche-fondo);
+  border-color: var(--chat-activo-noche-borde);
+  color: var(--chat-activo-noche-borde);
+}
+
+.selector-modelo-flecha {
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+.btn-selector-modelo.abierto .selector-modelo-flecha {
+  transform: rotate(180deg);
+}
+
+/* El menu se abre ARRIBA del input (la flecha ya apunta arriba cuando esta
+   abierto). Lo posicionamos absolute, pegado al borde superior del boton,
+   alineado a la derecha para que no se salga del input en pantallas chicas. */
+.selector-modelo-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  min-width: 260px;
+  background: white;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+  padding: 6px;
+  z-index: 50;
+  animation: apareceMenuModelo 0.16s ease-out;
+}
+.selector-modelo-menu.oculto { display: none; }
+
+@keyframes apareceMenuModelo {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+html.tema-night .selector-modelo-menu {
+  background: var(--fondo-noche, #1B1E29);
+  border-color: var(--borde-noche, #2A2E40);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+}
+
+.opcion-modelo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  width: 100%;
+  transition: background 0.12s;
+}
+.opcion-modelo:hover { background: var(--acento-suave); }
+html.tema-night .opcion-modelo:hover { background: var(--hover-noche); }
+
+.opcion-modelo.activa {
+  background: var(--acento-suave);
+}
+html.tema-night .opcion-modelo.activa { background: var(--chat-activo-noche-fondo); }
+
+.opcion-modelo-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.opcion-modelo-nombre {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--texto);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.opcion-modelo-check {
+  color: var(--acento);
+  opacity: 0;
+  flex-shrink: 0;
+}
+.opcion-modelo.activa .opcion-modelo-check { opacity: 1; }
+html.tema-night .opcion-modelo-nombre { color: var(--texto); }
+html.tema-night .opcion-modelo-check { color: var(--chat-activo-noche-borde); }
+
+.opcion-modelo-badges {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.opcion-modelo-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--acento);
+  color: white;
+  letter-spacing: 0.2px;
+}
+.opcion-modelo-badge-beta {
+  background: #2E8B57;
+}
+html.tema-night .opcion-modelo-badge { background: var(--chat-activo-noche-borde); color: var(--texto); }
+
+.opcion-modelo-desc {
+  font-size: 11.5px;
+  color: var(--texto-suave);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+html.tema-night .opcion-modelo-desc { color: var(--texto-suave); }
 
 .preview-imagen {
   margin: 0 18% 8px 18%;
