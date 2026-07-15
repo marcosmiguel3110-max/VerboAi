@@ -2650,7 +2650,20 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       enviarGen({ type: 'investigando', query: `Generando imagen: ${intencionImagen.prompt}` });
       enviarGen({ type: 'investigando_sitio', sitio: 'image.pollinations.ai' });
 
-      const img = await generarImagenPollinations(intencionImagen.prompt);
+      // HEARTBEAT: mandamos un evento "ping" cada 5s para mantener la conexion
+      // viva. Sin esto, el navegador corta la conexion despues de ~30-60s sin
+      // recibir datos, y la imagen generada se pierde (el servidor la guarda
+      // pero el frontend nunca la recibe).
+      const heartbeat = setInterval(() => {
+        enviarGen({ type: 'ping' });
+      }, 5000);
+
+      let img = null;
+      try {
+        img = await generarImagenPollinations(intencionImagen.prompt);
+      } finally {
+        clearInterval(heartbeat);
+      }
       enviarGen({ type: 'investigando_fin' });
 
       if (img) {

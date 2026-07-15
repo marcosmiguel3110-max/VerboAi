@@ -1598,6 +1598,10 @@ elForm.addEventListener('submit', async (ev) => {
 
         if (evt.type === 'retry') {
           mostrarReintento(evt.intento, evt.maxIntentos, evt.espera);
+        } else if (evt.type === 'ping') {
+          // Heartbeat del servidor: no hace falta hacer nada, solo sirve para
+          // mantener la conexion viva mientras se genera una imagen (que
+          // puede tardar 30-60s). Si no mandamos nada, el navegador corta.
         } else if (evt.type === 'chunk') {
           ocultarReintento();
           asegurarBurbuja();
