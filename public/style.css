@@ -1549,7 +1549,23 @@ html.tema-night .opcion-modelo-check { color: var(--chat-activo-noche-borde); }
 .opcion-modelo-badge-beta {
   background: #2E8B57;
 }
+.opcion-modelo-badge-pronto {
+  background: #6c757d;
+  font-style: italic;
+}
 html.tema-night .opcion-modelo-badge { background: var(--chat-activo-noche-borde); color: var(--texto); }
+html.tema-night .opcion-modelo-badge-beta { background: #2E8B57; color: white; }
+html.tema-night .opcion-modelo-badge-pronto { background: #6c757d; color: white; }
+
+/* Opcion de modelo no disponible (ej: NewserPro con "pronto") — grisada, no
+   se puede clickear, cursor not-allowed. */
+.opcion-modelo.no-disponible {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.opcion-modelo.no-disponible:hover { background: var(--crema-oscuro); }
+html.tema-night .opcion-modelo.no-disponible:hover { background: var(--hover-noche); }
 
 .opcion-modelo-desc {
   font-size: 11.5px;
@@ -2336,4 +2352,177 @@ html.tema-night .btn-menu-movil:hover { background: var(--hover-noche); }
 
   .lightbox-cerrar { top: 10px; right: 10px; }
   .lightbox img { max-width: 94vw; }
+}
+
+/* ---------- Pantalla de Creditos (Settings -> Creditos) ---------- */
+/* Muestra la imagen xd.png/creditos-bg.png como fondo, con un overlay oscuro
+   y el numero de creditos en el centro. Abajo van las estadisticas de uso. */
+.creditos-pantalla {
+  position: relative;
+  width: 100%;
+  height: 280px;
+  border-radius: 16px;
+  overflow: hidden;
+  margin: 16px 0 24px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+
+.creditos-fondo {
+  position: absolute;
+  inset: 0;
+  background-image: url('/creditos-bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* Si la imagen no carga, color de fallback */
+  background-color: #2a2a2a;
+  transform: scale(1.05);
+  animation: creditosFondoZoom 20s ease-in-out infinite alternate;
+}
+
+@keyframes creditosFondoZoom {
+  from { transform: scale(1.05); }
+  to { transform: scale(1.15); }
+}
+
+.creditos-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.4) 100%);
+}
+
+.creditos-contenido {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  text-align: center;
+  padding: 20px;
+}
+
+.creditos-label {
+  font-size: 13px;
+  opacity: 0.85;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.creditos-numero {
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  transition: transform 0.3s ease, color 0.3s ease;
+}
+
+.creditos-numero.cambio {
+  transform: scale(1.15);
+  color: #4ade80;
+}
+
+.creditos-sub {
+  font-size: 13px;
+  opacity: 0.7;
+  margin-top: 8px;
+}
+
+.creditos-titulo-estadisticas {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--texto-suave);
+  font-weight: 600;
+  margin: 20px 0 10px;
+}
+
+.creditos-estadisticas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.creditos-stat {
+  background: var(--crema-oscuro);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 14px 10px;
+  text-align: center;
+}
+
+html.tema-night .creditos-stat {
+  background: var(--hover-noche, #1B1E29);
+  border-color: var(--borde-noche, #2A2E40);
+}
+
+.creditos-stat-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--acento);
+  line-height: 1.2;
+}
+
+html.tema-night .creditos-stat-num { color: var(--chat-activo-noche-borde); }
+
+.creditos-stat-label {
+  font-size: 11px;
+  color: var(--texto-suave);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Consumo por modelo */
+.creditos-por-modelo {
+  margin-top: 8px;
+}
+
+.creditos-por-modelo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--crema-oscuro);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+html.tema-night .creditos-por-modelo-item {
+  background: var(--hover-noche, #1B1E29);
+  border-color: var(--borde-noche, #2A2E40);
+}
+
+.creditos-por-modelo-nombre {
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.creditos-por-modelo-gasto {
+  color: var(--acento);
+  font-weight: 600;
+}
+
+html.tema-night .creditos-por-modelo-gasto { color: var(--chat-activo-noche-borde); }
+
+@media (max-width: 640px) {
+  .creditos-pantalla { height: 220px; }
+  .creditos-numero { font-size: 48px; }
+  .creditos-estadisticas { grid-template-columns: repeat(2, 1fr); }
+  .creditos-stat { padding: 10px 8px; }
+  .creditos-stat-num { font-size: 18px; }
+  .creditos-stat-label { font-size: 10px; }
+}
+
+@media (max-width: 480px) {
+  .creditos-pantalla { height: 180px; }
+  .creditos-numero { font-size: 40px; }
+  .creditos-label { font-size: 11px; }
+  .creditos-sub { font-size: 11px; }
 }

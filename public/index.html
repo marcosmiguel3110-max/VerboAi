@@ -3,8 +3,30 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
-<title>Verbo AI</title>
-<link rel="stylesheet" href="style.css?v=6" />
+<title>Verbo AI - Asistente con IA, imágenes, web y clima</title>
+<meta name="description" content="Verbo AI: asistente conversacional con IA. Genera imágenes, busca en la web, consulta el clima. API pública con tokens verboai-XXXX. Modelos NewserLite y NewserAdvanced." />
+<meta name="keywords" content="Verbo AI, IA, asistente, chatbot, generacion de imagenes, API, NewserLite, NewserAdvanced, VerboAITeams" />
+<meta name="author" content="VerboAITeams" />
+<meta name="robots" content="index, follow" />
+
+<meta property="og:title" content="Verbo AI - Asistente con IA" />
+<meta property="og:description" content="Genera imágenes, busca en la web, consulta el clima. API pública con tokens verboai-XXXX." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://verboai.duckdns.org" />
+<meta property="og:image" content="https://verboai.duckdns.org/logo.png" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Verbo AI - Asistente con IA" />
+<meta name="twitter:description" content="Genera imágenes, busca en la web, consulta el clima. API pública." />
+<meta name="twitter:image" content="https://verboai.duckdns.org/logo.png" />
+
+<link rel="icon" type="image/png" href="/logo.png" />
+<link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" />
+<link rel="apple-touch-icon" href="/logo.png" />
+
+<link rel="canonical" href="https://verboai.duckdns.org/" />
+
+<link rel="stylesheet" href="style.css?v=7" />
 <script>
   // Se aplica antes de pintar la pagina para que no se vea un flash del tema claro
   try { if (localStorage.getItem('verboAiTema') === 'df-night') document.documentElement.classList.add('tema-night'); } catch (e) {}
@@ -234,6 +256,10 @@
           Clave API
           <span class="badge-prox" id="badgeProxClaveApi">Prox</span>
         </button>
+        <button class="settings-nav-item" data-seccion="creditos">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h4.5a2.5 2.5 0 010 5H9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Créditos
+        </button>
       </nav>
 
       <div class="settings-contenido">
@@ -324,11 +350,11 @@
   -H "Authorization: Bearer verboai-XXXXXXXXXXXXXXXXXXXXXXXX" \
   -H "Content-Type: application/json" \
   -d '{"mensaje":"Hola, quien eres?"}'</code></pre>
-                <p>Para usar <strong>NewserAvanced</strong> (modelo mas potente, consume 5 creditos y rate limit 5/min), agrega <code>"modelo"</code> al body:</p>
+                <p>Para usar <strong>NewserAdvanced</strong> (modelo mas potente, consume 5 creditos y rate limit 5/min), agrega <code>"modelo"</code> al body:</p>
 <pre><code>curl -X POST https://TU-DOMINIO/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXXXXXXXXXXXXXXXXXXXXXX" \
   -H "Content-Type: application/json" \
-  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAvanced"}'</code></pre>
+  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAdvanced"}'</code></pre>
                 <p>Respuesta (JSON):</p>
 <pre><code>{
   "ok": true,
@@ -343,13 +369,13 @@
                 <p>Tambien podes consultar el estado del token y la lista de modelos disponibles con <code>GET /api/v1/info</code> (no gasta creditos):</p>
 <pre><code>curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</code></pre>
                 <ul>
-                  <li>Cada token arranca con <strong>1000 creditos</strong>. NewserLite consume <strong>1</strong> por pedido, NewserAvanced consume <strong>5</strong>.</li>
-                  <li>Rate limit (API): <strong>20/min</strong> para NewserLite, <strong>5/min</strong> para NewserAvanced (ventana deslizante por token).</li>
-                  <li>Rate limit (web, no consume creditos): <strong>30/min</strong> para NewserLite, <strong>8/min</strong> para NewserAvanced.</li>
-                  <li>NewserAvanced consume mas creditos y tiene rate limit mas estricto (mas potente, mas lento).</li>
-                  <li><strong>NewserAvanced</strong> tiene herramientas exclusivas:</li>
+                  <li>Cada token arranca con <strong>1000 creditos</strong>. NewserLite consume <strong>1</strong> por pedido, NewserAdvanced consume <strong>5</strong>.</li>
+                  <li>Rate limit (API): <strong>20/min</strong> para NewserLite, <strong>5/min</strong> para NewserAdvanced (ventana deslizante por token).</li>
+                  <li>Rate limit (web, no consume creditos): <strong>30/min</strong> para NewserLite, <strong>8/min</strong> para NewserAdvanced.</li>
+                  <li>NewserAdvanced consume mas creditos y tiene rate limit mas estricto (mas potente, mas lento).</li>
+                  <li><strong>NewserAdvanced</strong> tiene herramientas exclusivas:</li>
                   <li style="list-style: circle; margin-left: 20px;"><strong>Generar imagen</strong>: escribi <code>Generame [descripcion]</code> como mensaje (en web o API). Consume <strong>+1 credito</strong> adicional. Se abre en el visor en terminal.</li>
-                  <li style="list-style: circle; margin-left: 20px;"><code>[[WEB::consulta]]</code> busca en Google Custom Search — consume <strong>+1 credito</strong> adicional.</li>
+                  <li style="list-style: circle; margin-left: 20px;"><code>[[WEB::consulta]]</code> busca en internet (DuckDuckGo) — consume <strong>+1 credito</strong> adicional.</li>
                   <li style="list-style: circle; margin-left: 20px;"><code>[[CLIMA::lugar]]</code> consulta open-meteo — <strong>gratis</strong>, no consume creditos extra.</li>
                   <li>Si mandas un <code>"modelo"</code> invalido o vacio, cae automaticamente a NewserLite (no rompe).</li>
                   <li>Cuando se acaban los creditos, el token devuelve <code>402</code>. Si queres mas, avisale al admin.</li>
@@ -393,7 +419,7 @@ preguntar("Hola, quien eres?", "NewserLite")
   .catch(e => console.error(e));
 
 // Generar imagen:
-preguntar("Generame un leon descansando", "NewserAvanced")
+preguntar("Generame un leon descansando", "NewserAdvanced")
   .then(r => {
     console.log(r.respuesta);
     if (r.imagen) console.log("Imagen:", "https://TU-DOMINIO" + r.imagen.url);
@@ -427,7 +453,7 @@ r = preguntar("Hola, quien eres?", "NewserLite")
 print(r["respuesta"], "creditos:", r["creditosRestantes"])
 
 # Generar imagen:
-r = preguntar("Generame un leon descansando", "NewserAvanced")
+r = preguntar("Generame un leon descansando", "NewserAdvanced")
 print(r["respuesta"])
 if r.get("imagen"):
     print("Imagen:", "https://TU-DOMINIO" + r["imagen"]["url"])</code></pre>
@@ -465,7 +491,7 @@ echo $r["respuesta"] . "\n";
 echo "Creditos: " . $r["creditosRestantes"] . "\n";
 
 // Generar imagen:
-$r = preguntar("Generame un leon descansando", "NewserAvanced");
+$r = preguntar("Generame un leon descansando", "NewserAdvanced");
 if (isset($r["imagen"])) {
     echo "Imagen: https://TU-DOMINIO" . $r["imagen"]["url"] . "\n";
 }
@@ -482,17 +508,17 @@ curl -X POST https://TU-DOMINIO/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"mensaje":"Hola, quien eres?"}'
 
-# Con NewserAvanced (5 creditos, modelo mas potente)
+# Con NewserAdvanced (5 creditos, modelo mas potente)
 curl -X POST https://TU-DOMINIO/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
-  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAvanced"}'
+  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAdvanced"}'
 
-# Generar imagen (NewserAvanced + 1 credito extra = 6 total)
+# Generar imagen (NewserAdvanced + 1 credito extra = 6 total)
 curl -X POST https://TU-DOMINIO/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
-  -d '{"mensaje":"Generame un leon descansando","modelo":"NewserAvanced"}'
+  -d '{"mensaje":"Generame un leon descansando","modelo":"NewserAdvanced"}'
 
 # Ver info del token (no gasta creditos)
 curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</code></pre>
@@ -500,6 +526,54 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
                 </details>
               </div>
             </details>
+          </div>
+        </section>
+
+        <section class="settings-seccion oculto" data-seccion-panel="creditos">
+          <h3>Créditos</h3>
+          <p class="settings-descripcion">Tus créditos se comparten entre todos tus tokens de API. Se actualizan en vivo cada vez que usás la app.</p>
+
+          <div class="creditos-pantalla" id="creditosPantalla">
+            <div class="creditos-fondo"></div>
+            <div class="creditos-overlay"></div>
+            <div class="creditos-contenido">
+              <div class="creditos-label">Créditos disponibles</div>
+              <div class="creditos-numero" id="creditosNumero">...</div>
+              <div class="creditos-sub" id="creditosSub">Cargando...</div>
+            </div>
+          </div>
+
+          <p class="creditos-titulo-estadisticas">Estadísticas de uso</p>
+          <div class="creditos-estadisticas" id="creditosEstadisticas">
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statTotalGastado">-</div>
+              <div class="creditos-stat-label">Créditos gastados</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statChats">-</div>
+              <div class="creditos-stat-label">Mensajes de chat</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statImagenes">-</div>
+              <div class="creditos-stat-label">Imágenes generadas</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statWeb">-</div>
+              <div class="creditos-stat-label">Búsquedas web</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statClima">-</div>
+              <div class="creditos-stat-label">Consultas de clima</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statActividad">-</div>
+              <div class="creditos-stat-label">Última actividad</div>
+            </div>
+          </div>
+
+          <div class="creditos-por-modelo" id="creditosPorModelo" style="display:none">
+            <p class="creditos-titulo-estadisticas">Consumo por modelo</p>
+            <div id="creditosPorModeloLista"></div>
           </div>
         </section>
       </div>
@@ -525,6 +599,6 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
   </div>
 </div>
 
-<script src="script.js?v=6"></script>
+<script src="script.js?v=7"></script>
 </body>
 </html>

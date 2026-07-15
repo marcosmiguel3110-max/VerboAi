@@ -18,7 +18,7 @@ El flujo es:
   3. En la terminal:  python verboai.py run
      (levanta un servidor proxy local en http://localhost:7788 y arranca
       el REPL interactivo)
-  4. Te pide elegir modelo (NewserLite o NewserAvanced)
+  4. Te pide elegir modelo (NewserLite o NewserAdvanced)
   5. Escribis mensajes + Enter -> te responde
   6. Comandos especiales dentro del REPL:
        /modelo         Cambiar de modelo en vivo
@@ -529,7 +529,7 @@ def cmd_run():
 
         if mensaje.lower() in ("/help", "/ayuda", "/?"):
             out(f"  {C.BOLD}Comandos:{C.RESET}")
-            out(f"    /modelo    Cambiar de modelo (NewserLite / NewserAvanced)")
+            out(f"    /modelo    Cambiar de modelo (NewserLite / NewserAdvanced)")
             out(f"    /creditos  Ver creditos restantes")
             out(f"    /info      Info completa del token")
             out(f"    /salir     Cerrar y salir")

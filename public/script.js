@@ -126,8 +126,9 @@ let modoActual = localStorage.getItem('verboAiModo') || 'general';
 let modeloActual = localStorage.getItem('verboAiModelo') || 'NewserLite';
 let modelosDisponibles = [
   // Default hardcodeado por si /api/config tarda o falla: la UI sigue andando.
-  { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20, rateLimitMaxWeb: 30 },
-  { nombre: 'NewserAvanced', descripcion: 'Mas potente. Razonamiento profundo, respuestas mas ricas. Rate limit mas estricto.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8 },
+  { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20, rateLimitMaxWeb: 30, badge: null, disponible: true },
+  { nombre: 'NewserAdvanced', descripcion: 'Mas potente. Razonamiento profundo, respuestas mas ricas. Genera imagenes, busca en la web y consulta el clima.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8, badge: 'beta', disponible: true },
+  { nombre: 'NewserPro', descripcion: 'Pronto. Modelo profesional con capacidades premium.', costoCreditos: 0, rateLimitMax: 0, rateLimitMaxWeb: 0, badge: 'pronto', disponible: false },
 ];
 let hayCuaderno = false;
 let chatIdActual = localStorage.getItem('verboAiChatId') || null;
@@ -374,8 +375,108 @@ document.querySelectorAll('.settings-nav-item').forEach((boton) => {
     document.querySelectorAll('.settings-seccion').forEach((sec) => {
       sec.classList.toggle('oculto', sec.dataset.seccionPanel !== seccion);
     });
+    // Si abrio la seccion de creditos, los cargamos y arrancamos el polling
+    if (seccion === 'creditos') {
+      cargarCreditos();
+      iniciarPollingCreditos();
+    } else {
+      detenerPollingCreditos();
+    }
   });
 });
+
+// ---------- Creditos globales + estadisticas ----------
+// Muestra el pozo de creditos del usuario (compartido entre todos sus tokens)
+// y las estadisticas de uso. Se actualiza en vivo cada 5s mientras la seccion
+// "Creditos" del panel de Settings esta abierta.
+let creditosPollingInterval = null;
+let ultimoCreditosNumero = null;
+
+async function cargarCreditos() {
+  const elNumero = document.getElementById('creditosNumero');
+  const elSub = document.getElementById('creditosSub');
+  try {
+    const r = await fetch('/api/creditos');
+    if (!r.ok) {
+      if (elNumero) elNumero.textContent = '?';
+      if (elSub) elSub.textContent = 'No se pudo cargar. ¿Iniciaste sesión?';
+      return;
+    }
+    const d = await r.json();
+    // Animacion: si el numero cambio, le agregamos la clase "cambio" por 300ms
+    if (elNumero) {
+      const nuevoTexto = d.esAdmin ? '∞' : String(d.creditos);
+      if (ultimoCreditosNumero !== null && ultimoCreditosNumero !== nuevoTexto) {
+        elNumero.classList.add('cambio');
+        setTimeout(() => elNumero.classList.remove('cambio'), 300);
+      }
+      elNumero.textContent = nuevoTexto;
+      ultimoCreditosNumero = nuevoTexto;
+    }
+    if (elSub) {
+      if (d.esAdmin) {
+        elSub.textContent = 'Cuenta admin (ilimitados)';
+      } else if (d.creditosIniciales > 0) {
+        const pct = Math.round((d.creditos / d.creditosIniciales) * 100);
+        elSub.textContent = `${d.creditos} de ${d.creditosIniciales} (${pct}% disponible)`;
+      } else {
+        elSub.textContent = '';
+      }
+    }
+    // Estadisticas
+    const stats = d.estadisticas || {};
+    const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setText('statTotalGastado', stats.totalGastado || 0);
+    setText('statChats', stats.totalChats || 0);
+    setText('statImagenes', stats.totalImagenes || 0);
+    setText('statWeb', stats.totalBusquedasWeb || 0);
+    setText('statClima', stats.totalClima || 0);
+    setText('statActividad', stats.ultimaActividad ? formatearFechaCorta(stats.ultimaActividad) : '—');
+
+    // Consumo por modelo
+    const porModelo = stats.porModelo || {};
+    const modelosUsados = Object.keys(porModelo).filter((k) => porModelo[k] > 0);
+    const contenedorPorModelo = document.getElementById('creditosPorModelo');
+    const listaPorModelo = document.getElementById('creditosPorModeloLista');
+    if (contenedorPorModelo && listaPorModelo) {
+      if (modelosUsados.length) {
+        contenedorPorModelo.style.display = 'block';
+        listaPorModelo.innerHTML = modelosUsados.map((m) => `
+          <div class="creditos-por-modelo-item">
+            <span class="creditos-por-modelo-nombre">${escapeHtml(m)}</span>
+            <span class="creditos-por-modelo-gasto">${porModelo[m]} créditos</span>
+          </div>
+        `).join('');
+      } else {
+        contenedorPorModelo.style.display = 'none';
+      }
+    }
+  } catch (e) {
+    if (elNumero) elNumero.textContent = '?';
+    if (elSub) elSub.textContent = 'Error de conexión';
+  }
+}
+
+function formatearFechaCorta(iso) {
+  if (!iso) return '—';
+  try {
+    const f = new Date(iso);
+    return f.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }) + ' ' +
+           f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) { return iso; }
+}
+
+function iniciarPollingCreditos() {
+  detenerPollingCreditos();
+  creditosPollingInterval = setInterval(cargarCreditos, 5000);
+}
+
+function detenerPollingCreditos() {
+  if (creditosPollingInterval) {
+    clearInterval(creditosPollingInterval);
+    creditosPollingInterval = null;
+  }
+}
 
 btnAbrirSettings.addEventListener('click', () => {
   overlaySettings.classList.remove('oculto');
@@ -383,19 +484,22 @@ btnAbrirSettings.addEventListener('click', () => {
   // API (por si el usuario acaba de entrar con una cuenta distinta).
   if (!claveApiAccesoVerificado) verificarAccesoClaveApi();
 });
-btnCerrarSettings.addEventListener('click', () => overlaySettings.classList.add('oculto'));
+btnCerrarSettings.addEventListener('click', () => {
+  overlaySettings.classList.add('oculto');
+  detenerPollingCreditos();
+});
 overlaySettings.addEventListener('click', (ev) => {
-  if (ev.target === overlaySettings) overlaySettings.classList.add('oculto');
+  if (ev.target === overlaySettings) {
+    overlaySettings.classList.add('oculto');
+    detenerPollingCreditos();
+  }
 });
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && !overlaySettings.classList.contains('oculto')) overlaySettings.classList.add('oculto');
 });
 
 // ---------- Clave API: tokens tipo "verboai-XXXX" ----------
-// Por ahora la seccion solo la ve marcos.miguel.3110@gmail.com (o el admin
-// local). El resto ve el cartel "Prox". El servidor decide quien entra via
-// /api/api-tokens/acceso, asi si mañana se agregan mas correos autorizados
-// no hace falta tocar el frontend.
+// La seccion esta disponible para todos los usuarios autenticados (100% publica).
 let claveApiAccesoVerificado = false;
 let claveApiTieneAcceso = false;
 let claveApiCargandoTokens = false;
@@ -411,34 +515,20 @@ const btnCopiarTokenRecien = document.getElementById('btnCopiarTokenRecien');
 const claveApiListaTokens = document.getElementById('claveApiListaTokens');
 
 async function verificarAccesoClaveApi() {
-  try {
-    const r = await fetch('/api/api-tokens/acceso');
-    if (!r.ok) throw new Error('no-auth');
-    const d = await r.json();
-    claveApiAccesoVerificado = true;
-    claveApiTieneAcceso = !!d.acceso;
-    aplicarEstadoClaveApi();
-    if (claveApiTieneAcceso) cargarTokensClaveApi();
-  } catch (e) {
-    // Si ni siquiera podemos preguntar, lo dejamos en "Prox" para no romper.
-    claveApiAccesoVerificado = true;
-    claveApiTieneAcceso = false;
-    aplicarEstadoClaveApi();
-  }
+  // Ahora todos los usuarios autenticados tienen acceso. No hace falta
+  // preguntarle al server, directamente mostramos el panel.
+  claveApiAccesoVerificado = true;
+  claveApiTieneAcceso = true;
+  aplicarEstadoClaveApi();
+  cargarTokensClaveApi();
 }
 
 function aplicarEstadoClaveApi() {
-  // El badge "Prox" se oculta cuando el usuario tiene acceso; el panel
-  // principal se oculta cuando no lo tiene.
-  if (claveApiTieneAcceso) {
-    if (badgeProxClaveApi) badgeProxClaveApi.classList.add('oculto');
-    if (claveApiProx) claveApiProx.classList.add('oculto');
-    if (claveApiPanel) claveApiPanel.classList.remove('oculto');
-  } else {
-    if (badgeProxClaveApi) badgeProxClaveApi.classList.remove('oculto');
-    if (claveApiProx) claveApiProx.classList.remove('oculto');
-    if (claveApiPanel) claveApiPanel.classList.add('oculto');
-  }
+  // Como todos tienen acceso, siempre ocultamos el badge "Prox" y mostramos
+  // el panel principal.
+  if (badgeProxClaveApi) badgeProxClaveApi.classList.add('oculto');
+  if (claveApiProx) claveApiProx.classList.add('oculto');
+  if (claveApiPanel) claveApiPanel.classList.remove('oculto');
 }
 
 async function cargarTokensClaveApi() {
@@ -608,7 +698,7 @@ if (btnCopiarTokenRecien) btnCopiarTokenRecien.addEventListener('click', async (
   }
 });
 
-// ---------- Selector de modelo (NewserLite / NewserAvanced) ----------
+// ---------- Selector de modelo (NewserLite / NewserAdvanced) ----------
 // Boton "Nombre + flecha" que va al lado del microfono en el input del chat.
 // Al click lo abre, la flecha rota (apunta arriba) y se muestran las opciones
 // con su costo en creditos. La seleccion se persiste en localStorage y tambien
@@ -621,24 +711,31 @@ function renderOpcionesModelo() {
   if (!selectorModeloMenu) return;
   selectorModeloMenu.innerHTML = modelosDisponibles.map((m) => {
     const activa = m.nombre === modeloActual;
+    const disponible = m.disponible !== false; // default true si no viene
     // Badge de costo en creditos: 1 = "1 credito", 5 = "5 creditos". Para
     // que el usuario vea el "precio" antes de elegir.
     const badges = [];
-    if (m.costoCreditos && m.costoCreditos > 1) {
+    if (disponible && m.costoCreditos && m.costoCreditos > 1) {
       badges.push(`<span class="opcion-modelo-badge">${m.costoCreditos} creditos</span>`);
     }
-    if (m.nombre === 'NewserAvanced') {
+    // Badge "beta" para NewserAdvanced (viene del server como m.badge === 'beta')
+    if (m.badge === 'beta' || m.nombre === 'NewserAdvanced') {
       badges.push(`<span class="opcion-modelo-badge opcion-modelo-badge-beta">Beta</span>`);
     }
+    // Badge "pronto" para modelos no disponibles (ej: NewserPro)
+    if (m.badge === 'pronto' || !disponible) {
+      badges.push(`<span class="opcion-modelo-badge opcion-modelo-badge-pronto">Pronto</span>`);
+    }
+    const claseNoDisponible = disponible ? '' : 'no-disponible';
     return `
-      <button type="button" class="opcion-modelo ${activa ? 'activa' : ''}" data-modelo="${escapeHtml(m.nombre)}" role="option" aria-selected="${activa}">
+      <button type="button" class="opcion-modelo ${activa ? 'activa' : ''} ${claseNoDisponible}" data-modelo="${escapeHtml(m.nombre)}" role="option" aria-selected="${activa}" ${disponible ? '' : 'disabled'}>
         <div class="opcion-modelo-fila">
           <span class="opcion-modelo-nombre">
             ${escapeHtml(m.nombre)}
           </span>
           <span class="opcion-modelo-badges">
             ${badges.join('')}
-            <svg class="opcion-modelo-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            ${disponible ? '<svg class="opcion-modelo-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}
           </span>
         </div>
         <span class="opcion-modelo-desc">${escapeHtml(m.descripcion || '')}</span>
@@ -647,6 +744,8 @@ function renderOpcionesModelo() {
   }).join('');
 
   selectorModeloMenu.querySelectorAll('.opcion-modelo').forEach((op) => {
+    // Solo agregar listener si el modelo esta disponible
+    if (op.disabled) return;
     op.addEventListener('click', () => {
       modeloActual = op.dataset.modelo;
       localStorage.setItem('verboAiModelo', modeloActual);
@@ -714,7 +813,7 @@ document.addEventListener('keydown', (ev) => {
 });
 
 // Carga la lista real de modelos desde el servidor. Si falla, no pasa nada:
-// seguimos con la lista hardcodeada de arriba (NewserLite + NewserAvanced).
+// seguimos con la lista hardcodeada de arriba (NewserLite + NewserAdvanced).
 async function cargarModelosDisponibles() {
   try {
     const r = await fetch('/api/config');
@@ -1612,12 +1711,12 @@ elForm.addEventListener('submit', async (ev) => {
   elIndicador.classList.remove('oculto');
 
   // Si el mensaje empieza con "Generame", "Genera", "Dibujame", etc. Y el
-  // modelo es NewserAvanced, mostramos el overlay de "Generando imagen..."
+  // modelo es NewserAdvanced, mostramos el overlay de "Generando imagen..."
   // con porcentaje simulado. El server va a tardar 10-60s en generar la
   // imagen, y sin el overlay el usuario no sabe si esta pasando algo.
   // Usamos la misma regex que el server para detectar la intencion.
   const _esGeneracionImagen = (() => {
-    if (modeloActual !== 'NewserAvanced') return false;
+    if (modeloActual !== 'NewserAdvanced') return false;
     const re = /^\s*(generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé)\s+/i;
     return re.test(texto);
   })();
@@ -1633,7 +1732,7 @@ elForm.addEventListener('submit', async (ev) => {
   formData.append('mensaje', texto);
   if (chatIdActual) formData.append('chatId', chatIdActual);
   formData.append('modo', modoActual);
-  // Mandamos el modelo elegido en el selector (NewserLite o NewserAvanced).
+  // Mandamos el modelo elegido en el selector (NewserLite o NewserAdvanced).
   // Si por algun motivo no se cargo la config, mandamos el default y el
   // servidor lo resuelve igual.
   formData.append('modelo', modeloActual);
