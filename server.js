@@ -3130,19 +3130,30 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   }
 });
 
-// Arranque: primero conectamos a MongoDB y cargamos los datos persistentes,
-// despues recien empezamos a escuchar. Esto asegura que cuando llegue la
-// primera peticion, los archivos locales ya tengan los datos de Mongo.
-(async () => {
-  try {
-    await mongoDb.conectarMongo();
-    await cargarDesdeMongoAlArrancar();
-  } catch (e) {
-    console.error('[startup] Error en inicializacion Mongo:', e.message);
-    // No frenamos el arranque: seguimos con archivos locales.
-  }
-  app.listen(PORT, () => {
-    console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
+// Estado de la conexion a MongoDB (solo para admin/diagnostico). No revela
+// datos sensibles, solo si Mongo esta conectado o no, y un mensaje de ayuda
+// si no lo esta. util para debugear desde el navegador sin tener que ir a los
+// logs de Render.
+app.get('/api/mongo-status', (req, res) => {
+  const conectado = mongoDb.estaConectado();
+  res.json({
+    conectado,
+    mensaje: conectado
+      ? 'MongoDB conectado. Los datos se estan guardando de forma persistente.'
+      : 'MongoDB NO conectado. Los datos se guardan solo en archivos locales (/memory) y se pierden al reiniciar el servicio. Revisa los logs del servidor para ver las causas probables.',
+    uriConfigurada: !!process.env.MONGODB_URI,
+    dbName: process.env.MONGODB_DB_NAME || 'biblia_ai',
+  });
+});
+
+// Arranque: arrancamos el server INMEDIATAMENTE, y la conexion a MongoDB +
+// carga de datos persistente pasa en BACKGROUND. Esto es importante porque si
+// Mongo no conecta (timeout de 6s x 4 configs = 24s), el server igual
+// responde pedidos. Las primeras peticiones pueden no tener datos de Mongo
+// todavia, pero como los archivos locales arrancan vacios y se cargan en
+// background, en algunos segundos queda todo sincronizado.
+app.listen(PORT, () => {
+  console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
   try {
     const os = require('os');
     const interfaces = os.networkInterfaces();
@@ -3160,8 +3171,19 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
     }
   } catch (e) { /* si falla, no pasa nada, el resto de la app funciona igual */ }
-  }); // fin de app.listen callback
-})(); // fin del IIFE de arranque
+
+  // Ahora si: conectar Mongo y cargar datos en background (no bloquea).
+  (async () => {
+    try {
+      console.log('[startup] Conectando a MongoDB en background...');
+      await mongoDb.conectarMongo();
+      await cargarDesdeMongoAlArrancar();
+      console.log('[startup] Mongo listo. Estado:', mongoDb.estaConectado() ? 'CONECTADO' : 'NO conectado (usando archivos locales)');
+    } catch (e) {
+      console.error('[startup] Error en inicializacion Mongo:', e.message);
+    }
+  })();
+});
 
 // Endpoint de prueba de conexion con el modelo de IA. Requiere sesion
 // iniciada (lo exige el middleware global de arriba). No revela nunca el
