@@ -179,6 +179,27 @@ function crearBurbuja(rol, esError = false) {
   return div;
 }
 
+// Actualiza el contenido de una burbuja de IA con el texto acumulado, PERO
+// preserva cualquier grid de imagenes (.adjuntas-grid) u otros widgets que
+// se hayan agregado durante el stream (por ejemplo, cuando llega el evento
+// 'descargas' con una imagen generada por IA).
+//
+// Sin esto, el handler de 'done' hace burbujaIA.innerHTML = texto, lo cual
+// BORRA las imagenes que ya estaban agregadas. Bug encontrado y arreglado.
+function actualizarBurbujaPreservandoImagenes(burbuja, texto) {
+  if (!burbuja) return;
+  // Guardamos los grids de imagenes y otros elementos no-texto que haya
+  const elementosAPreservar = [];
+  burbuja.querySelectorAll('.adjuntas-grid, .hoja-cuaderno, .fuentes-lista, .referencia-imagenes').forEach((el) => {
+    elementosAPreservar.push(el.cloneNode(true));
+  });
+  // Reconstruimos el contenido: primero el texto, despues los elementos preservados
+  burbuja.innerHTML = renderizarTexto(texto);
+  elementosAPreservar.forEach((el) => {
+    burbuja.appendChild(el);
+  });
+}
+
 function pintarMensajeCompleto(rol, texto, imagenesUrls = null, esError = false) {
   const div = crearBurbuja(rol, esError);
   div.innerHTML = rol === 'user' || esError ? convertirEnlaces(escaparHtml(texto)) : renderizarTexto(texto);
@@ -1684,7 +1705,7 @@ elForm.addEventListener('submit', async (ev) => {
           await new Promise((resolve) => {
             const finalizar = () => {
               if (escritor) escritor.detener();
-              if (burbujaIA) burbujaIA.innerHTML = renderizarTexto(textoAcumulado.trim());
+              if (burbujaIA) actualizarBurbujaPreservandoImagenes(burbujaIA, textoAcumulado.trim());
               resolve();
             };
             if (escritor && escritor.pendiente()) {
@@ -1710,7 +1731,7 @@ elForm.addEventListener('submit', async (ev) => {
       // lo que ya se alcanzo a mostrar (el servidor igual guarda lo generado
       // hasta ese momento en el historial).
       if (escritor) escritor.detener();
-      if (burbujaIA) burbujaIA.innerHTML = renderizarTexto(textoAcumulado.trim());
+      if (burbujaIA) actualizarBurbujaPreservandoImagenes(burbujaIA, textoAcumulado.trim());
     } else {
       if (escritor) escritor.detener();
       if (burbujaIA) burbujaIA.remove();
