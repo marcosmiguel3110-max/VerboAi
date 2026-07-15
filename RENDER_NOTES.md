@@ -2,7 +2,8 @@
 
 ## Variables de Entorno
 Configura estas variables en el dashboard de Render:
-- `BTATESTERS_KEY`: Tu clave de API para el modelo de IA (antes GROQ_API_KEY)
+- `BTATESTERS_KEY`: Tu clave de API para el modelo de IA (preferido)
+- `GROQ_API_KEY`: (opcional) También acepta esta variable para compatibilidad
 - `GROQ_MODEL`: (opcional) Modelo de texto, default: openai/gpt-oss-20b
 - `GROQ_MODEL_VISION`: (opcional) Modelo de visión, default: meta-llama/llama-4-scout-17b-16e-instruct
 - `MONGODB_URI`: Tu conexión de MongoDB Atlas
