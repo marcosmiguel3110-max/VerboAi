@@ -391,6 +391,8 @@ function obtenerUsuarioActual(req) {
 
 const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/info.html', '/info']);
 app.use((req, res, next) => {
+  // Redireccion /info -> /info.html para que sea mas facil de recordar
+  if (req.path === '/info') return res.redirect(301, '/info.html');
   if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/')) return next();
   if (estaAutenticado(req)) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
@@ -1279,13 +1281,15 @@ app.post('/api/v1/chat', async (req, res) => {
       });
     }
     // Generamos la imagen
-    const img = await generarImagenPollinations(intencionImagenApi.prompt);
-    if (!img) {
+    const resultado = await generarImagenPollinations(intencionImagenApi.prompt);
+    if (!resultado || !resultado.img) {
+      console.error('[api/v1/chat] generacion de imagen fallo:', resultado ? resultado.error : 'sin resultado');
       return res.status(502).json({
         ok: false,
         error: 'No se pudo generar la imagen en este momento. Intenta de nuevo en unos minutos.',
       });
     }
+    const img = resultado.img;
     // Descontamos el costo extra (+1) del token. El costo base ya se cobró al
     // inicio con registrarUsoToken. Si el token se quedó sin creditos aca (por
     // un race condition), igual devolvemos la imagen pero avisamos.
@@ -2145,13 +2149,16 @@ async function buscarWebGoogle(query) {
 // Pollinations a veces tarda mucho (60-90s) o devuelve 502/503 cuando esta
 // sobrecargado. Por eso hacemos hasta 3 reintentos con timeout creciente.
 //
+// Devuelve: { img: {...}, error: null } si salio bien, o { img: null, error: "..." } si fallo.
+// El caller puede usar .img para verificar y .error para log/mensaje.
+//
 // Parametros:
 //   prompt  -> texto descriptivo de la imagen (se URL-encodea)
 //   seed    -> semilla opcional para reproducibilidad (si no viene, se
 //              genera una aleatoria asi cada pedido da algo distinto)
 async function generarImagenPollinations(prompt, seed) {
   const promptLimpio = (prompt || '').trim().slice(0, 200);
-  if (!promptLimpio) return null;
+  if (!promptLimpio) return { img: null, error: 'Prompt vacio' };
   const seedFinal = (typeof seed === 'number' && seed > 0) ? seed : Math.floor(Math.random() * 1000000);
 
   // 3 intentos con timeout razonable: 30s, 45s, 60s. Pollinations a veces
@@ -2207,10 +2214,13 @@ async function generarImagenPollinations(prompt, seed) {
       const urlLocal = guardarImagenDisco(buffer, mime);
       console.log(`[pollinations] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
       return {
-        url: urlLocal,
-        prompt: promptLimpio,
-        seed: seedFinal,
-        tamanoKB: Math.round(buffer.length / 1024),
+        img: {
+          url: urlLocal,
+          prompt: promptLimpio,
+          seed: seedFinal,
+          tamanoKB: Math.round(buffer.length / 1024),
+        },
+        error: null,
       };
     } catch (e) {
       ultimoError = e.message;
@@ -2225,7 +2235,7 @@ async function generarImagenPollinations(prompt, seed) {
   }
 
   console.error(`[pollinations] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
-  return null;
+  return { img: null, error: ultimoError || 'Error desconocido' };
 }
 
 // Detecta si un mensaje del usuario pide generar una imagen. La "palabra
@@ -2658,15 +2668,16 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         enviarGen({ type: 'ping' });
       }, 5000);
 
-      let img = null;
+      let resultadoImg = null;
       try {
-        img = await generarImagenPollinations(intencionImagen.prompt);
+        resultadoImg = await generarImagenPollinations(intencionImagen.prompt);
       } finally {
         clearInterval(heartbeat);
       }
       enviarGen({ type: 'investigando_fin' });
 
-      if (img) {
+      if (resultadoImg && resultadoImg.img) {
+        const img = resultadoImg.img;
         // Borramos el texto "Generando imagen..." y mandamos la imagen como
         // descarga (el frontend la muestra como foto). Reusamos el evento
         // 'descargas' que ya sabe renderizar el frontend.
@@ -2683,7 +2694,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         // usuario con un mensaje claro. El log del servidor ya tiene el detalle
         // del error real (HTTP status, timeout, etc.) para que el admin pueda
         // debuguear.
-        console.error('[chat-generar-imagen] Pollinations fallo despues de 3 intentos. Ultimo error:', ultimoError);
+        const errMsg = (resultadoImg && resultadoImg.error) ? resultadoImg.error : 'error desconocido';
+        console.error('[chat-generar-imagen] Pollinations fallo despues de 3 intentos. Ultimo error:', errMsg);
         enviarGen({ type: 'chunk', text: '\n\nNo pude generar la imagen en este momento. El servicio de generacion de imagenes esta caido o sobrecargado. Probá de nuevo en unos minutos.' });
         chatGen.mensajes.push({
           role: 'assistant',
