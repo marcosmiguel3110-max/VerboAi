@@ -234,6 +234,24 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 *
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+// Handler para cuando el body-parser rechaza un JSON mal formado (sintaxis
+// invalida, comillas simples, comas sueltas, etc.). Por defecto Express manda
+// un HTML crudo "Bad Request" que rompe a cualquier cliente de API que espera
+// JSON. Aca lo interceptamos para devolver siempre JSON en las rutas /api/*,
+// igual que hace el resto de la app.
+app.use((err, req, res, next) => {
+  if (err && (err.type === 'entity.parse.failed' || err.type === 'entity.too.large' || err.type === 'request.size.invalid')) {
+    if (req.path && req.path.startsWith('/api/')) {
+      let mensaje = 'El cuerpo de la peticion no es un JSON valido.';
+      if (err.type === 'entity.too.large') mensaje = 'La peticion es demasiado grande.';
+      return res.status(400).json({ ok: false, error: mensaje });
+    }
+    // Para rutas no-API (HTML), dejamos el comportamiento default.
+    return res.status(400).type('text').send('Bad Request');
+  }
+  next(err);
+});
+
 // ---------- Login (sesion con cookie firmada, sin dependencias extra) ----------
 const APP_USER = process.env.APP_USER || 'admin';
 const APP_PASS = process.env.APP_PASS || 'cambia-esta-clave';
@@ -899,6 +917,11 @@ app.post('/api/api-tokens/generar', (req, res) => {
   if (!tieneAccesoApiTokens(usuario)) {
     return res.status(403).json({ error: 'Tu cuenta no tiene acceso a Clave API por ahora.' });
   }
+  // Validacion estricta del nombre: solo string, max 40 chars. Rechazamos
+  // arrays/objetos/numeros para que no rompa String() ni .trim().
+  if (req.body && req.body.nombre != null && typeof req.body.nombre !== 'string') {
+    return res.status(400).json({ error: 'El nombre debe ser un texto valido.' });
+  }
   const nombreLimpio = (req.body && req.body.nombre ? String(req.body.nombre) : '').trim().slice(0, 40);
   const tokens = leerApiTokens();
   // Prevenimos que alguien llene el archivo a manotazos: max 10 tokens vivos.
@@ -982,14 +1005,27 @@ app.post('/api/v1/chat', async (req, res) => {
     return res.status(controlUso.status).json({ ok: false, error: controlUso.error });
   }
 
-  const mensaje = (req.body && typeof req.body.mensaje === 'string') ? req.body.mensaje.trim() : '';
-  const modo = (req.body && req.body.modo === 'catolico') ? 'catolico' : 'general';
+  // Validacion estricta de tipos: rechazamos arrays, objetos, numeros, etc.
+  // antes de intentar usar el mensaje. Esto evita que un cliente malicioso
+  // mande {"mensaje": ["test", true, null]} u otras estructuras raras y haga
+  // colgar la peticion.
+  if (req.body == null || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ ok: false, error: 'El cuerpo debe ser un objeto JSON.' });
+  }
+  if (typeof req.body.mensaje !== 'string') {
+    return res.status(400).json({ ok: false, error: 'El mensaje debe ser un formato de texto valido.' });
+  }
+  const mensaje = req.body.mensaje.trim();
   if (!mensaje) {
     return res.status(400).json({ ok: false, error: 'Falta "mensaje" en el cuerpo de la peticion.' });
   }
   if (mensaje.length > 8000) {
     return res.status(400).json({ ok: false, error: 'El mensaje es demasiado largo (max 8000 caracteres).' });
   }
+
+  // Modo opcional: solo aceptamos "general" (default) o "catolico". Cualquier
+  // otro valor (o tipo no-string) cae a "general" para no romper.
+  const modo = (typeof req.body.modo === 'string' && req.body.modo.trim() === 'catolico') ? 'catolico' : 'general';
 
   const mensajesParaModelo = [
     { role: 'system', content: modo === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT },
