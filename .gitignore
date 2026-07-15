@@ -3,3 +3,6 @@ node_modules/
 .DS_Store
 *.log
 memory/
+
+# Zaemit AI tool config (auto-generated)
+.mcp.json

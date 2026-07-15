@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const mongo = require('./db');
 
 const app = express();
 // Si la app corre detras de ngrok (u otro proxy), esto hace que Express
@@ -94,6 +95,7 @@ function guardarProgresoBiblia(usuario, p) {
   if (!raiz.usuarios) raiz.usuarios = {};
   raiz.usuarios[usuario] = p;
   fs.writeFileSync(BIBLIA_PROGRESO_FILE, JSON.stringify(raiz, null, 2));
+  mongo.guardarDocumento('biblia-progreso', raiz);
 }
 
 // API publica (RV1960) que usamos como fuente de la Biblia completa, para no
@@ -176,6 +178,7 @@ function leerUsuarios() {
 }
 function guardarUsuarios(usuarios) {
   fs.writeFileSync(USUARIOS_FILE, JSON.stringify({ usuarios }, null, 2));
+  mongo.guardarDocumento('usuarios', { usuarios });
 }
 function hashearClave(clave) {
   const sal = crypto.randomBytes(16).toString('hex');
@@ -731,6 +734,10 @@ function leerDB() {
 
 function guardarDB(db) {
   fs.writeFileSync(MEMORY_FILE, JSON.stringify(db, null, 2));
+  // Se espeja a MongoDB en segundo plano (sin bloquear la respuesta al
+  // usuario). El archivo local ya quedo guardado arriba, asi que si Mongo
+  // no esta disponible en este momento no se pierde nada de todos modos.
+  mongo.guardarDocumento('historial', db);
 }
 
 function obtenerChat(db, chatId, usuario) {
@@ -1448,23 +1455,67 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
+// Antes de levantar el servidor: conectar a MongoDB (si esta configurada) y
+// "hidratar" los archivos locales con lo ultimo que haya guardado en la
+// base de datos. Esto es lo que hace que los datos sobrevivan a un reinicio
+// del servicio en Render, donde el disco local se borra en cada deploy:
+// si Mongo tiene datos mas recientes que el archivo local (por ejemplo
+// porque el disco se acaba de borrar), se usan esos.
+async function hidratarDesdeMongo() {
+  if (!mongo.estaConectado()) return;
+
+  const historialRemoto = await mongo.leerDocumento('historial');
+  if (historialRemoto) {
+    fs.writeFileSync(MEMORY_FILE, JSON.stringify(historialRemoto, null, 2));
+  } else {
+    await mongo.guardarDocumento('historial', JSON.parse(fs.readFileSync(MEMORY_FILE, 'utf-8')));
+  }
+
+  const usuariosRemoto = await mongo.leerDocumento('usuarios');
+  if (usuariosRemoto) {
+    fs.writeFileSync(USUARIOS_FILE, JSON.stringify(usuariosRemoto, null, 2));
+  } else {
+    await mongo.guardarDocumento('usuarios', JSON.parse(fs.readFileSync(USUARIOS_FILE, 'utf-8')));
+  }
+
+  const progresoRemoto = await mongo.leerDocumento('biblia-progreso');
+  if (progresoRemoto) {
+    fs.writeFileSync(BIBLIA_PROGRESO_FILE, JSON.stringify(progresoRemoto, null, 2));
+  } else {
+    await mongo.guardarDocumento('biblia-progreso', JSON.parse(fs.readFileSync(BIBLIA_PROGRESO_FILE, 'utf-8')));
+  }
+
+  console.log('[mongodb] Datos locales sincronizados con la base de datos.');
+}
+
+async function iniciarServidor() {
+  await mongo.conectarMongo();
   try {
-    const os = require('os');
-    const interfaces = os.networkInterfaces();
-    const ips = [];
-    Object.values(interfaces).forEach((lista) => {
-      (lista || []).forEach((info) => {
-        if (info.family === 'IPv4' && !info.internal) ips.push(info.address);
+    await hidratarDesdeMongo();
+  } catch (err) {
+    console.error('[mongodb] Error al sincronizar datos iniciales:', err.message);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
+    try {
+      const os = require('os');
+      const interfaces = os.networkInterfaces();
+      const ips = [];
+      Object.values(interfaces).forEach((lista) => {
+        (lista || []).forEach((info) => {
+          if (info.family === 'IPv4' && !info.internal) ips.push(info.address);
+        });
       });
-    });
-    if (ips.length) {
-      console.log('Para entrar desde tu celular (misma red WiFi):');
-      ips.forEach((ip) => console.log(`  http://${ip}:${PORT}`));
-      console.log('Importante: esa(s) URL tambien tienen que estar agregadas en');
-      console.log('Google Cloud Console -> Credenciales -> tu cliente OAuth -> "URIs de');
-      console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
-    }
-  } catch (e) { /* si falla, no pasa nada, el resto de la app funciona igual */ }
-});
+      if (ips.length) {
+        console.log('Para entrar desde tu celular (misma red WiFi):');
+        ips.forEach((ip) => console.log(`  http://${ip}:${PORT}`));
+        console.log('Importante: esa(s) URL tambien tienen que estar agregadas en');
+        console.log('Google Cloud Console -> Credenciales -> tu cliente OAuth -> "URIs de');
+        console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
+      }
+    } catch (e) { /* si falla, no pasa nada, el resto de la app funciona igual */ }
+  });
+}
+
+iniciarServidor();

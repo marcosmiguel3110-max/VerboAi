@@ -34,18 +34,26 @@ Render puede bloquear conexiones SMTP salientes. El sistema tiene fallback autom
 - Si SMTP falla, usa Resend API
 - Si ambos fallan, el login con Google funcionará en modo directo sin código
 
-## Limitaciones Importantes
-Render usa un sistema de archivos efímero. Esto significa:
+## Persistencia con MongoDB (ya integrada)
+La app ahora guarda todo (historial de chats, usuarios y progreso de lectura
+de la Biblia) en MongoDB, ademas de los archivos locales de `memory/`. Para
+activarlo, configura en Render:
+- `MONGODB_URI`: tu cadena de conexion de MongoDB Atlas (ej: `mongodb+srv://usuario:clave@cluster.mongodb.net/?appName=Cluster0`)
+- `MONGODB_DB_NAME`: (opcional) nombre de la base de datos, default: `biblia_ai`
+
+Como funciona:
+- Cada escritura (nuevo mensaje, nuevo usuario, progreso de lectura) se guarda
+  primero en el archivo local y luego se espeja en MongoDB en segundo plano.
+- Al arrancar, el servidor se conecta a MongoDB y "hidrata" los archivos
+  locales con lo ultimo guardado ahi, asi que aunque Render borre el disco en
+  cada deploy o reinicio, los datos reales sobreviven en la base de datos.
+- Si `MONGODB_URI` no esta configurada o Mongo no responde, la app sigue
+  funcionando igual que antes (solo con archivos locales), sin romperse.
+
+## Limitaciones sin MongoDB
+Si no configuras `MONGODB_URI`, Render usa un sistema de archivos efímero:
 - El directorio `memory/` se perderá cada vez que el servicio se reinicia
 - El historial de chat y el progreso de lectura de la Biblia NO serán persistentes
-- Para persistencia real, necesitarías integrar una base de datos externa (PostgreSQL, MongoDB, etc.)
-
-## Solución Temporal
-La app funcionará correctamente en Render, pero los datos se perderán al reiniciar el servicio.
-Para una solución de producción, considera:
-1. Usar PostgreSQL de Render para persistencia
-2. Usar Redis para caché temporal
-3. Migrar el almacenamiento de archivos a una base de datos
 
 ## Nota de Deploy
 Última actualización: Fallback a Resend API implementado para solucionar bloqueos SMTP en Render.
