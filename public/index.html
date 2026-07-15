@@ -357,14 +357,21 @@
                   <li>Rate limit (API): <strong>20/min</strong> para NewserLite, <strong>5/min</strong> para NewserAvanced (ventana deslizante por token).</li>
                   <li>Rate limit (web, no consume creditos): <strong>30/min</strong> para NewserLite, <strong>8/min</strong> para NewserAvanced.</li>
                   <li>NewserAvanced consume mas creditos y tiene rate limit mas estricto (mas potente, mas lento).</li>
-                  <li><strong>NewserAvanced</strong> tiene 3 herramientas exclusivas (se activan automaticamente cuando la IA decide):</li>
-                  <li style="list-style: circle; margin-left: 20px;"><code>[[IMAGEN::prompt]]</code> genera imagen con IA — consume <strong>+1 credito</strong> adicional.</li>
+                  <li><strong>NewserAvanced</strong> tiene herramientas exclusivas:</li>
+                  <li style="list-style: circle; margin-left: 20px;"><strong>Generar imagen</strong>: escribi <code>Generame [descripcion]</code> como mensaje (en web o API). Consume <strong>+1 credito</strong> adicional. Se abre en el visor en terminal.</li>
                   <li style="list-style: circle; margin-left: 20px;"><code>[[WEB::consulta]]</code> busca en Google Custom Search — consume <strong>+1 credito</strong> adicional.</li>
                   <li style="list-style: circle; margin-left: 20px;"><code>[[CLIMA::lugar]]</code> consulta open-meteo — <strong>gratis</strong>, no consume creditos extra.</li>
                   <li>Si mandas un <code>"modelo"</code> invalido o vacio, cae automaticamente a NewserLite (no rompe).</li>
                   <li>Cuando se acaban los creditos, el token devuelve <code>402</code>. Si queres mas, avisale al admin.</li>
                   <li>Borrar un token lo revoca de inmediato: cualquier peticion posterior con ese token devuelve <code>401</code>.</li>
                 </ul>
+                <p style="margin-top: 16px;"><strong>Usar desde la terminal:</strong> descarga el archivo <code>cli/verboai.py</code> y ejecutá:</p>
+<pre><code># 1. Guardar el token (una sola vez)
+python verboai.py login verboai-TU_TOKEN
+
+# 2. Iniciar chat interactivo
+python verboai.py run</code></pre>
+                <p>El CLI levanta un servidor proxy local en <code>http://127.0.0.1:7788</code> (alta seguridad, el token nunca se expone). Para usarlo desde otra web o app, seguí los ejemplos de <code>curl</code> de arriba.</p>
               </div>
             </details>
           </div>

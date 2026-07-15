@@ -1176,6 +1176,71 @@ app.post('/api/v1/chat', async (req, res) => {
     { role: 'user', content: mensaje },
   ];
 
+  // ---- Atajo: "Generame [descripcion]" -> genera imagen directo, sin IA ----
+  // Si el mensaje empieza con "Genera", "Generame", "Dibujame", etc., vamos
+  // directo a pollinations.ai sin llamar a Groq. Esto consume +1 credito
+  // (encima del costo base del modelo) SOLO si el modelo es NewserAvanced.
+  // Si es NewserLite, devolvemos un error claro.
+  const intencionImagenApi = detectarGeneracionImagen(mensaje);
+  if (intencionImagenApi.esGeneracion) {
+    if (configModelo.nombre !== 'NewserAvanced') {
+      return res.status(400).json({
+        ok: false,
+        error: 'La generacion de imagenes solo esta disponible con NewserAvanced. Mandá "modelo":"NewserAvanced" en el body para usarla.',
+      });
+    }
+    // Verificamos si le alcanzan los creditos para el extra (+1)
+    const tokenActual = buscarTokenPorValor(valorToken);
+    const costoTotalGen = configModelo.costoCreditos + 1;
+    if (!tokenActual || tokenActual.creditos < 1) {
+      return res.status(402).json({
+        ok: false,
+        error: `El token no tiene creditos suficientes para generar imagen (necesita +1, le quedan ${tokenActual ? tokenActual.creditos : 0}).`,
+      });
+    }
+    // Generamos la imagen
+    const img = await generarImagenPollinations(intencionImagenApi.prompt);
+    if (!img) {
+      return res.status(502).json({
+        ok: false,
+        error: 'No se pudo generar la imagen en este momento. Intenta de nuevo en unos minutos.',
+      });
+    }
+    // Descontamos el costo extra (+1) del token. El costo base ya se cobró al
+    // inicio con registrarUsoToken. Si el token se quedó sin creditos aca (por
+    // un race condition), igual devolvemos la imagen pero avisamos.
+    const tokensGen = leerApiTokens();
+    const idxGen = tokensGen.findIndex((t) => t.id === tokenActual.id);
+    if (idxGen !== -1) {
+      tokensGen[idxGen].creditos = Math.max(0, (tokensGen[idxGen].creditos || 0) - 1);
+      guardarApiTokens(tokensGen);
+    }
+    const actualizadoGen = buscarTokenPorValor(valorToken);
+    return res.json({
+      ok: true,
+      respuesta: `Imagen generada: ${intencionImagenApi.prompt}`,
+      modelo: configModelo.nombre,
+      modeloUsado: configModelo.nombre,
+      costoCreditos: costoTotalGen,
+      costoBase: configModelo.costoCreditos,
+      costoExtraHerramientas: 1,
+      herramientas: [{
+        herramienta: 'imagen',
+        prompt: img.prompt,
+        url: img.url,
+        tamanoKB: img.tamanoKB,
+      }],
+      imagen: {
+        url: img.url,
+        prompt: img.prompt,
+        tamanoKB: img.tamanoKB,
+      },
+      creditosRestantes: actualizadoGen ? actualizadoGen.creditos : null,
+      rateLimitMax: configModelo.rateLimitMax,
+      rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
+    });
+  }
+
   try {
     const respuestaGroq = await llamarGroqConReintentos({
       method: 'POST',
@@ -1201,17 +1266,17 @@ app.post('/api/v1/chat', async (req, res) => {
     const data = await respuestaGroq.json();
     const texto = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
 
-    // Detectar las 3 etiquetas exclusivas de NewserAvanced. Si alguna aparece,
-    // ejecutamos la herramienta correspondiente y la quitamos del texto plano.
-    // IMAGEN y WEB consumen +1 credito cada una; CLIMA no consume.
-    let imagenQueryApi = null;
+    // Detectar las etiquetas exclusivas de NewserAvanced que la IA puede haber
+    // escrito: WEB y CLIMA (la etiqueta IMAGEN ya no se usa; las imagenes se
+    // generan automaticamente cuando el mensaje empieza con "Genera...").
+    // WEB consume +1 credito; CLIMA no consume.
     let webSearchQueryApi = null;
     let climaQueryApi = null;
     let textoLimpio = texto;
 
-    const reImagenApi = /\[\[IMAGEN::([^\]]+)\]\]/g;
-    const mImg = [...texto.matchAll(reImagenApi)];
-    if (mImg.length) { imagenQueryApi = mImg[0][1].trim(); textoLimpio = textoLimpio.replace(reImagenApi, ''); }
+    // Por las dudas, si el modelo igual escribió un [[IMAGEN::...]] (no debería
+    // porque el prompt le dice que no lo haga), lo limpiamos del texto.
+    textoLimpio = textoLimpio.replace(/\[\[IMAGEN::[^\]]*\]\]/g, '');
 
     const reWebApi = /\[\[WEB::([^\]]+)\]\]/g;
     const mWeb = [...texto.matchAll(reWebApi)];
@@ -1221,22 +1286,66 @@ app.post('/api/v1/chat', async (req, res) => {
     const mClima = [...texto.matchAll(reClimaApi)];
     if (mClima.length) { climaQueryApi = mClima[0][1].trim(); textoLimpio = textoLimpio.replace(reClimaApi, ''); }
 
-    // Quitamos tambien las etiquetas originales (CUADERNO, BUSCAR, etc.) porque
-    // aca no hay UI que las procese: el que consume esta API solo quiere texto.
-    textoLimpio = textoLimpio
-      .replace(/\[\[CUADERNO::[\s\S]*?\]\]/g, '')
-      .replace(/\[\[BUSCAR::[^\]]*\]\]/g, '')
-      .replace(/\[\[INVESTIGAR::[^\]]*\]\]/g, '')
-      .replace(/\[\[DESCARGAR::[\s\S]*?\]\]/g, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
+    // Quitamos las etiquetas originales pero EXTRAEMOS su contenido para
+    // agregarlo como texto plano a la respuesta. Asi el cliente de la API
+    // recibe la informacion util (el versiculo del cuaderno, la consulta de
+    // busqueda, etc.) sin necesidad del widget del cuadernito que solo existe
+    // en la web. Solo aplica aca (API), en la web las etiquetas se procesan
+    // aparte y se muestran como widgets.
+    let textoExtraidoEtiquetas = '';
+
+    // CUADERNO: el formato es [[CUADERNO::referencia::texto del versiculo]]
+    // Extraemos "Referencia: texto" para que el cliente lo tenga como texto.
+    const reCuadernoApi = /\[\[CUADERNO::(.+?)::([\s\S]*?)\]\]/g;
+    const cuadernosApi = [...textoLimpio.matchAll(reCuadernoApi)];
+    if (cuadernosApi.length) {
+      textoExtraidoEtiquetas += cuadernosApi.map((m) => `${m[1].trim()}: ${m[2].trim()}`).join('\n\n');
+    }
+    textoLimpio = textoLimpio.replace(reCuadernoApi, '');
+
+    // BUSCAR: [[BUSCAR::consulta]] -> lo convertimos en "[Busqueda solicitada: consulta]"
+    const reBuscarApi = /\[\[BUSCAR::([^\]]+)\]\]/g;
+    const buscarsApi = [...textoLimpio.matchAll(reBuscarApi)];
+    if (buscarsApi.length) {
+      if (textoExtraidoEtiquetas) textoExtraidoEtiquetas += '\n\n';
+      textoExtraidoEtiquetas += buscarsApi.map((m) => `[Busqueda de imagenes solicitada: ${m[1].trim()}]`).join('\n');
+    }
+    textoLimpio = textoLimpio.replace(reBuscarApi, '');
+
+    // INVESTIGAR: [[INVESTIGAR::consulta]] -> "[Investigacion solicitada: consulta]"
+    const reInvestigarApi = /\[\[INVESTIGAR::([^\]]+)\]\]/g;
+    const investigarsApi = [...textoLimpio.matchAll(reInvestigarApi)];
+    if (investigarsApi.length) {
+      if (textoExtraidoEtiquetas) textoExtraidoEtiquetas += '\n\n';
+      textoExtraidoEtiquetas += investigarsApi.map((m) => `[Investigacion solicitada: ${m[1].trim()}]`).join('\n');
+    }
+    textoLimpio = textoLimpio.replace(reInvestigarApi, '');
+
+    // DESCARGAR: [[DESCARGAR::consulta::cantidad]] -> "[Descarga solicitada: consulta (N imagenes)]"
+    const reDescargarApi = /\[\[DESCARGAR::([^:\]]+?)(?:::\s*(\d+))?\s*\]\]/g;
+    const descargarsApi = [...textoLimpio.matchAll(reDescargarApi)];
+    if (descargarsApi.length) {
+      if (textoExtraidoEtiquetas) textoExtraidoEtiquetas += '\n\n';
+      textoExtraidoEtiquetas += descargarsApi.map((m) => {
+        const cant = m[2] ? ` (${m[2]} imagenes)` : '';
+        return `[Descarga solicitada: ${m[1].trim()}${cant}]`;
+      }).join('\n');
+    }
+    textoLimpio = textoLimpio.replace(reDescargarApi, '');
+
+    // Pegamos el texto extraido al final de la respuesta limpia
+    if (textoExtraidoEtiquetas) {
+      textoLimpio = (textoLimpio + '\n\n' + textoExtraidoEtiquetas).replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    // Limpieza final de saltos de linea extra
+    textoLimpio = textoLimpio.replace(/\n{3,}/g, '\n\n').trim();
 
     // Calcular costo adicional por herramientas usadas (solo si el modelo es
     // NewserAvanced, porque las etiquetas solo aparecen ahi).
     let costoExtra = 0;
     const herramientasUsadas = [];
     if (configModelo.nombre === 'NewserAvanced') {
-      if (imagenQueryApi) { costoExtra += 1; herramientasUsadas.push({ herramienta: 'imagen', query: imagenQueryApi, costo: 1 }); }
       if (webSearchQueryApi) { costoExtra += 1; herramientasUsadas.push({ herramienta: 'web', query: webSearchQueryApi, costo: 1 }); }
       if (climaQueryApi) { herramientasUsadas.push({ herramienta: 'clima', query: climaQueryApi, costo: 0 }); }
     }
@@ -1262,25 +1371,8 @@ app.post('/api/v1/chat', async (req, res) => {
         // No le alcanza para las herramientas: las omitimos pero devolvemos
         // la respuesta de texto (ya cobrada al inicio).
         herramientasOmitidas = true;
-        imagenQueryApi = null;
         webSearchQueryApi = null;
         climaQueryApi = null;
-      }
-    }
-
-    // Ejecutar IMAGEN (pollinations.ai)
-    if (imagenQueryApi) {
-      const img = await generarImagenPollinations(imagenQueryApi);
-      if (img) {
-        herramientasResultado.push({
-          herramienta: 'imagen',
-          prompt: img.prompt,
-          url: img.url,
-          tamanoKB: img.tamanoKB,
-        });
-        textoLimpio = `${textoLimpio}\n\n[Imagen generada: ${img.url}]`.trim();
-      } else {
-        herramientasResultado.push({ herramienta: 'imagen', error: 'No se pudo generar la imagen.' });
       }
     }
 
@@ -1499,20 +1591,15 @@ Reglas que nunca cambian pase lo que pase:
 const SYSTEM_PROMPT_AVANCED_EXTRA = `
 
 HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserAvanced):
-Ademas de CUADERNO, BUSCAR, DESCARGAR e INVESTIGAR, en este modelo tenes 3 herramientas mas. Se activan
+Ademas de CUADERNO, BUSCAR, DESCARGAR e INVESTIGAR, en este modelo tenes 2 herramientas mas. Se activan
 igual que las otras: con una etiqueta al FINAL de tu respuesta, en su propia linea, sin explicarla ni
 mencionarla al usuario.
 
-HERRAMIENTA "IMAGEN" (para GENERAR una imagen nueva a partir de un texto, NO para buscar una existente):
-Cuando el usuario te pida CREAR, GENERAR, DIBUJAR o HACER una imagen (no buscar una foto real, para eso
-usas BUSCAR), agregas al FINAL de tu respuesta, en su propia linea, EXACTAMENTE este formato:
-[[IMAGEN::descripcion detallada en ingles de la imagen a generar, 3 a 15 palabras]]
-Ejemplo: si el usuario dice "genera una imagen de un leon descansando", tu respuesta es algo como:
-"Dale, aca va:"
-[[IMAGEN::a majestic lion resting under a tree, golden hour, photorealistic]]
-Esa etiqueta dispara la generacion real de una imagen con IA y se la muestra al usuario. NUNCA inventes
-una URL tu mismo ni digas que no podes generar imagenes — vos SI podes, el sistema lo hace por vos. Usala
-SOLO cuando el usuario pida explicitamente generar/crear/dibujar, no en cada respuesta.
+NOTA IMPORTANTE SOBRE IMAGENES: si el usuario quiere generar/crear una imagen, NO tenes que hacer nada.
+El sistema detecta automaticamente cuando un mensaje empieza con "Genera", "Generame", "Generá", etc. y
+genera la imagen sin pasar por vos. Si te preguntan si podes generar imagenes, decis que si, y que para
+hacerlo tienen que escribir "Generame [descripcion]" como mensaje. NO intentes escribir ninguna etiqueta
+de imagen tu mismo.
 
 HERRAMIENTA "WEB" (para buscar informacion actualizada en internet, mas alla de Wikipedia):
 Cuando necesites datos actuales (noticias, precios, eventos recientes, datos que cambian con el tiempo)
@@ -1531,9 +1618,9 @@ Ejemplo: "como esta el clima en Madrid?" -> tu respuesta breve + [[CLIMA::Madrid
 Esto consulta la API de open-meteo y agrega el resultado real (temperatura, sensacion, humedad, viento)
 despues de tu respuesta. NUNCA inventes datos del clima tu mismo — si te preguntan, usas esta herramienta.
 
-Estas etiquetas [[IMAGEN::...]], [[WEB::...]] y [[CLIMA::...]] son invisibles para el usuario, se procesan
-aparte por el sistema. Nunca las menciones ni las escribas a la mitad del texto. Puedes combinar varias
-herramientas en la misma respuesta, cada una en su propia linea al final.`;
+Estas etiquetas [[WEB::...]] y [[CLIMA::...]] son invisibles para el usuario, se procesan aparte por el
+sistema. Nunca las menciones ni las escribas a la mitad del texto. Puedes combinar varias herramientas
+en la misma respuesta, cada una en su propia linea al final.`;
 
 // Modo "Catolicismo": mismo prompt base + un bloque que cambia el enfoque
 // hacia la fe y doctrina catolica. OJO: el LECTOR de la Biblia sigue usando
@@ -2005,6 +2092,38 @@ async function generarImagenPollinations(prompt, seed) {
   }
 }
 
+// Detecta si un mensaje del usuario pide generar una imagen. La "palabra
+// secreta" es "Generame", "Genera", "Generá" (con o sin tilde) al inicio del
+// mensaje, seguida de la descripcion de la imagen. Ej:
+//   "Generame un leon descansando al atardecer"  -> "un leon descansando al atardecer"
+//   "Genera una montaña con nieve"                -> "una montaña con nieve"
+//   "generá un perro volando"                     -> "un perro volando"
+//
+// Devuelve { esGeneracion: true, prompt: "..." } o { esGeneracion: false }.
+// El prompt se pasa tal cual a pollinations (no se traduce ni se modifica,
+// pollinations maneja español razonablemente bien).
+//
+// OJO: esto reemplaza a la etiqueta [[IMAGEN::...]] que teniamos antes. Ahora
+// la IA no decide cuando generar imagenes: lo hace el usuario escribiendo
+// "Genera..." o "Generame..." al inicio del mensaje. Es mas directo, mas
+// barato (no pasa por la IA) y mas predecible.
+function detectarGeneracionImagen(mensaje) {
+  if (!mensaje || typeof mensaje !== 'string') return { esGeneracion: false };
+  // Patrones aceptados al inicio del mensaje (case-insensitive):
+  //   - "Generame " / "Generáme "
+  //   - "Genera " / "Generá "
+  //   - "Generar "  (por si alguien escribe "Generar una casa")
+  //   - "Dibujame " / "Dibújame " / "Dibuja " / "Dibujá "
+  // Despues del verbo puede venir "una imagen de", "una foto de", "un dibujo de"
+  // (todo eso se descarta y se queda solo con la descripcion real).
+  const re = /^\s*(generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé)\s+(?:una\s+imagen\s+(?:de|del|de la|de un|de una)\s*|una\s+foto\s+(?:de|del|de la|de un|de una)\s*|un\s+dibujo\s+(?:de|del|de la|de un|de una)\s*|imagen\s+(?:de|del|de la|de un|de una)\s*|foto\s+(?:de|del|de la|de un|de una)\s*)?(.+)$/i;
+  const m = mensaje.match(re);
+  if (!m) return { esGeneracion: false };
+  const prompt = (m[2] || '').trim();
+  if (!prompt || prompt.length < 3) return { esGeneracion: false };
+  return { esGeneracion: true, prompt: prompt.slice(0, 200) };
+}
+
 // Consulta el clima actual de una ubicacion usando open-meteo.com (API
 // gratuita, sin clave, sin limite serio). NO consume creditos.
 //
@@ -2320,6 +2439,118 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     return res.status(controlRateWeb.status).json({ error: controlRateWeb.error });
   }
 
+  // ---- Atajo: "Generame [descripcion]" -> genera imagen directo, sin IA ----
+  // Si el mensaje empieza con "Genera", "Generame", "Dibujame", etc., vamos
+  // directo a pollinations.ai sin llamar a Groq. Es mas rapido, mas barato
+  // (no gasta tokens del proveedor) y mas predecible. La imagen se muestra
+  // como foto en el chat usando el mismo evento 'descargas' que ya sabe
+  // renderizar el frontend.
+  // OJO: esto requiere NewserAvanced. Si el usuario tiene NewserLite, le
+  // devolvemos un aviso en vez de generar la imagen.
+  const intencionImagen = detectarGeneracionImagen(mensajeOriginal);
+  if (intencionImagen.esGeneracion) {
+    if (configModelo.nombre !== 'NewserAvanced') {
+      // Streaming para que el frontend lo muestre como mensaje normal
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('X-Accel-Buffering', 'no');
+      try {
+        const usuarioActualGen = obtenerUsuarioActual(req);
+        const dbGen = leerDB();
+        let chatGen = chatId ? obtenerChat(dbGen, chatId, usuarioActualGen) : null;
+        if (!chatGen) chatGen = crearChat(dbGen, usuarioActualGen);
+        chatGen.mensajes.push({
+          role: 'user',
+          contenidoTexto: mensajeOriginal,
+          fecha: new Date().toISOString(),
+        });
+        chatGen.mensajes.push({
+          role: 'assistant',
+          contenidoTexto: 'La generacion de imagenes solo esta disponible con NewserAvanced. Cambiá el modelo en el selector de abajo para usarla.',
+          fecha: new Date().toISOString(),
+        });
+        if (chatGen.titulo === 'Nueva conversacion' && mensajeOriginal) {
+          chatGen.titulo = mensajeOriginal.length > 40 ? mensajeOriginal.slice(0, 40) + '…' : mensajeOriginal;
+        }
+        chatGen.actualizadoEn = new Date().toISOString();
+        guardarDB(dbGen);
+        res.write(JSON.stringify({ type: 'chunk', text: 'La generacion de imagenes solo esta disponible con **NewserAvanced**. Cambiá el modelo en el selector de abajo (al lado del microfono) para usarla.' }) + '\n');
+        res.write(JSON.stringify({ type: 'done', chatId: chatGen.id }) + '\n');
+        res.end();
+      } catch (e) {
+        if (!res.writableEnded) res.end();
+      }
+      return;
+    }
+
+    // Es NewserAvanced: generamos la imagen directamente con pollinations.
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+    let clienteDesconectadoGen = false;
+    res.on('close', () => { if (!res.writableEnded) clienteDesconectadoGen = true; });
+    const enviarGen = (obj) => {
+      if (clienteDesconectadoGen || res.writableEnded) return;
+      try { res.write(JSON.stringify(obj) + '\n'); } catch (e) { /* conexion cerrada */ }
+    };
+
+    try {
+      // Guardamos el mensaje del usuario y preparamos el chat para el historial
+      const usuarioActualGen = obtenerUsuarioActual(req);
+      const dbGen = leerDB();
+      let chatGen = chatId ? obtenerChat(dbGen, chatId, usuarioActualGen) : null;
+      if (!chatGen) chatGen = crearChat(dbGen, usuarioActualGen);
+      chatGen.mensajes.push({
+        role: 'user',
+        contenidoTexto: mensajeOriginal,
+        fecha: new Date().toISOString(),
+      });
+      if (chatGen.titulo === 'Nueva conversacion' && mensajeOriginal) {
+        chatGen.titulo = mensajeOriginal.length > 40 ? mensajeOriginal.slice(0, 40) + '…' : mensajeOriginal;
+      }
+
+      // Avisamos al frontend que estamos generando
+      enviarGen({ type: 'chunk', text: `Generando imagen: **${intencionImagen.prompt}**...` });
+      enviarGen({ type: 'investigando', query: `Generando imagen: ${intencionImagen.prompt}` });
+      enviarGen({ type: 'investigando_sitio', sitio: 'image.pollinations.ai' });
+
+      const img = await generarImagenPollinations(intencionImagen.prompt);
+      enviarGen({ type: 'investigando_fin' });
+
+      if (img) {
+        // Borramos el texto "Generando imagen..." y mandamos la imagen como
+        // descarga (el frontend la muestra como foto). Reusamos el evento
+        // 'descargas' que ya sabe renderizar el frontend.
+        enviarGen({ type: 'descargas', items: [{ url: img.url, nombre: img.prompt, tamanoKB: img.tamanoKB }] });
+        // Guardamos en el historial la referencia a la imagen generada
+        chatGen.mensajes.push({
+          role: 'assistant',
+          contenidoTexto: `Imagen generada: ${intencionImagen.prompt}`,
+          fecha: new Date().toISOString(),
+          descargas: [{ url: img.url, nombre: img.prompt, tamanoKB: img.tamanoKB }],
+        });
+      } else {
+        enviarGen({ type: 'chunk', text: '\n\nNo pude generar la imagen en este momento. Probá de nuevo en un rato.' });
+        chatGen.mensajes.push({
+          role: 'assistant',
+          contenidoTexto: 'No pude generar la imagen en este momento. Probá de nuevo en un rato.',
+          fecha: new Date().toISOString(),
+        });
+      }
+      chatGen.actualizadoEn = new Date().toISOString();
+      guardarDB(dbGen);
+      enviarGen({ type: 'done', chatId: chatGen.id });
+      res.end();
+    } catch (e) {
+      console.error('[chat-generar-imagen] Error:', e.message);
+      try {
+        enviarGen({ type: 'error', message: 'Error al generar la imagen. Intenta de nuevo.' });
+        res.end();
+      } catch (e2) { if (!res.writableEnded) res.end(); }
+    }
+    return;
+  }
+
   // A partir de aqui respondemos en streaming NDJSON (una linea JSON por evento).
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
@@ -2512,7 +2743,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let descargaQuery = null;
     let descargaCantidad = 1;
     // Nuevas etiquetas exclusivas de NewserAvanced:
-    let imagenQuery = null;        // [[IMAGEN::prompt en ingles]]
+    // (imagenQuery ya no se usa: las imagenes se generan automaticamente con
+    // "Generame..." al inicio del mensaje, no por etiqueta)
     let webSearchQuery = null;     // [[WEB::consulta google]]
     let climaQuery = null;         // [[CLIMA::nombre del lugar]]
 
@@ -2551,13 +2783,12 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
 
     // ---- Nuevas etiquetas exclusivas de NewserAvanced ----
-    // IMAGEN: genera una imagen con pollinations.ai
-    const reImagenG = /\[\[IMAGEN::([^\]]+)\]\]/g;
-    const coincidenciasImagen = [...textoVisible.matchAll(reImagenG)];
-    if (coincidenciasImagen.length) {
-      imagenQuery = coincidenciasImagen[0][1].trim();
-      textoVisible = textoVisible.replace(reImagenG, '');
-    }
+    // NOTA: la etiqueta [[IMAGEN::...]] ya no se usa. Las imagenes se generan
+    // automaticamente cuando el mensaje del usuario empieza con "Genera..."
+    // o "Generame...". Si la IA igual escribió un [[IMAGEN::...]] (no debería,
+    // porque el prompt le dice que no lo haga), lo limpiamos del texto visible
+    // para que no aparezca crudo en el chat.
+    textoVisible = textoVisible.replace(/\[\[IMAGEN::[^\]]*\]\]/g, '');
 
     // WEB: busca en Google Custom Search (con rotacion de 5 CSE IDs)
     const reWebG = /\[\[WEB::([^\]]+)\]\]/g;
@@ -2601,7 +2832,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     // Si quedo texto sin emitir (fuera de las directivas), lo mandamos ahora
     if (emitido < textoCompleto.length) {
       let restante = textoCompleto.slice(emitido);
-      restante = restante.replace(reCuadernoG, '').replace(reBuscarG, '').replace(reInvestigarG, '').replace(reDescargarG, '').replace(reImagenG, '').replace(reWebG, '').replace(reClimaG, '').trim();
+      restante = restante.replace(reCuadernoG, '').replace(reBuscarG, '').replace(reInvestigarG, '').replace(reDescargarG, '').replace(/\[\[IMAGEN::[^\]]*\]\]/g, '').replace(reWebG, '').replace(reClimaG, '').trim();
       if (restante) enviar({ type: 'chunk', text: restante });
     }
 
@@ -2675,21 +2906,10 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
     }
 
-    // ---- IMAGEN (NewserAvanced): genera con pollinations.ai ----
-    if (imagenQuery) {
-      enviar({ type: 'investigando', query: `Generando imagen: ${imagenQuery}` });
-      enviar({ type: 'investigando_sitio', sitio: 'image.pollinations.ai' });
-      const img = await esperarMinimo(generarImagenPollinations(imagenQuery), 2000);
-      enviar({ type: 'investigando_fin' });
-      if (img) {
-        // Reusamos el mismo evento 'descargas' que ya sabe renderizar el frontend
-        // (muestra la imagen + link de descarga). Asi no hay que tocar el JS.
-        enviar({ type: 'descargas', items: [{ url: img.url, nombre: img.prompt, tamanoKB: img.tamanoKB }] });
-      } else {
-        enviar({ type: 'chunk', text: '\n\nNo pude generar la imagen en este momento, perdon. Probá de nuevo en un rato.' });
-        textoVisible = `${textoVisible}\n\nNo pude generar la imagen en este momento, perdon.`.trim();
-      }
-    }
+    // (La etiqueta [[IMAGEN::]] ya no se procesa aca. Las imagenes se generan
+    // automaticamente al inicio del handler cuando el mensaje empieza con
+    // "Generame...", sin pasar por la IA. Ver bloque detectarGeneracionImagen
+    // arriba.)
 
     // ---- WEB (NewserAvanced): busca en Google Custom Search ----
     if (webSearchQuery) {
