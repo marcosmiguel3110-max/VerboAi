@@ -13,7 +13,7 @@ const app = express();
 // aunque por detras le hable a este servidor por http normal.
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const BTATESTERS_KEY = process.env.BTATESTERS_KEY;
 
 // Modelo de texto (rapido) y modelo de vision (para imagenes).
 // gpt-oss-20b NO soporta imagenes en Groq -> por eso fallaba el envio de imagenes.
@@ -1043,7 +1043,7 @@ async function sintetizarInvestigacion(query, wiki, versiculos) {
 
     const resp = await llamarGroqConReintentos({
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${BTATESTERS_KEY}` },
       body: JSON.stringify({
         model: GROQ_MODEL_TEXTO,
         messages: [
@@ -1403,7 +1403,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${GROQ_API_KEY}`,
+        Authorization: `Bearer ${BTATESTERS_KEY}`,
       },
       body: JSON.stringify({
         model: modeloElegido,
