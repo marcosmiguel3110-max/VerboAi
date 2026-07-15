@@ -1626,6 +1626,30 @@ elForm.addEventListener('submit', async (ev) => {
           // para abrir el lightbox. Cada item tiene { url, nombre, tamanoKB }.
           ocultarReintento();
           asegurarBurbuja();
+          // Detenemos el escritor y limpiamos el cursor + texto "Generando..."
+          // antes de agregar la imagen. Sin esto, la imagen se agrega pero el
+          // cursor queda titilando encima y a veces el navegador no renderiza
+          // bien la imagen hasta que termina el stream.
+          if (escritor) {
+            escritor.detener();
+          }
+          if (burbujaIA) {
+            // Quitamos el cursor titilante si existe
+            const cursorViejo = burbujaIA.querySelector('.cursor-escribiendo');
+            if (cursorViejo) cursorViejo.remove();
+            // Si el unico contenido es "Generando imagen: ..." lo limpiamos
+            // para que la imagen quede sola en la burbuja. Si ya hay otro texto
+            // (mas de un nodo de texto), lo dejamos.
+            const hijos = Array.from(burbujaIA.childNodes).filter((n) => n.nodeType !== 8);
+            // Si solo esta el texto de "Generando imagen..." (un text node),
+            // lo borramos. Si hay mas cosas, no tocamos.
+            if (burbujaIA.children.length === 0 && hijos.length === 1 && hijos[0].nodeType === 3) {
+              const texto = hijos[0].textContent || '';
+              if (/^Generando imagen:/i.test(texto.trim())) {
+                burbujaIA.textContent = '';
+              }
+            }
+          }
           const items = Array.isArray(evt.items) ? evt.items : [];
           if (items.length) {
             const grid = document.createElement('div');
@@ -1640,8 +1664,12 @@ elForm.addEventListener('submit', async (ev) => {
               img.addEventListener('click', () => abrirLightbox(item.url, item.nombre || ''));
               grid.appendChild(img);
             });
-            if (grid.children.length) burbujaIA.appendChild(grid);
-            elMensajes.scrollTop = elMensajes.scrollHeight;
+            if (grid.children.length && burbujaIA) {
+              burbujaIA.appendChild(grid);
+              // Forzar reflow para asegurar que el navegador pinte la imagen
+              void burbujaIA.offsetHeight;
+              elMensajes.scrollTop = elMensajes.scrollHeight;
+            }
           }
         } else if (evt.type === 'error') {
           ocultarReintento();
