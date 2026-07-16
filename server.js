@@ -446,9 +446,7 @@ function guardarApiTokens(tokens) {
 // Devuelve true si el usuario actual (email o "local:admin") tiene acceso a la
 // seccion de Clave API. El admin local siempre entra (para probarlo).
 function tieneAccesoApiTokens(usuario) {
-  if (!usuario) return false;
-  if (usuario.startsWith('local:')) return true;
-  return EMAILS_AUTORIZADOS_API.has(usuario.toLowerCase());
+  return !!usuario;
 }
 
 // Genera un token aleatorio tipo "verboai-" + 24 digitos. Son solo digitos
@@ -2144,6 +2142,46 @@ const GOOGLE_CSE_API_KEY = process.env.GOOGLE_CSE_API_KEY || '';
 // al siguiente ID de la lista. Devuelve { exito, cseUsado, resultados } o
 // { exito: false, error } si todos fallan.
 async function buscarWebGoogle(query) {
+  const ddg = await buscarWebDuckDuckGo(query);
+  if (ddg.exito) return ddg;
+  if (GOOGLE_CSE_API_KEY) { const g = await buscarWebGoogleReal(query); if (g.exito) return g; }
+  return ddg;
+}
+
+async function buscarWebDuckDuckGo(query) {
+  try {
+    const q = (query || "").trim();
+    if (!q) return { exito: false, error: "Query vacia" };
+    const url = "https://duckduckgo.com/html/?q=" + encodeURIComponent(q);
+    const resp = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36", "Accept": "text/html", "Accept-Language": "es-AR,es;q=0.9" },
+      signal: AbortSignal.timeout(8000), redirect: "follow",
+    });
+    if (!resp.ok) return { exito: false, error: "DuckDuckGo HTTP " + resp.status };
+    const html = await resp.text();
+    const resultados = [];
+    const bloques = html.split(/<div[^>]*class="[^"]*result[^"]*"/).slice(1);
+    for (const bloque of bloques) {
+      if (resultados.length >= 5) break;
+      const reA = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i;
+      const mA = bloque.match(reA);
+      if (!mA) continue;
+      let link = mA[1];
+      const mUddg = link.match(/uddg=([^&]+)/);
+      if (mUddg) { try { link = decodeURIComponent(mUddg[1]); } catch (e) {} }
+      const titulo = mA[2].replace(/<[^>]+>/g, "").trim();
+      if (!titulo) continue;
+      const reS = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i;
+      const mS = bloque.match(reS);
+      const snippet = mS ? mS[1].replace(/<[^>]+>/g, "").trim() : "";
+      resultados.push({ titulo, link, resumen: snippet });
+    }
+    if (!resultados.length) return { exito: false, error: "DuckDuckGo no devolvio resultados." };
+    return { exito: true, cseUsado: "duckduckgo", resultados };
+  } catch (e) { return { exito: false, error: "DuckDuckGo fallo: " + e.message }; }
+}
+
+async function buscarWebGoogleReal(query) {
   if (!GOOGLE_CSE_API_KEY) {
     return { exito: false, error: 'Falta GOOGLE_CSE_API_KEY en el .env del servidor.' };
   }
@@ -2325,59 +2363,51 @@ function detectarGeneracionImagen(mensaje) {
 // caso primero geocodifica con la API de open-meteo). Devuelve un resumen
 // textual corto para que la IA lo integre en su respuesta.
 async function consultarClimaOpenMeteo(consulta) {
-  try {
-    const q = (consulta || '').trim();
-    if (!q) return null;
+  const wttr = await consultarClimaWttr(consulta);
+  if (wttr) return wttr;
+  console.log("[clima] wttr.in fallo, intentando open-meteo...");
+  return await consultarClimaOpenMeteoReal(consulta);
+}
 
-    // 1. Geocodificar: nombre del lugar -> lat, lon
-    const geoParams = new URLSearchParams({
-      name: q,
-      count: '1',
-      language: 'es',
-      format: 'json',
-    });
-    const geoResp = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${geoParams.toString()}`, {
+async function consultarClimaWttr(consulta) {
+  try {
+    const q = (consulta || "").trim();
+    if (!q) return null;
+    const url = "https://wttr.in/" + encodeURIComponent(q) + "?format=j1";
+    const resp = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Accept": "application/json" },
       signal: AbortSignal.timeout(8000),
     });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const cc = data.current_condition && data.current_condition[0];
+    if (!cc) return null;
+    const area = data.nearest_area && data.nearest_area[0];
+    const nombreLugar = area ? (area.areaName[0].value + (area.country[0].value ? ", " + area.country[0].value : "")) : q;
+    const temp = parseInt(cc.temp_C, 10);
+    const sensacion = parseInt(cc.FeelsLikeC, 10);
+    const humedad = parseInt(cc.humidity, 10);
+    const viento = parseInt(cc.windspeedKmph, 10);
+    const desc = (cc.weatherDesc && cc.weatherDesc[0] && cc.weatherDesc[0].value) || "desconocido";
+    return { lugar: nombreLugar, lat: area ? parseFloat(area.latitude) : null, lon: area ? parseFloat(area.longitude) : null, temperatura: temp, sensacion: sensacion, humedad: humedad, viento: viento, codigo: 0, descripcion: desc, textoResumen: "Clima actual en " + nombreLugar + ": " + temp + "\u00b0C (sensaci\u00f3n " + sensacion + "\u00b0C), " + desc + ", humedad " + humedad + "%, viento " + viento + " km/h." };
+  } catch (e) { console.error("[wttr.in] Error:", e.message); return null; }
+}
+
+async function consultarClimaOpenMeteoReal(consulta) {
+  try {
+    const q = (consulta || "").trim();
+    if (!q) return null;
+    const geoResp = await fetch("https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(q) + "&count=1&language=es&format=json", { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) });
     if (!geoResp.ok) return null;
     const geoData = await geoResp.json();
     const lugar = geoData.results && geoData.results[0];
     if (!lugar) return null;
-
-    // 2. Clima actual: lat, lon -> temperatura, viento, etc.
-    const climaParams = new URLSearchParams({
-      latitude: String(lugar.latitude),
-      longitude: String(lugar.longitude),
-      current: 'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m',
-      timezone: 'auto',
-    });
-    const climaResp = await fetch(`https://api.open-meteo.com/v1/forecast?${climaParams.toString()}`, {
-      signal: AbortSignal.timeout(8000),
-    });
+    const climaResp = await fetch("https://api.open-meteo.com/v1/forecast?latitude=" + lugar.latitude + "&longitude=" + lugar.longitude + "&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto", { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) });
     if (!climaResp.ok) return null;
-    const climaData = await climaResp.json();
-    const c = climaData.current;
+    const c = (await climaResp.json()).current;
     if (!c) return null;
-
-    // Traducir el weather_code (WMO) a texto en español
-    const descripcion = describirCodigoClima(c.weather_code);
-
-    return {
-      lugar: lugar.name + (lugar.country ? ', ' + lugar.country : ''),
-      lat: lugar.latitude,
-      lon: lugar.longitude,
-      temperatura: c.temperature_2m,
-      sensacion: c.apparent_temperature,
-      humedad: c.relative_humidity_2m,
-      viento: c.wind_speed_10m,
-      codigo: c.weather_code,
-      descripcion,
-      textoResumen: `Clima actual en ${lugar.name}${lugar.country ? ', ' + lugar.country : ''}: ${c.temperature_2m}°C (sensación ${c.apparent_temperature}°C), ${descripcion}, humedad ${c.relative_humidity_2m}%, viento ${c.wind_speed_10m} km/h.`,
-    };
-  } catch (e) {
-    console.error('[open-meteo] Error:', e.message);
-    return null;
-  }
+    return { lugar: lugar.name + (lugar.country ? ", " + lugar.country : ""), lat: lugar.latitude, lon: lugar.longitude, temperatura: c.temperature_2m, sensacion: c.apparent_temperature, humedad: c.relative_humidity_2m, viento: c.wind_speed_10m, codigo: c.weather_code, descripcion: describirCodigoClima(c.weather_code), textoResumen: "Clima actual en " + lugar.name + (lugar.country ? ", " + lugar.country : "") + ": " + c.temperature_2m + "\u00b0C (sensaci\u00f3n " + c.apparent_temperature + "\u00b0C), " + describirCodigoClima(c.weather_code) + ", humedad " + c.relative_humidity_2m + "%, viento " + c.wind_speed_10m + " km/h." };
+  } catch (e) { console.error("[open-meteo] Error:", e.message); return null; }
 }
 
 // Traduce el codigo de tiempo WMO usado por open-meteo a una descripcion
