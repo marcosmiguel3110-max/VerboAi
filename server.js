@@ -1079,11 +1079,16 @@ app.post('/api/v1/chat', async (req, res) => {
   }
 
   const controlUso = registrarUsoToken(token, {
-    costo: configModelo.costoCreditos,
+    costo: 0,
     rateLimitMax: configModelo.rateLimitMax,
   });
   if (!controlUso.ok) {
     return res.status(controlUso.status).json({ ok: false, error: controlUso.error });
+  }
+
+  const controlCreditos = descontarCreditosGlobales(token.propietario, configModelo.costoCreditos, 'chat', configModelo.nombre);
+  if (!controlCreditos.ok) {
+    return res.status(402).json({ ok: false, error: controlCreditos.error });
   }
 
   let systemPrompt = modo === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT;
@@ -1152,7 +1157,7 @@ app.post('/api/v1/chat', async (req, res) => {
         prompt: img.prompt,
         tamanoKB: img.tamanoKB,
       },
-      creditosRestantes: actualizadoGen ? actualizadoGen.creditos : null,
+      creditosRestantes: token.propietario.startsWith('local:') ? -1 : leerCreditosGlobales(token.propietario),
       rateLimitMax: configModelo.rateLimitMax,
       rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
     });
@@ -1314,7 +1319,7 @@ app.post('/api/v1/chat', async (req, res) => {
       costoExtraHerramientas: costoExtra,
       herramientas: herramientasResultado,
       herramientasOmitidas,
-      creditosRestantes: actualizado ? actualizado.creditos : null,
+      creditosRestantes: token.propietario.startsWith('local:') ? -1 : leerCreditosGlobales(token.propietario),
       rateLimitMax: configModelo.rateLimitMax,
       rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
     });

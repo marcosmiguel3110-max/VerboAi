@@ -524,7 +524,10 @@ def cmd_run():
 
         creditos = respuesta.get("creditosRestantes")
         if creditos is not None:
-            out(f"  {C.GRAY}[creditos restantes: {creditos}]{C.RESET}", C.DIM)
+            if creditos == -1:
+                out(f"  {C.GRAY}[creditos restantes: infinito]{C.RESET}", C.DIM)
+            else:
+                out(f"  {C.GRAY}[creditos restantes: {creditos}]{C.RESET}", C.DIM)
 
         herramientas = respuesta.get("herramientas", [])
         for h in herramientas:

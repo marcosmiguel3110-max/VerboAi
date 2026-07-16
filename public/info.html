@@ -527,7 +527,8 @@ python verboai.py info</code></pre>
       infoCard.style.display = 'grid';
       document.getElementById('rModelo').textContent = data.modeloUsado || '-';
       document.getElementById('rCosto').textContent = data.costoCreditos || '-';
-      document.getElementById('rRestantes').textContent = data.creditosRestantes != null ? data.creditosRestantes : '-';
+      var restantes = data.creditosRestantes;
+      document.getElementById('rRestantes').textContent = restantes == -1 ? '∞' : (restantes != null ? restantes : '-');
       document.getElementById('rTiempo').textContent = tiempo;
 
       // Si trajo imagen, mostrarla
