@@ -365,7 +365,7 @@ document.querySelectorAll('.opcion-modo').forEach((boton) => {
   });
 });
 
-// Navegacion interna del panel de Settings (Modos / Fondo)
+// Navegacion interna del panel de Settings (Modos / Fondo / Clave API / Creditos)
 document.querySelectorAll('.settings-nav-item').forEach((boton) => {
   boton.addEventListener('click', () => {
     document.querySelectorAll('.settings-nav-item').forEach((b) => b.classList.remove('activa'));
@@ -374,19 +374,85 @@ document.querySelectorAll('.settings-nav-item').forEach((boton) => {
     document.querySelectorAll('.settings-seccion').forEach((sec) => {
       sec.classList.toggle('oculto', sec.dataset.seccionPanel !== seccion);
     });
+    if (seccion === 'creditos') {
+      cargarCreditos();
+      iniciarPollingCreditos();
+    } else {
+      detenerPollingCreditos();
+    }
   });
 });
 
+// ---------- Creditos globales + estadisticas ----------
+let creditosPollingInterval = null;
+let ultimoCreditosNumero = null;
+
+async function cargarCreditos() {
+  const elNumero = document.getElementById('creditosNumero');
+  const elSub = document.getElementById('creditosSub');
+  try {
+    const r = await fetch('/api/creditos');
+    if (!r.ok) {
+      if (elNumero) elNumero.textContent = '?';
+      if (elSub) elSub.textContent = 'No se pudo cargar.';
+      return;
+    }
+    const d = await r.json();
+    if (elNumero) {
+      const nuevoTexto = d.esAdmin ? '\u221e' : String(d.creditos);
+      if (ultimoCreditosNumero !== null && ultimoCreditosNumero !== nuevoTexto) {
+        elNumero.classList.add('cambio');
+        setTimeout(() => elNumero.classList.remove('cambio'), 300);
+      }
+      elNumero.textContent = nuevoTexto;
+      ultimoCreditosNumero = nuevoTexto;
+    }
+    if (elSub) {
+      if (d.esAdmin) elSub.textContent = 'Cuenta admin (ilimitados)';
+      else if (d.creditosIniciales > 0) elSub.textContent = d.creditos + ' de ' + d.creditosIniciales + ' (' + Math.round((d.creditos / d.creditosIniciales) * 100) + '% disponible)';
+      else elSub.textContent = '';
+    }
+    const stats = d.estadisticas || {};
+    const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setText('statTotalGastado', stats.totalGastado || 0);
+    setText('statChats', stats.totalChats || 0);
+    setText('statImagenes', stats.totalImagenes || 0);
+    setText('statWeb', stats.totalBusquedasWeb || 0);
+    setText('statClima', stats.totalClima || 0);
+    setText('statActividad', stats.ultimaActividad ? formatearFechaCorta(stats.ultimaActividad) : '\u2014');
+    const porModelo = stats.porModelo || {};
+    const modelosUsados = Object.keys(porModelo).filter((k) => porModelo[k] > 0);
+    const cont = document.getElementById('creditosPorModelo');
+    const lista = document.getElementById('creditosPorModeloLista');
+    if (cont && lista) {
+      if (modelosUsados.length) {
+        cont.style.display = 'block';
+        lista.innerHTML = modelosUsados.map((m) => '<div class="creditos-por-modelo-item"><span class="creditos-por-modelo-nombre">' + escapeHtml(m) + '</span><span class="creditos-por-modelo-gasto">' + porModelo[m] + ' cr\u00e9ditos</span></div>').join('');
+      } else cont.style.display = 'none';
+    }
+  } catch (e) {
+    if (elNumero) elNumero.textContent = '?';
+    if (elSub) elSub.textContent = 'Error de conexi\u00f3n';
+  }
+}
+
+function formatearFechaCorta(iso) {
+  if (!iso) return '\u2014';
+  try {
+    const f = new Date(iso);
+    return f.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' }) + ' ' + f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) { return iso; }
+}
+
+function iniciarPollingCreditos() { detenerPollingCreditos(); creditosPollingInterval = setInterval(cargarCreditos, 5000); }
+function detenerPollingCreditos() { if (creditosPollingInterval) { clearInterval(creditosPollingInterval); creditosPollingInterval = null; } }
+
 btnAbrirSettings.addEventListener('click', () => {
   overlaySettings.classList.remove('oculto');
-  // Cuando abrimos Settings, aprovechamos para refrescar el estado de Clave
-  // API (por si el usuario acaba de entrar con una cuenta distinta).
   if (!claveApiAccesoVerificado) verificarAccesoClaveApi();
 });
-btnCerrarSettings.addEventListener('click', () => overlaySettings.classList.add('oculto'));
-overlaySettings.addEventListener('click', (ev) => {
-  if (ev.target === overlaySettings) overlaySettings.classList.add('oculto');
-});
+btnCerrarSettings.addEventListener('click', () => { overlaySettings.classList.add('oculto'); detenerPollingCreditos(); });
+overlaySettings.addEventListener('click', (ev) => { if (ev.target === overlaySettings) { overlaySettings.classList.add('oculto'); detenerPollingCreditos(); } });
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && !overlaySettings.classList.contains('oculto')) overlaySettings.classList.add('oculto');
 });
@@ -476,7 +542,6 @@ function renderTokensClaveApi(tokens) {
     return;
   }
   claveApiListaTokens.innerHTML = tokens.map((t) => {
-    const pct = t.creditosIniciales > 0 ? Math.max(0, Math.min(100, Math.round((t.creditos / t.creditosIniciales) * 100))) : 0;
     return `
       <div class="token-card" data-id="${t.id}">
         <div class="token-card-fila">
@@ -488,11 +553,6 @@ function renderTokensClaveApi(tokens) {
         </div>
         <div class="token-card-token"><code>${escapeHtml(t.prefijo)}</code></div>
         <div class="token-card-stats">
-          <div class="token-stat">
-            <span class="token-stat-label">Creditos</span>
-            <span class="token-stat-valor">${t.creditos} / ${t.creditosIniciales}</span>
-            <div class="token-stat-barra"><div style="width:${pct}%"></div></div>
-          </div>
           <div class="token-stat">
             <span class="token-stat-label">Rate limit</span>
             <span class="token-stat-valor">${t.rateLimit} / min</span>

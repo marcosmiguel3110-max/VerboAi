@@ -234,6 +234,10 @@
           Clave API
           <span class="badge-prox" id="badgeProxClaveApi">Prox</span>
         </button>
+        <button class="settings-nav-item" data-seccion="creditos">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h4.5a2.5 2.5 0 010 5H9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Créditos
+        </button>
       </nav>
 
       <div class="settings-contenido">
@@ -290,7 +294,7 @@
 
           <div id="claveApiPanel" class="clave-api-panel oculto">
             <h3>Clave API</h3>
-            <p class="settings-descripcion">Genera tokens tipo <code>verboai-XXXX</code> para usar Verbo AI desde otros proyectos (un bot, un script, otra web). Cada token tiene creditos y rate limit propios, separados de la cuenta.</p>
+            <p class="settings-descripcion">Genera tokens tipo <code>verboai-XXXX</code> para usar Verbo AI desde otros proyectos. Los tokens comparten los creditos globales de tu cuenta (ver seccion "Creditos").</p>
 
             <div class="clave-api-acciones">
               <input type="text" id="claveApiNombreNuevo" maxlength="40" placeholder="Nombre (opcional) ej: Bot de Discord" class="clave-api-input-nombre" />
@@ -500,6 +504,54 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
                 </details>
               </div>
             </details>
+          </div>
+        </section>
+
+        <section class="settings-seccion oculto" data-seccion-panel="creditos">
+          <h3>Créditos</h3>
+          <p class="settings-descripcion">Tus créditos se comparten entre todos tus tokens de API. Se actualizan en vivo cada vez que usás la app.</p>
+
+          <div class="creditos-pantalla" id="creditosPantalla">
+            <div class="creditos-fondo"></div>
+            <div class="creditos-overlay"></div>
+            <div class="creditos-contenido">
+              <div class="creditos-label">Créditos disponibles</div>
+              <div class="creditos-numero" id="creditosNumero">...</div>
+              <div class="creditos-sub" id="creditosSub">Cargando...</div>
+            </div>
+          </div>
+
+          <p class="creditos-titulo-estadisticas">Estadísticas de uso</p>
+          <div class="creditos-estadisticas" id="creditosEstadisticas">
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statTotalGastado">-</div>
+              <div class="creditos-stat-label">Créditos gastados</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statChats">-</div>
+              <div class="creditos-stat-label">Mensajes de chat</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statImagenes">-</div>
+              <div class="creditos-stat-label">Imágenes generadas</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statWeb">-</div>
+              <div class="creditos-stat-label">Búsquedas web</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statClima">-</div>
+              <div class="creditos-stat-label">Consultas de clima</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statActividad">-</div>
+              <div class="creditos-stat-label">Última actividad</div>
+            </div>
+          </div>
+
+          <div class="creditos-por-modelo" id="creditosPorModelo" style="display:none">
+            <p class="creditos-titulo-estadisticas">Consumo por modelo</p>
+            <div id="creditosPorModeloLista"></div>
           </div>
         </section>
       </div>
