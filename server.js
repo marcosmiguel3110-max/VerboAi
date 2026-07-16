@@ -629,6 +629,43 @@ function guardarUsuarios(usuarios) {
   // Backup a MongoDB en background
   guardarEnMongoBackground('usuarios', valor);
 }
+
+const CREDITOS_GLOBALES_INICIALES = 1000;
+
+function leerCreditosGlobales(usuario) {
+  if (!usuario) return 0;
+  if (usuario.startsWith("local:")) return 999999999;
+  const usuarios = leerUsuarios();
+  const cuenta = usuarios[usuario];
+  if (!cuenta) return 0;
+  if (typeof cuenta.creditosGlobales !== "number") {
+    cuenta.creditosGlobales = CREDITOS_GLOBALES_INICIALES;
+    if (!cuenta.estadisticas) cuenta.estadisticas = { totalGastado: 0, totalChats: 0, totalImagenes: 0, totalBusquedasWeb: 0, totalClima: 0, porModelo: {}, ultimaActividad: null };
+    guardarUsuarios(usuarios);
+  }
+  return cuenta.creditosGlobales;
+}
+
+function descontarCreditosGlobales(usuario, cantidad, tipo, modeloNombre) {
+  if (!usuario) return { ok: false, error: "Sin usuario" };
+  if (usuario.startsWith("local:")) return { ok: true, restantes: 999999999 };
+  const usuarios = leerUsuarios();
+  const cuenta = usuarios[usuario];
+  if (!cuenta) return { ok: false, error: "Cuenta no encontrada" };
+  if (typeof cuenta.creditosGlobales !== "number") cuenta.creditosGlobales = CREDITOS_GLOBALES_INICIALES;
+  if (!cuenta.estadisticas) cuenta.estadisticas = { totalGastado: 0, totalChats: 0, totalImagenes: 0, totalBusquedasWeb: 0, totalClima: 0, porModelo: {}, ultimaActividad: null };
+  if (cuenta.creditosGlobales < cantidad) return { ok: false, error: "No te quedan creditos suficientes (necesitas " + cantidad + ", te quedan " + cuenta.creditosGlobales + ")." };
+  cuenta.creditosGlobales -= cantidad;
+  cuenta.estadisticas.totalGastado = (cuenta.estadisticas.totalGastado || 0) + cantidad;
+  cuenta.estadisticas.ultimaActividad = new Date().toISOString();
+  if (tipo === "chat") cuenta.estadisticas.totalChats = (cuenta.estadisticas.totalChats || 0) + 1;
+  if (tipo === "imagen") cuenta.estadisticas.totalImagenes = (cuenta.estadisticas.totalImagenes || 0) + 1;
+  if (tipo === "web") cuenta.estadisticas.totalBusquedasWeb = (cuenta.estadisticas.totalBusquedasWeb || 0) + 1;
+  if (tipo === "clima") cuenta.estadisticas.totalClima = (cuenta.estadisticas.totalClima || 0) + 1;
+  if (modeloNombre) { cuenta.estadisticas.porModelo = cuenta.estadisticas.porModelo || {}; cuenta.estadisticas.porModelo[modeloNombre] = (cuenta.estadisticas.porModelo[modeloNombre] || 0) + cantidad; }
+  guardarUsuarios(usuarios);
+  return { ok: true, restantes: cuenta.creditosGlobales };
+}
 function hashearClave(clave) {
   const sal = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(clave, sal, 64).toString('hex');
@@ -3169,6 +3206,27 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 // datos sensibles, solo si Mongo esta conectado o no, y un mensaje de ayuda
 // si no lo esta. util para debugear desde el navegador sin tener que ir a los
 // logs de Render.
+app.get('/api/creditos', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!usuario) return res.status(401).json({ error: 'No autenticado.' });
+  const creditos = leerCreditosGlobales(usuario);
+  const esAdmin = usuario.startsWith('local:');
+  const usuarios = leerUsuarios();
+  const cuenta = usuarios[usuario] || {};
+  const estadisticas = cuenta.estadisticas || {
+    totalGastado: 0, totalChats: 0, totalImagenes: 0,
+    totalBusquedasWeb: 0, totalClima: 0, porModelo: {}, ultimaActividad: null,
+  };
+  res.json({
+    ok: true,
+    usuario: esAdmin ? usuario.slice(6) : usuario,
+    esAdmin,
+    creditos: esAdmin ? -1 : creditos,
+    creditosIniciales: esAdmin ? -1 : 1000,
+    estadisticas,
+  });
+});
+
 app.get('/api/mongo-status', (req, res) => {
   const conectado = mongoDb.estaConectado();
   res.json({
