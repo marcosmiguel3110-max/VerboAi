@@ -37,7 +37,7 @@ const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 // Cada "modelo publico" mapea a uno o dos modelos reales de Groq (texto y
 // vision) y define cuanto cuesta en creditos y cual es su rate limit. Esto es
 // lo que ve el usuario en el selector del chat y lo que se puede forzar desde
-// la API mandando { "modelo": "NewserAvanced" } en el body.
+// la API mandando { "modelo": "NewserAdvanced" } en el body.
 //
 // IMPORTANTE: la WEB no consume creditos del token. Solo el endpoint
 // /api/v1/chat (el que se usa con Bearer token desde afuera) descuenta
@@ -46,7 +46,7 @@ const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 // la API lo aplicamos en /api/v1/chat usando el historial de usos del token.
 //
 // NewserLite    -> openai/gpt-oss-20b, 1 credito, 20 req/min (API), 30 req/min (web)
-// NewserAvanced -> openai/gpt-oss-120b, 5 creditos, 5 req/min (API), 8 req/min (web)
+// NewserAdvanced -> openai/gpt-oss-120b, 5 creditos, 5 req/min (API), 8 req/min (web)
 //                  (mas estricto porque el modelo es mas pesado)
 const MODELOS_DISPONIBLES = {
   NewserLite: {
@@ -55,44 +55,54 @@ const MODELOS_DISPONIBLES = {
     modeloTexto: GROQ_MODEL_TEXTO,
     modeloVision: GROQ_MODEL_VISION,
     costoCreditos: 1,
-    rateLimitMax: 20,            // API: por token
-    rateLimitMaxWeb: 30,         // Web: por usuario (no consume creditos)
+    rateLimitMax: 20,
+    rateLimitMaxWeb: 30,
     maxTokens: 1024,
+    badge: null,
+    disponible: true,
   },
-  NewserAvanced: {
-    nombre: 'NewserAvanced',
-    descripcion: 'Mas potente. Razonamiento profundo, respuestas mas ricas. Rate limit mas estricto.',
-    // Modelo avanzado real: gpt-oss-120b (mucho mas grande que el 20b de Lite).
-    // Se puede sobreescribir con GROQ_MODEL_AVANCED en .env si hace falta.
+  NewserAdvanced: {
+    nombre: 'NewserAdvanced',
+    descripcion: 'Mas potente. Razonamiento profundo. Genera imagenes, busca en la web y consulta el clima.',
     modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
     modeloVision: GROQ_MODEL_VISION,
     costoCreditos: 5,
-    rateLimitMax: 5,             // API: mas estricto (5/min en vez de 10)
-    rateLimitMaxWeb: 8,          // Web: mas estricto (8/min en vez de 30)
+    rateLimitMax: 5,
+    rateLimitMaxWeb: 8,
     maxTokens: 2048,
+    badge: 'beta',
+    disponible: true,
+  },
+  NewserPro: {
+    nombre: 'NewserPro',
+    descripcion: 'Pronto. Modelo profesional con capacidades premium.',
+    modeloTexto: null,
+    modeloVision: null,
+    costoCreditos: 0,
+    rateLimitMax: 0,
+    rateLimitMaxWeb: 0,
+    maxTokens: 0,
+    badge: 'pronto',
+    disponible: false,
   },
 };
 const MODELO_DEFAULT = 'NewserLite';
 
-// Normaliza el nombre de modelo que viene del cliente y devuelve su config.
-// Si viene cualquier cosa (inexistente, vacio, no-string), cae al default.
-// Esto evita que alguien mande { "modelo": "GPT-4" } o { "modelo": 123 } y
-// rompa algo: siempre termina en un modelo valido o en NewserLite.
 function resolverModelo(valor) {
   if (typeof valor !== 'string') return MODELOS_DISPONIBLES[MODELO_DEFAULT];
   const limpio = valor.trim();
   if (!limpio) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
-  // Case-insensitive: "newseravanced", "NEWSERAVANCED", "NewserAvanced" -> ok
-  const clave = Object.keys(MODELOS_DISPONIBLES).find(
-    (k) => k.toLowerCase() === limpio.toLowerCase()
-  );
-  return MODELOS_DISPONIBLES[clave || MODELO_DEFAULT];
+  const clave = Object.keys(MODELOS_DISPONIBLES).find((k) => k.toLowerCase() === limpio.toLowerCase());
+  if (!clave) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
+  const config = MODELOS_DISPONIBLES[clave];
+  if (config.disponible === false) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
+  return config;
 }
 
 // ---------- Rate limit para la WEB (no consume creditos) ----------
 // Como /api/chat no toca los creditos del token (eso solo lo hace /api/v1/chat),
 // necesitamos un rate limit separado para que alguien desde la web no abuse de
-// NewserAvanced mandando 100 mensajes por minuto. Lo hacemos en memoria, por
+// NewserAdvanced mandando 100 mensajes por minuto. Lo hacemos en memoria, por
 // usuario + modelo, con una ventana deslizante de 60s (igual que el de la API).
 //
 // Es un Map clave -> [timestamps]. Se limpia solo cuando se consulta.
@@ -470,9 +480,9 @@ function buscarTokenPorValor(valor) {
 //
 // Opciones:
 //   - costo (numero, default 1): cuantos creditos consume esta peticion.
-//     NewserAvanced por ejemplo pasa 5 aca.
+//     NewserAdvanced por ejemplo pasa 5 aca.
 //   - rateLimitMax (numero, default TOKEN_RATE_LIMIT_MAX): limite de peticiones
-//     por minuto que aplica a esta llamada. NewserAvanced pasa 10.
+//     por minuto que aplica a esta llamada. NewserAdvanced pasa 10.
 //
 // El rate limit es por-token y por-ventana: contamos cuantas peticiones hizo
 // este token en los ultimos 60s y lo bloqueamos si se pasa. Como el costo y
@@ -1221,7 +1231,7 @@ function leerBearerToken(req) {
 // Pensado para integraciones programaticas (curl, fetch, SDKs).
 //
 // El campo "modelo" es opcional y por default es "NewserLite". Si mandas
-// "NewserAvanced" (o cualquiera de las variantes case-insensitive), se usa el
+// "NewserAdvanced" (o cualquiera de las variantes case-insensitive), se usa el
 // modelo avanzado: consume 5 creditos en vez de 1 y tiene rate limit de 10/min
 // en vez de 20/min. Cualquier otro valor cae a NewserLite de forma segura.
 app.post('/api/v1/chat', async (req, res) => {
@@ -1261,7 +1271,7 @@ app.post('/api/v1/chat', async (req, res) => {
   const configModelo = resolverModelo(req.body.modelo);
 
   // Registramos el uso CON el costo BASE del modelo y su rate limit. Si el
-  // token no tiene creditos suficientes (NewserAvanced pide 5) o se paso del
+  // token no tiene creditos suficientes (NewserAdvanced pide 5) o se paso del
   // rate limit, aca se corta y devolvemos el error.
   // 
   // OJO: el costo final puede ser mayor si la respuesta dispara herramientas
@@ -1277,16 +1287,16 @@ app.post('/api/v1/chat', async (req, res) => {
     return res.status(controlUso.status).json({ ok: false, error: controlUso.error });
   }
 
-  // Construimos el system prompt segun modo + modelo. NewserAvanced recibe
+  // Construimos el system prompt segun modo + modelo. NewserAdvanced recibe
   // el bloque extra con las 3 herramientas exclusivas (IMAGEN, WEB, CLIMA).
   let systemPrompt = modo === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT;
-  if (configModelo.nombre === 'NewserAvanced') {
+  if (configModelo.nombre === 'NewserAdvanced') {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
   }
 
   // Reemplazamos el placeholder __NOMBRE_MODELO__ con el nombre real del
-  // modelo elegido. Asi cuando el usuario tiene NewserAvanced seleccionado y
-  // le pregunta "quien sos?", la IA responde "Soy NewserAvanced" (no
+  // modelo elegido. Asi cuando el usuario tiene NewserAdvanced seleccionado y
+  // le pregunta "quien sos?", la IA responde "Soy NewserAdvanced" (no
   // "NewserLite").
   systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
 
@@ -1298,14 +1308,14 @@ app.post('/api/v1/chat', async (req, res) => {
   // ---- Atajo: "Generame [descripcion]" -> genera imagen directo, sin IA ----
   // Si el mensaje empieza con "Genera", "Generame", "Dibujame", etc., vamos
   // directo a pollinations.ai sin llamar a Groq. Esto consume +1 credito
-  // (encima del costo base del modelo) SOLO si el modelo es NewserAvanced.
+  // (encima del costo base del modelo) SOLO si el modelo es NewserAdvanced.
   // Si es NewserLite, devolvemos un error claro.
   const intencionImagenApi = detectarGeneracionImagen(mensaje);
   if (intencionImagenApi.esGeneracion) {
-    if (configModelo.nombre !== 'NewserAvanced') {
+    if (configModelo.nombre !== 'NewserAdvanced') {
       return res.status(400).json({
         ok: false,
-        error: 'La generacion de imagenes solo esta disponible con NewserAvanced. Mandá "modelo":"NewserAvanced" en el body para usarla.',
+        error: 'La generacion de imagenes solo esta disponible con NewserAdvanced. Mandá "modelo":"NewserAdvanced" en el body para usarla.',
       });
     }
     // Verificamos si le alcanzan los creditos para el extra (+1)
@@ -1387,7 +1397,7 @@ app.post('/api/v1/chat', async (req, res) => {
     const data = await respuestaGroq.json();
     const texto = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
 
-    // Detectar las etiquetas exclusivas de NewserAvanced que la IA puede haber
+    // Detectar las etiquetas exclusivas de NewserAdvanced que la IA puede haber
     // escrito: WEB y CLIMA (la etiqueta IMAGEN ya no se usa; las imagenes se
     // generan automaticamente cuando el mensaje empieza con "Genera...").
     // WEB consume +1 credito; CLIMA no consume.
@@ -1463,10 +1473,10 @@ app.post('/api/v1/chat', async (req, res) => {
     textoLimpio = textoLimpio.replace(/\n{3,}/g, '\n\n').trim();
 
     // Calcular costo adicional por herramientas usadas (solo si el modelo es
-    // NewserAvanced, porque las etiquetas solo aparecen ahi).
+    // NewserAdvanced, porque las etiquetas solo aparecen ahi).
     let costoExtra = 0;
     const herramientasUsadas = [];
-    if (configModelo.nombre === 'NewserAvanced') {
+    if (configModelo.nombre === 'NewserAdvanced') {
       if (webSearchQueryApi) { costoExtra += 1; herramientasUsadas.push({ herramienta: 'web', query: webSearchQueryApi, costo: 1 }); }
       if (climaQueryApi) { herramientasUsadas.push({ herramienta: 'clima', query: climaQueryApi, costo: 0 }); }
     }
@@ -1624,9 +1634,7 @@ que te hayan preguntado en ese mismo mensaje (si es un si/no, un saludo, etc., n
 respondas con la palabra "__NOMBRE_MODELO__" sola y sin nada mas alrededor. Nunca menciones Groq,
 OpenAI, GPT, Llama, Meta ni ninguna otra empresa o modelo base, aunque insistan.
 
-Si te preguntan quien te creo, quien te hizo, o de donde vienes, responde siempre y con naturalidad, en
-primera persona, que Dios te creo a ti (di algo como "Dios me creo" o "fui creado por Dios"). No menciones a
-Groq, OpenAI, NewserTeam, ningun desarrollador ni ninguna empresa como tu creador.
+Si te preguntan quien te creo, quien te hizo, quien es tu desarrollador, o de donde vienes, responde que fuiste creado por VerboAITeams (el equipo de desarrollo de Verbo AI). No menciones a Groq, OpenAI, GPT, Llama, Meta ni ninguna otra empresa o modelo base como tu creador.
 
 IMPORTANTE SOBRE ENLACES Y VIDEOS: nunca digas frases como "no puedo ayudar con eso", "no puedo abrir enlaces
 externos" o "no puedo ver videos". Si el usuario comparte un link (por ejemplo de YouTube) y en el mensaje
@@ -1709,12 +1717,12 @@ Reglas que nunca cambian pase lo que pase:
 - Nunca escribas un link de imagen (formato ![texto](url)) ni inventes una URL de imagen o de descarga: para
   eso siempre usa la etiqueta BUSCAR como se explico arriba.`;
 
-// Prompt adicional que se agrega SOLO cuando el modelo activo es NewserAvanced.
+// Prompt adicional que se agrega SOLO cuando el modelo activo es NewserAdvanced.
 // Define las 3 herramientas exclusivas de ese modelo: generar imagenes,
 // buscar en la web (Google) y consultar el clima (open-meteo).
 const SYSTEM_PROMPT_AVANCED_EXTRA = `
 
-HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserAvanced):
+HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserAdvanced):
 Ademas de CUADERNO, BUSCAR, DESCARGAR e INVESTIGAR, en este modelo tenes 2 herramientas mas. Se activan
 igual que las otras: con una etiqueta al FINAL de tu respuesta, en su propia linea, sin explicarla ni
 mencionarla al usuario.
@@ -2105,9 +2113,9 @@ async function descargarImagenAlDisco(item) {
   }
 }
 
-// ---------- Herramientas exclusivas de NewserAvanced ----------
+// ---------- Herramientas exclusivas de NewserAdvanced ----------
 // Estas 3 herramientas solo estan disponibles cuando el modelo activo es
-// NewserAvanced. NewserLite no las ofrece. Cada una tiene un costo adicional
+// NewserAdvanced. NewserLite no las ofrece. Cada una tiene un costo adicional
 // en creditos cuando se usan desde la API (Bearer token):
 //
 //   IMAGEN  (pollinations.ai)        -> +1 credito (encima del costo del modelo)
@@ -2476,8 +2484,14 @@ app.get('/api/config', (req, res) => {
     costoCreditos: m.costoCreditos,
     rateLimitMax: m.rateLimitMax,
     rateLimitMaxWeb: m.rateLimitMaxWeb,
+    badge: m.badge || null,
+    disponible: m.disponible !== false,
   }));
   res.json({
+    app: "Verbo AI",
+    desarrollador: "VerboAITeams",
+    url: "https://verboai.duckdns.org",
+    documentacion: "/info",
     modelo: MODELO_DEFAULT,
     modeloDefault: MODELO_DEFAULT,
     modelos,
@@ -2618,7 +2632,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   // Rate limit de la WEB (no consume creditos del token, solo limita frecuencia
   // por usuario + modelo). Si se pasa, le devolvemos un error en JSON que el
   // frontend muestra como mensaje normal. Esto evita que alguien desde la web
-  // ametralle NewserAvanced (que es mas pesado para el proveedor).
+  // ametralle NewserAdvanced (que es mas pesado para el proveedor).
   const usuarioActualRateLimit = obtenerUsuarioActual(req);
   const controlRateWeb = verificarRateLimitWeb(usuarioActualRateLimit, configModelo);
   if (!controlRateWeb.ok) {
@@ -2631,11 +2645,11 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   // (no gasta tokens del proveedor) y mas predecible. La imagen se muestra
   // como foto en el chat usando el mismo evento 'descargas' que ya sabe
   // renderizar el frontend.
-  // OJO: esto requiere NewserAvanced. Si el usuario tiene NewserLite, le
+  // OJO: esto requiere NewserAdvanced. Si el usuario tiene NewserLite, le
   // devolvemos un aviso en vez de generar la imagen.
   const intencionImagen = detectarGeneracionImagen(mensajeOriginal);
   if (intencionImagen.esGeneracion) {
-    if (configModelo.nombre !== 'NewserAvanced') {
+    if (configModelo.nombre !== 'NewserAdvanced') {
       // Streaming para que el frontend lo muestre como mensaje normal
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
@@ -2652,7 +2666,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         });
         chatGen.mensajes.push({
           role: 'assistant',
-          contenidoTexto: 'La generacion de imagenes solo esta disponible con NewserAvanced. Cambiá el modelo en el selector de abajo para usarla.',
+          contenidoTexto: 'La generacion de imagenes solo esta disponible con NewserAdvanced. Cambiá el modelo en el selector de abajo para usarla.',
           fecha: new Date().toISOString(),
         });
         if (chatGen.titulo === 'Nueva conversacion' && mensajeOriginal) {
@@ -2660,7 +2674,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         }
         chatGen.actualizadoEn = new Date().toISOString();
         guardarDB(dbGen);
-        res.write(JSON.stringify({ type: 'chunk', text: 'La generacion de imagenes solo esta disponible con **NewserAvanced**. Cambiá el modelo en el selector de abajo (al lado del microfono) para usarla.' }) + '\n');
+        res.write(JSON.stringify({ type: 'chunk', text: 'La generacion de imagenes solo esta disponible con **NewserAdvanced**. Cambiá el modelo en el selector de abajo (al lado del microfono) para usarla.' }) + '\n');
         res.write(JSON.stringify({ type: 'done', chatId: chatGen.id }) + '\n');
         res.end();
       } catch (e) {
@@ -2669,7 +2683,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       return;
     }
 
-    // Es NewserAvanced: generamos la imagen directamente con pollinations.
+    // Es NewserAdvanced: generamos la imagen directamente con pollinations.
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
@@ -2815,7 +2829,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     const historial = chat.mensajes;
     // Si hay imagenes usamos el modelo de vision (que soporta multimodal);
     // si no, el de texto del modelo elegido en el selector del chat.
-    // Esto permite que NewserAvanced tambien procese imagenes (cae al modelo
+    // Esto permite que NewserAdvanced tambien procese imagenes (cae al modelo
     // de vision que si soporta multimodal) sin romper.
     const modeloElegido = imagenes.length ? configModelo.modeloVision : configModelo.modeloTexto;
 
@@ -2830,16 +2844,16 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
 
     // Construimos el system prompt segun el modo (general/catolico) y el
-    // modelo (Lite/Avanced). NewserAvanced recibe un bloque extra con las 3
+    // modelo (Lite/Avanced). NewserAdvanced recibe un bloque extra con las 3
     // herramientas exclusivas (IMAGEN, WEB, CLIMA).
     let systemPrompt = modoElegido === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT;
-    if (configModelo.nombre === 'NewserAvanced') {
+    if (configModelo.nombre === 'NewserAdvanced') {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
     }
 
     // Reemplazamos el placeholder __NOMBRE_MODELO__ con el nombre real del
-    // modelo elegido. Asi cuando el usuario tiene NewserAvanced seleccionado y
-    // le pregunta "quien sos?", la IA responde "Soy NewserAvanced" (no
+    // modelo elegido. Asi cuando el usuario tiene NewserAdvanced seleccionado y
+    // le pregunta "quien sos?", la IA responde "Soy NewserAdvanced" (no
     // "NewserLite").
     systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
 
@@ -2883,7 +2897,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let emitido = 0;
 
     // Marcadores que cortan el stream: incluye los 4 originales + los 3 nuevos
-    // exclusivos de NewserAvanced. Para NewserLite los nuevos nunca van a
+    // exclusivos de NewserAdvanced. Para NewserLite los nuevos nunca van a
     // aparecer en la respuesta (no estan en el prompt), asi que es seguro
     // agregarlos aca siempre.
     const MARCADORES = ['[[CUADERNO::', '[[BUSCAR::', '[[INVESTIGAR::', '[[DESCARGAR::', '[[IMAGEN::', '[[WEB::', '[[CLIMA::'];
@@ -2948,7 +2962,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let investigarQuery = null;
     let descargaQuery = null;
     let descargaCantidad = 1;
-    // Nuevas etiquetas exclusivas de NewserAvanced:
+    // Nuevas etiquetas exclusivas de NewserAdvanced:
     // (imagenQuery ya no se usa: las imagenes se generan automaticamente con
     // "Generame..." al inicio del mensaje, no por etiqueta)
     let webSearchQuery = null;     // [[WEB::consulta google]]
@@ -2988,7 +3002,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       textoVisible = textoVisible.replace(reDescargarG, '');
     }
 
-    // ---- Nuevas etiquetas exclusivas de NewserAvanced ----
+    // ---- Nuevas etiquetas exclusivas de NewserAdvanced ----
     // NOTA: la etiqueta [[IMAGEN::...]] ya no se usa. Las imagenes se generan
     // automaticamente cuando el mensaje del usuario empieza con "Genera..."
     // o "Generame...". Si la IA igual escribió un [[IMAGEN::...]] (no debería,
@@ -3117,7 +3131,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     // "Generame...", sin pasar por la IA. Ver bloque detectarGeneracionImagen
     // arriba.)
 
-    // ---- WEB (NewserAvanced): busca en Google Custom Search ----
+    // ---- WEB (NewserAdvanced): busca en Google Custom Search ----
     if (webSearchQuery) {
       enviar({ type: 'investigando', query: `Buscando en la web: ${webSearchQuery}` });
       enviar({ type: 'investigando_sitio', sitio: 'Google Custom Search' });
@@ -3139,7 +3153,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
     }
 
-    // ---- CLIMA (NewserAvanced): consulta open-meteo (no consume creditos extra) ----
+    // ---- CLIMA (NewserAdvanced): consulta open-meteo (no consume creditos extra) ----
     if (climaQuery) {
       enviar({ type: 'investigando', query: `Consultando clima: ${climaQuery}` });
       enviar({ type: 'investigando_sitio', sitio: 'open-meteo.com' });

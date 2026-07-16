@@ -4,7 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
 <title>Verbo AI</title>
-<link rel="stylesheet" href="style.css?v=6" />
+<link rel="icon" type="image/png" href="/logo.png" />
+<link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" />
+<link rel="stylesheet" href="style.css?v=7" />
 <script>
   // Se aplica antes de pintar la pagina para que no se vea un flash del tema claro
   try { if (localStorage.getItem('verboAiTema') === 'df-night') document.documentElement.classList.add('tema-night'); } catch (e) {}
@@ -14,8 +16,10 @@
 
 <div class="app">
 
+  <!-- Fondo oscuro detras del sidebar cuando esta abierto en celular -->
   <div id="fondoSidebar" class="fondo-sidebar oculto"></div>
 
+  <!-- Barra lateral -->
   <aside id="sidebar" class="sidebar">
     <div class="marca">
       <img src="logo.png" alt="Verbo AI" class="marca-logo" />
@@ -68,6 +72,7 @@
     </div>
   </aside>
 
+  <!-- Zona principal de chat -->
   <main class="chat">
     <svg class="chat-fondo" viewBox="0 0 1440 400" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
       <path class="chat-fondo-cresta chat-fondo-cresta-1" d="M0,220 C160,180 260,240 420,200 C580,160 640,120 800,150 C940,172 1020,130 1160,145 C1300,160 1360,190 1440,170 L1440,400 L0,400 Z" />
@@ -121,13 +126,14 @@
         </svg>
       </button>
 
+      <!-- Selector de modelo: boton "NewserLite + flecha" que abre un menu -->
       <div class="selector-modelo" id="selectorModelo">
         <button type="button" id="btnSelectorModelo" class="btn-selector-modelo" title="Cambiar modelo" aria-haspopup="listbox" aria-expanded="false">
           <span class="selector-modelo-nombre" id="selectorModeloNombre">NewserLite</span>
           <svg class="selector-modelo-flecha" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div class="selector-modelo-menu oculto" id="selectorModeloMenu" role="listbox">
-          
+          <!-- Las opciones se rellenan dinamicamente desde /api/config -->
         </div>
       </div>
 
@@ -143,6 +149,7 @@
     </form>
   </main>
 
+  <!-- Cuadernito: se activa cuando la IA explica un pasaje puntual -->
   <aside id="frameCuaderno" class="frame-cuaderno oculto">
     <div class="cuaderno-header">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h13a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V4Z"/><path d="M4 17a3 3 0 0 1 3-3h13"/></svg>
@@ -157,6 +164,7 @@
     <div id="cuadernoLista" class="cuaderno-cuerpo cuaderno-lista"></div>
   </aside>
 
+  <!-- Lector de la Biblia completa: se abre como panel a pantalla completa -->
   <div id="modalBiblia" class="modal-biblia oculto">
     <div class="biblia-header">
       <button id="btnCerrarBiblia" class="biblia-btn-icono" title="Cerrar">
@@ -189,6 +197,7 @@
     <div id="biblaAvisoMarcador" class="biblia-aviso-marcador oculto"></div>
     <div id="biblaCuerpo" class="biblia-cuerpo"></div>
 
+    <!-- Selector de libro/capitulo: pantalla propia dentro del lector -->
     <div id="selectorLibro" class="selector-libro oculto">
       <div class="selector-libro-header">
         <button id="btnCerrarSelectorLibro" class="biblia-btn-icono" title="Volver">
@@ -204,6 +213,7 @@
     </div>
   </div>
 
+  <!-- Panel de ajustes (Settings) -->
   <div id="overlaySettings" class="overlay-settings oculto">
     <div class="settings-cielo">
       <div class="settings-resplandor"></div>
@@ -282,7 +292,7 @@
         </section>
 
         <section class="settings-seccion oculto" data-seccion-panel="clave-api">
-          
+          <!-- Estado "Prox": lo ven los usuarios que no estan en la lista de autorizados -->
           <div id="claveApiProx" class="clave-api-prox">
             <h3>Clave API</h3>
             <div class="clave-api-prox-cuerpo">
@@ -292,6 +302,7 @@
             </div>
           </div>
 
+          <!-- Estado "autorizado": lo ve marcos.miguel.3110@gmail.com -->
           <div id="claveApiPanel" class="clave-api-panel oculto">
             <h3>Clave API</h3>
             <p class="settings-descripcion">Genera tokens tipo <code>verboai-XXXX</code> para usar Verbo AI desde otros proyectos. Los tokens comparten los creditos globales de tu cuenta (ver seccion "Creditos").</p>
@@ -304,6 +315,7 @@
               </button>
             </div>
 
+            <!-- Banner que aparece 1 vez despues de generar, con el token en claro -->
             <div id="claveApiTokenRecien" class="clave-api-token-recien oculto">
               <p class="token-recien-titulo">Token creado. Copialo ahora, no se vuelve a mostrar:</p>
               <div class="token-recien-cuerpo">
@@ -558,6 +570,7 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
     </div>
   </div>
 
+  <!-- Visor de imagenes a pantalla completa -->
   <div id="lightbox" class="lightbox oculto">
     <button id="btnCerrarLightbox" class="lightbox-cerrar" title="Cerrar">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18" stroke-linecap="round"/></svg>
@@ -566,6 +579,7 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
     <p id="lightboxCaption" class="lightbox-caption"></p>
   </div>
 
+  <!-- Overlay de carga mientras se genera una imagen con IA -->
   <div id="overlayGenerandoImagen" class="overlay-generando-imagen oculto">
     <div class="overlay-generando-imagen-cuerpo">
       <div class="overlay-generando-imagen-spinner"></div>
@@ -577,6 +591,6 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
   </div>
 </div>
 
-<script src="script.js?v=6"></script>
+<script src="script.js?v=7"></script>
 </body>
 </html>

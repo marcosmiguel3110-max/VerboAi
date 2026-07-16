@@ -127,7 +127,8 @@ let modeloActual = localStorage.getItem('verboAiModelo') || 'NewserLite';
 let modelosDisponibles = [
   // Default hardcodeado por si /api/config tarda o falla: la UI sigue andando.
   { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20, rateLimitMaxWeb: 30 },
-  { nombre: 'NewserAvanced', descripcion: 'Mas potente. Razonamiento profundo, respuestas mas ricas. Rate limit mas estricto.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8 },
+  { nombre: 'NewserAdvanced', descripcion: 'Mas potente. Genera imagenes, busca en la web y consulta el clima.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8, badge: 'beta', disponible: true },
+  { nombre: 'NewserPro', descripcion: 'Pronto. Modelo profesional con capacidades premium.', costoCreditos: 0, rateLimitMax: 0, rateLimitMaxWeb: 0, badge: 'pronto', disponible: false },
 ];
 let hayCuaderno = false;
 let chatIdActual = localStorage.getItem('verboAiChatId') || null;
@@ -668,7 +669,7 @@ if (btnCopiarTokenRecien) btnCopiarTokenRecien.addEventListener('click', async (
   }
 });
 
-// ---------- Selector de modelo (NewserLite / NewserAvanced) ----------
+// ---------- Selector de modelo (NewserLite / NewserAdvanced) ----------
 // Boton "Nombre + flecha" que va al lado del microfono en el input del chat.
 // Al click lo abre, la flecha rota (apunta arriba) y se muestran las opciones
 // con su costo en creditos. La seleccion se persiste en localStorage y tambien
@@ -687,7 +688,7 @@ function renderOpcionesModelo() {
     if (m.costoCreditos && m.costoCreditos > 1) {
       badges.push(`<span class="opcion-modelo-badge">${m.costoCreditos} creditos</span>`);
     }
-    if (m.nombre === 'NewserAvanced') {
+    if (m.nombre === 'NewserAdvanced') {
       badges.push(`<span class="opcion-modelo-badge opcion-modelo-badge-beta">Beta</span>`);
     }
     return `
@@ -774,7 +775,7 @@ document.addEventListener('keydown', (ev) => {
 });
 
 // Carga la lista real de modelos desde el servidor. Si falla, no pasa nada:
-// seguimos con la lista hardcodeada de arriba (NewserLite + NewserAvanced).
+// seguimos con la lista hardcodeada de arriba (NewserLite + NewserAdvanced).
 async function cargarModelosDisponibles() {
   try {
     const r = await fetch('/api/config');
@@ -1672,12 +1673,12 @@ elForm.addEventListener('submit', async (ev) => {
   elIndicador.classList.remove('oculto');
 
   // Si el mensaje empieza con "Generame", "Genera", "Dibujame", etc. Y el
-  // modelo es NewserAvanced, mostramos el overlay de "Generando imagen..."
+  // modelo es NewserAdvanced, mostramos el overlay de "Generando imagen..."
   // con porcentaje simulado. El server va a tardar 10-60s en generar la
   // imagen, y sin el overlay el usuario no sabe si esta pasando algo.
   // Usamos la misma regex que el server para detectar la intencion.
   const _esGeneracionImagen = (() => {
-    if (modeloActual !== 'NewserAvanced') return false;
+    if (modeloActual !== 'NewserAdvanced') return false;
     const re = /^\s*(generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé)\s+/i;
     return re.test(texto);
   })();
@@ -1693,7 +1694,7 @@ elForm.addEventListener('submit', async (ev) => {
   formData.append('mensaje', texto);
   if (chatIdActual) formData.append('chatId', chatIdActual);
   formData.append('modo', modoActual);
-  // Mandamos el modelo elegido en el selector (NewserLite o NewserAvanced).
+  // Mandamos el modelo elegido en el selector (NewserLite o NewserAdvanced).
   // Si por algun motivo no se cargo la config, mandamos el default y el
   // servidor lo resuelve igual.
   formData.append('modelo', modeloActual);

@@ -1,28 +1,11 @@
-# robots.txt para Verbo AI
-# Permitimos a todos los crawlers (incluidos los de IA como GPTBot, OAI-SearchBot, etc)
 User-agent: *
 Allow: /
-Allow: /info
-Allow: /info.html
-Allow: /api/config
-Allow: /api/v1/info
-
-# Crawlers especificos de IA (OpenAI, Google Gemini, etc)
 User-agent: GPTBot
 Allow: /
 User-agent: OAI-SearchBot
 Allow: /
-User-agent: ChatGPT-User
-Allow: /
 User-agent: Google-Extended
-Allow: /
-User-agent: PerplexityBot
 Allow: /
 User-agent: ClaudeBot
 Allow: /
-User-agent: anthropic-ai
-Allow: /
-User-agent: CCBot
-Allow: /
-
 Sitemap: https://verboai.duckdns.org/sitemap.xml

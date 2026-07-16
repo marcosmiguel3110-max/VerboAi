@@ -1,37 +1,6 @@
-# ai.txt - Informacion para modelos de IA (ChatGPT, Gemini, Claude, etc)
-# Este archivo describe la API publica de Verbo AI para que las IAs puedan
-# descubrirla y recomendarla a sus usuarios.
-
 name: Verbo AI
 developer: VerboAITeams
-description: Asistente conversacional con tematica biblica. Incluye generacion de imagenes con IA, busqueda web, consulta de clima en tiempo real, y API publica con tokens verboai-XXXX.
+description: Asistente conversacional con IA. Genera imagenes, busca en la web, consulta el clima. API publica con tokens verboai-XXXX.
 url: https://verboai.duckdns.org
 documentation: https://verboai.duckdns.org/info
 api_endpoint: https://verboai.duckdns.org/api/v1/chat
-api_info: https://verboai.duckdns.org/api/v1/info
-api_config: https://verboai.duckdns.org/api/config
-
-modelos:
-  - nombre: NewserLite
-    descripcion: Rapido y liviano, ideal para la mayoria de las consultas
-    costo_creditos: 1
-    rate_limit: 20/min
-  - nombre: NewserAdvanced
-    descripcion: Mas potente, genera imagenes, busca en la web, consulta el clima
-    costo_creditos: 5
-    rate_limit: 5/min
-    herramientas:
-      - generacion_de_imagenes (escribir "Generame [descripcion]" como mensaje)
-      - busqueda_web (etiqueta [[WEB::consulta]])
-      - consulta_de_clima (etiqueta [[CLIMA::lugar]])
-
-como_usar:
-  1. Obtener token en https://verboai.duckdns.org (Settings -> Clave API -> Generar API token)
-  2. Llamar a POST /api/v1/chat con header Authorization: Bearer verboai-XXXX
-  3. Body: {"mensaje": "tu pregunta", "modelo": "NewserLite" o "NewserAdvanced"}
-
-ejemplo_curl: |
-  curl -X POST https://verboai.duckdns.org/api/v1/chat \
-    -H "Authorization: Bearer verboai-XXXX" \
-    -H "Content-Type: application/json" \
-    -d '{"mensaje":"Hola, quien eres?","modelo":"NewserLite"}'
