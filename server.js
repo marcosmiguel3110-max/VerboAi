@@ -1335,6 +1335,9 @@ app.get('/api/v1/info', (req, res) => {
   const token = buscarTokenPorValor(valorToken);
   if (!token) return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
 
+  const esAdmin = token.propietario && token.propietario.startsWith('local:');
+  const creditosGlobales = leerCreditosGlobales(token.propietario);
+
   const modelos = Object.values(MODELOS_DISPONIBLES).map((m) => ({
     nombre: m.nombre,
     descripcion: m.descripcion,
@@ -1342,13 +1345,16 @@ app.get('/api/v1/info', (req, res) => {
     rateLimitMax: m.rateLimitMax,
     rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
     maxTokens: m.maxTokens,
+    badge: m.badge || null,
+    disponible: m.disponible !== false,
   }));
 
   res.json({
     ok: true,
     nombre: token.nombre,
-    creditos: token.creditos,
-    creditosIniciales: token.creditosIniciales || token.creditos,
+    esAdmin,
+    creditos: esAdmin ? -1 : creditosGlobales,
+    creditosIniciales: esAdmin ? -1 : 1000,
     rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
     modeloDefault: MODELO_DEFAULT,
     modelos,

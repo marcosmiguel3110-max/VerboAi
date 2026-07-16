@@ -190,7 +190,10 @@ def cmd_guardar_token(token):
     guardar_token(token)
     out("Token valido y guardado.", C.GREEN)
     out(f"  Nombre:    {data.get('nombre', '-')}", C.DIM)
-    out(f"  Creditos:  {data.get('creditos', '?')} / {data.get('creditosIniciales', '?')}", C.DIM)
+    if data.get("creditos") == -1:
+        out("  Creditos:  infinito (admin)", C.DIM)
+    else:
+        out(f"  Creditos:  {data.get('creditos', '?')} / {data.get('creditosIniciales', '?')}", C.DIM)
     out(f"  Modelos disponibles:", C.DIM)
     for m in data.get("modelos", []):
         costo = m.get("costoCreditos", 1)
@@ -421,7 +424,10 @@ def cmd_run():
         out("Volve a guardarlo con: python verboai.py login TUTOKEN", C.YELLOW)
         sys.exit(1)
 
-    out(f"{C.GREEN}Token valido.{C.RESET}  Creditos: {(data or {}).get('creditos', '?')}/{(data or {}).get('creditosIniciales', '?')}", C.GREEN)
+    if (data or {}).get("creditos") == -1:
+        out(f"{C.GREEN}Token valido.{C.RESET}  Creditos: infinito (admin)", C.GREEN)
+    else:
+        out(f"{C.GREEN}Token valido.{C.RESET}  Creditos: {(data or {}).get('creditos', '?')}/{(data or {}).get('creditosIniciales', '?')}", C.GREEN)
 
     modelo = elegir_modelo(data if isinstance(data, dict) else {})
     out("")
@@ -460,23 +466,26 @@ def cmd_run():
         if mensaje.lower() == "/modelo":
             modelo = elegir_modelo({})
             out(f"{C.BOLD}Modelo cambiado a:{C.RESET} {C.CYAN}{modelo}{C.RESET}", C.GREEN)
-            out("")
             continue
 
         if mensaje.lower() == "/creditos":
             status, info, _ = http_get(f"{API_URL_BASE}/api/v1/info", token=token)
             if status == 200 and info:
-                out(f"  Creditos: {C.BOLD}{info.get('creditos', '?')}{C.RESET} / {info.get('creditosIniciales', '?')}", C.BOLD)
+                if info.get("creditos") == -1:
+                    out(f"  Creditos: {C.BOLD}infinito (admin){C.RESET}", C.BOLD)
+                else:
+                    out(f"  Creditos: {C.BOLD}{info.get('creditos', '?')}{C.RESET} / {info.get('creditosIniciales', '?')}", C.BOLD)
             else:
                 out(f"  No se pudo obtener info: {info}", C.RED)
             out("")
             continue
-
         if mensaje.lower() == "/info":
             status, info, _ = http_get(f"{API_URL_BASE}/api/v1/info", token=token)
             if status == 200 and info:
-                out(f"  {C.BOLD}Token:{C.RESET} {info.get('nombre', '-')}")
-                out(f"  {C.BOLD}Creditos:{C.RESET} {info.get('creditos', '?')} / {info.get('creditosIniciales', '?')}")
+                if info.get("creditos") == -1:
+                    out(f"  {C.BOLD}Creditos:{C.RESET} infinito (admin)")
+                else:
+                    out(f"  {C.BOLD}Creditos:{C.RESET} {info.get('creditos', '?')} / {info.get('creditosIniciales', '?')}")
                 out(f"  {C.BOLD}Creado:{C.RESET} {info.get('creadoEn', '-')}")
                 out(f"  {C.BOLD}Ultimo uso:{C.RESET} {info.get('ultimoUso', '-')}")
                 out(f"  {C.BOLD}Modelos disponibles:{C.RESET}")
@@ -487,7 +496,6 @@ def cmd_run():
                 out(f"  No se pudo obtener info: {info}", C.RED)
             out("")
             continue
-
         if mensaje.lower() in ("/help", "/ayuda", "/?"):
             out(f"  {C.BOLD}Comandos:{C.RESET}")
             out(f"    /modelo    Cambiar de modelo (NewserLite / NewserAvanced)")
@@ -561,7 +569,10 @@ def cmd_info():
         sys.exit(1)
 
     out(f"{C.BOLD}Token:{C.RESET}     {data.get('nombre', '-')}")
-    out(f"{C.BOLD}Creditos:{C.RESET}  {data.get('creditos', '?')} / {data.get('creditosIniciales', '?')}")
+    if data.get("creditos") == -1:
+        out(f"{C.BOLD}Creditos:{C.RESET}  infinito (admin)")
+    else:
+        out(f"{C.BOLD}Creditos:{C.RESET}  {data.get('creditos', '?')} / {data.get('creditosIniciales', '?')}")
     out(f"{C.BOLD}Creado:{C.RESET}    {data.get('creadoEn', '-')}")
     out(f"{C.BOLD}Ultimo uso:{C.RESET} {data.get('ultimoUso', '-')}")
     out("")
