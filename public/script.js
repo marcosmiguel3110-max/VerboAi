@@ -682,32 +682,26 @@ function renderOpcionesModelo() {
   if (!selectorModeloMenu) return;
   selectorModeloMenu.innerHTML = modelosDisponibles.map((m) => {
     const activa = m.nombre === modeloActual;
-    // Badge de costo en creditos: 1 = "1 credito", 5 = "5 creditos". Para
-    // que el usuario vea el "precio" antes de elegir.
+    const disponible = m.disponible !== false;
     const badges = [];
-    if (m.costoCreditos && m.costoCreditos > 1) {
-      badges.push(`<span class="opcion-modelo-badge">${m.costoCreditos} creditos</span>`);
+    if (disponible && m.costoCreditos && m.costoCreditos > 1) {
+      badges.push('<span class="opcion-modelo-badge">' + m.costoCreditos + ' creditos</span>');
     }
-    if (m.nombre === 'NewserAdvanced') {
-      badges.push(`<span class="opcion-modelo-badge opcion-modelo-badge-beta">Beta</span>`);
+    if (m.badge === 'beta' || m.nombre === 'NewserAdvanced') {
+      badges.push('<span class="opcion-modelo-badge opcion-modelo-badge-beta">Beta</span>');
     }
-    return `
-      <button type="button" class="opcion-modelo ${activa ? 'activa' : ''}" data-modelo="${escapeHtml(m.nombre)}" role="option" aria-selected="${activa}">
-        <div class="opcion-modelo-fila">
-          <span class="opcion-modelo-nombre">
-            ${escapeHtml(m.nombre)}
-          </span>
-          <span class="opcion-modelo-badges">
-            ${badges.join('')}
-            <svg class="opcion-modelo-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </span>
-        </div>
-        <span class="opcion-modelo-desc">${escapeHtml(m.descripcion || '')}</span>
-      </button>
-    `;
+    if (m.badge === 'pronto' || !disponible) {
+      badges.push('<span class="opcion-modelo-badge opcion-modelo-badge-pronto">Pronto</span>');
+    }
+    const claseNoDisponible = disponible ? '' : 'no-disponible';
+    const checkSvg = disponible ? '<svg class="opcion-modelo-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
+    return '<button type="button" class="opcion-modelo ' + (activa ? 'activa' : '') + ' ' + claseNoDisponible + '" data-modelo="' + escapeHtml(m.nombre) + '" role="option" aria-selected="' + activa + '" ' + (disponible ? '' : 'disabled') + '>' +
+      '<div class="opcion-modelo-fila"><span class="opcion-modelo-nombre">' + escapeHtml(m.nombre) + '</span><span class="opcion-modelo-badges">' + badges.join('') + checkSvg + '</span></div>' +
+      '<span class="opcion-modelo-desc">' + escapeHtml(m.descripcion || '') + '</span></button>';
   }).join('');
 
   selectorModeloMenu.querySelectorAll('.opcion-modelo').forEach((op) => {
+    if (op.disabled) return;
     op.addEventListener('click', () => {
       modeloActual = op.dataset.modelo;
       localStorage.setItem('verboAiModelo', modeloActual);

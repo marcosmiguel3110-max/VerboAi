@@ -1549,7 +1549,21 @@ html.tema-night .opcion-modelo-check { color: var(--chat-activo-noche-borde); }
 .opcion-modelo-badge-beta {
   background: #2E8B57;
 }
+.opcion-modelo-badge-pronto {
+  background: #6c757d;
+  font-style: italic;
+}
 html.tema-night .opcion-modelo-badge { background: var(--chat-activo-noche-borde); color: var(--texto); }
+html.tema-night .opcion-modelo-badge-beta { background: #2E8B57; color: white; }
+html.tema-night .opcion-modelo-badge-pronto { background: #6c757d; color: white; }
+
+.opcion-modelo.no-disponible {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.opcion-modelo.no-disponible:hover { background: var(--crema-oscuro); }
+html.tema-night .opcion-modelo.no-disponible:hover { background: var(--hover-noche); }
 
 .opcion-modelo-desc {
   font-size: 11.5px;
