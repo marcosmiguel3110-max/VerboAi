@@ -284,7 +284,6 @@ def iniciar_proxy_local():
     return PROXY_PORT
 
 def elegir_modelo(config):
-    """Pregunta al usuario que modelo quiere usar. Devuelve el nombre."""
     token = leer_token()
     if not token:
         out("No hay token guardado. Corre primero: verboai:TUTOKEN", C.RED)
@@ -296,35 +295,49 @@ def elegir_modelo(config):
         out("No se pudo obtener la lista de modelos. Usando NewserLite por defecto.", C.YELLOW)
         return "NewserLite"
 
-    modelos = data["modelos"]
+    modelos_disponibles = [m for m in data["modelos"] if m.get("disponible", True) != False]
+    modelos_bloqueados = [m for m in data["modelos"] if m.get("disponible", True) == False]
+
     out("")
     out(f"{C.BOLD}Elegi un modelo:{C.RESET}", C.BOLD)
-    for i, m in enumerate(modelos, 1):
+    for i, m in enumerate(modelos_disponibles, 1):
         costo = m.get("costoCreditos", 1)
         rl = m.get("rateLimitMax", "?")
-        out(f"  {C.CYAN}{i}{C.RESET}. {C.BOLD}{m['nombre']}{C.RESET}  -  {m.get('descripcion', '')}")
+        badge = f" [{m.get('badge','')}]" if m.get("badge") else ""
+        out(f"  {C.CYAN}{i}{C.RESET}. {C.BOLD}{m['nombre']}{C.RESET}{badge}  -  {m.get('descripcion', '')}")
         out(f"     {C.GRAY}Costo: {costo} credito(s)/pedido  |  Rate limit: {rl}/min{C.RESET}", C.DIM)
+
+    for m in modelos_bloqueados:
+        badge = m.get("badge", "pronto")
+        out(f"  {C.GRAY}- {m['nombre']} [{badge}] (no disponible){C.RESET}", C.DIM)
+
     out("")
 
     while True:
         try:
-            eleccion = input(f"{C.BOLD}Modelo [1-{len(modelos)}] (default 1): {C.RESET}").strip()
+            eleccion = input(f"{C.BOLD}Modelo [1-{len(modelos_disponibles)}] (default 1): {C.RESET}").strip()
         except (EOFError, KeyboardInterrupt):
             out("\nCancelado.", C.YELLOW)
             sys.exit(0)
         if not eleccion:
-            return modelos[0]["nombre"]
+            return modelos_disponibles[0]["nombre"]
         try:
             idx = int(eleccion) - 1
-            if 0 <= idx < len(modelos):
-                return modelos[idx]["nombre"]
+            if 0 <= idx < len(modelos_disponibles):
+                return modelos_disponibles[idx]["nombre"]
         except ValueError:
             pass
-        
-        for m in modelos:
+
+        for m in modelos_disponibles:
             if eleccion.lower() == m["nombre"].lower():
                 return m["nombre"]
-        out(f"Opcion invalida. Probá 1-{len(modelos)} o el nombre del modelo.", C.RED)
+
+        for m in modelos_bloqueados:
+            if eleccion.lower() == m["nombre"].lower():
+                out(f"El modelo {m['nombre']} no esta disponible aun. Elegi NewserLite o NewserAdvanced.", C.RED)
+                break
+        else:
+            out(f"Opcion invalida. Probá 1-{len(modelos_disponibles)} o el nombre del modelo.", C.RED)
 
 def abrir_imagen(url):
     """Descarga una imagen del servidor y la abre con el visor del sistema."""

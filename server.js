@@ -68,7 +68,12 @@ function resolverModelo(valor) {
   const clave = Object.keys(MODELOS_DISPONIBLES).find((k) => k.toLowerCase() === limpio.toLowerCase());
   if (!clave) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
   const config = MODELOS_DISPONIBLES[clave];
-  if (config.disponible === false) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
+  if (config.disponible === false) {
+    const err = new Error('El modelo "' + config.nombre + '" no esta disponible aun. Usa NewserLite o NewserAdvanced.');
+    err.codigo = 400;
+    err.modeloBloqueado = true;
+    throw err;
+  }
   return config;
 }
 
@@ -1065,7 +1070,13 @@ app.post('/api/v1/chat', async (req, res) => {
 
   const modo = (typeof req.body.modo === 'string' && req.body.modo.trim() === 'catolico') ? 'catolico' : 'general';
 
-  const configModelo = resolverModelo(req.body.modelo);
+  let configModelo;
+  try {
+    configModelo = resolverModelo(req.body.modelo);
+  } catch (e) {
+    if (e.modeloBloqueado) return res.status(400).json({ ok: false, error: e.message });
+    configModelo = resolverModelo(null);
+  }
 
   const controlUso = registrarUsoToken(token, {
     costo: configModelo.costoCreditos,
@@ -2240,7 +2251,12 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   const chatId = (req.body.chatId || '').trim();
   const modoElegido = (req.body.modo || 'general').trim();
 
-  const configModelo = resolverModelo(req.body.modelo);
+  let configModelo;
+  try {
+    configModelo = resolverModelo(req.body.modelo);
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
   let imagenes = [];
 
   if (req.files && req.files.length) {
