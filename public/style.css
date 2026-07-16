@@ -2487,3 +2487,41 @@ html.tema-night .creditos-por-modelo-gasto { color: var(--chat-activo-noche-bord
   .creditos-label { font-size: 11px; }
   .creditos-sub { font-size: 11px; }
 }
+
+.token-card-descarga {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--borde);
+}
+
+html.tema-night .token-card-descarga {
+  border-color: var(--borde-noche, #2A2E40);
+}
+
+.token-descarga-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1f6feb;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(31, 111, 235, 0.1);
+  transition: background 0.15s;
+}
+
+.token-descarga-link:hover {
+  background: rgba(31, 111, 235, 0.2);
+  text-decoration: none;
+}
+
+html.tema-night .token-descarga-link {
+  color: #58a6ff;
+  background: rgba(88, 166, 255, 0.1);
+}
+
+html.tema-night .token-descarga-link:hover {
+  background: rgba(88, 166, 255, 0.2);
+}

@@ -567,6 +567,12 @@ function renderTokensClaveApi(tokens) {
             <span class="token-stat-valor">${formatearFecha(t.ultimoUso)}</span>
           </div>
         </div>
+        <div class="token-card-descarga">
+          <a href="/VerboAIpc.bat" download class="token-descarga-link" title="Descargar cliente para Windows">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Descargar VerboAIpc
+          </a>
+        </div>
       </div>
     `;
   }).join('');
