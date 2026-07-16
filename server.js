@@ -8,46 +8,19 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 
 const app = express();
-// Si la app corre detras de ngrok (u otro proxy), esto hace que Express
-// respete el header X-Forwarded-Proto y sepa que la conexion real es https,
-// aunque por detras le hable a este servidor por http normal.
+
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 
-// La clave real de Groq es GROQ_API_KEY (la que esta en tu .env). BTATESTERS_KEY
-// se deja solo como alias de compatibilidad con Render (por si alguien la
-// configuro asi alla), pero ya NO tiene prioridad: si esa quedo vieja, vencida
-// o sin creditos (eso es lo que tira el error 402), ni se intenta primero, asi
-// que no bloquea nada. Si llegaras a tener las dos configuradas y una falla
-// por auth/creditos, el sistema prueba automaticamente con la otra antes de
-// rendirse (ver llamarGroqConReintentos).
 const CLAVES_GROQ = [...new Set([process.env.GROQ_API_KEY, process.env.BTATESTERS_KEY].filter(Boolean))];
-const BTATESTERS_KEY = CLAVES_GROQ[0]; // nombre viejo, se deja para no tocar el resto del archivo
+const BTATESTERS_KEY = CLAVES_GROQ[0]; 
 
-// Modelo de texto (rapido) y modelo de vision (para imagenes).
-// gpt-oss-20b NO soporta imagenes en Groq -> por eso fallaba el envio de imagenes.
 const GROQ_MODEL_TEXTO = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
 const GROQ_MODEL_VISION = process.env.GROQ_MODEL_VISION || 'meta-llama/llama-4-scout-17b-16e-instruct';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
-// Nombre publico del modelo (lo unico que la IA debe admitir que es).
 const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 
-// ---------- Modelos disponibles ----------
-// Cada "modelo publico" mapea a uno o dos modelos reales de Groq (texto y
-// vision) y define cuanto cuesta en creditos y cual es su rate limit. Esto es
-// lo que ve el usuario en el selector del chat y lo que se puede forzar desde
-// la API mandando { "modelo": "NewserAdvanced" } en el body.
-//
-// IMPORTANTE: la WEB no consume creditos del token. Solo el endpoint
-// /api/v1/chat (el que se usa con Bearer token desde afuera) descuenta
-// creditos. El rate limit de aca aplica a AMBOS (web y API): la web lo
-// aplicamos en /api/chat usando un contador en memoria por usuario+modelo, y
-// la API lo aplicamos en /api/v1/chat usando el historial de usos del token.
-//
-// NewserLite    -> openai/gpt-oss-20b, 1 credito, 20 req/min (API), 30 req/min (web)
-// NewserAdvanced -> openai/gpt-oss-120b, 5 creditos, 5 req/min (API), 8 req/min (web)
-//                  (mas estricto porque el modelo es mas pesado)
 const MODELOS_DISPONIBLES = {
   NewserLite: {
     nombre: 'NewserLite',
@@ -99,17 +72,9 @@ function resolverModelo(valor) {
   return config;
 }
 
-// ---------- Rate limit para la WEB (no consume creditos) ----------
-// Como /api/chat no toca los creditos del token (eso solo lo hace /api/v1/chat),
-// necesitamos un rate limit separado para que alguien desde la web no abuse de
-// NewserAdvanced mandando 100 mensajes por minuto. Lo hacemos en memoria, por
-// usuario + modelo, con una ventana deslizante de 60s (igual que el de la API).
-//
-// Es un Map clave -> [timestamps]. Se limpia solo cuando se consulta.
-const RATE_LIMIT_WEB = new Map(); // clave "usuario|modelo" -> [timestamps]
+const RATE_LIMIT_WEB = new Map(); 
 const RATE_LIMIT_WEB_VENTANA_MS = 60 * 1000;
 
-// Devuelve { ok: true } o { ok: false, status, error, reintentarEnSeg }.
 function verificarRateLimitWeb(usuario, configModelo) {
   if (!usuario) return { ok: true };
   const clave = `${usuario}|${configModelo.nombre}`;
@@ -131,30 +96,17 @@ function verificarRateLimitWeb(usuario, configModelo) {
   return { ok: true };
 }
 
-// Las consultas reales (Wikipedia, busqueda biblica) a veces tardan menos de
-// medio segundo, y el frame de "investigando" pasaba de largo sin que se
-// alcanzara a ver. Esto obliga a que cada paso se muestre al menos "ms" en
-// pantalla, sin inventar nada: el resultado sigue siendo 100% real, solo se
-// pausa la UI lo suficiente para que sea visible.
 function esperarMinimo(promesa, ms) {
   return Promise.all([promesa, new Promise((resolve) => setTimeout(resolve, ms))]).then(([resultado]) => resultado);
 }
 
-// Llama a Groq. Reintenta automaticamente si responde 429 (limite de uso
-// alcanzado), avisando al cliente cuantos segundos va a esperar antes de
-// reintentar, en vez de simplemente fallar. Ademas, si la clave activa falla
-// por auth o creditos (401/402/403), prueba con la siguiente clave de
-// CLAVES_GROQ antes de rendirse (asi una BTATESTERS_KEY vencida en Render no
-// tumba todo si hay una GROQ_API_KEY valida configurada tambien). Nunca
-// devuelve al llamador el texto crudo de error de Groq: eso se resuelve
-// afuera con mensajeErrorAmigableIA(), para no filtrar datos del proveedor.
 async function llamarGroqConReintentos(opcionesBase, enviar, maxIntentos = 4) {
   const claves = CLAVES_GROQ.length ? CLAVES_GROQ : [undefined];
   let ultimaRespuesta = null;
 
   for (const clave of claves) {
     const headers = { ...(opcionesBase.headers || {}) };
-    delete headers.Authorization; // por si el llamador ya la puso, la pisamos
+    delete headers.Authorization; 
     if (clave) headers.Authorization = `Bearer ${clave}`;
     const opciones = { ...opcionesBase, headers };
 
@@ -162,8 +114,7 @@ async function llamarGroqConReintentos(opcionesBase, enviar, maxIntentos = 4) {
       const r = await fetch(GROQ_URL, opciones);
 
       if (r.status === 401 || r.status === 402 || r.status === 403) {
-        // Esta clave no sirve (vencida / invalida / sin creditos). Si hay
-        // otra clave configurada, la probamos antes de rendirnos.
+
         ultimaRespuesta = r;
         break;
       }
@@ -182,10 +133,6 @@ async function llamarGroqConReintentos(opcionesBase, enviar, maxIntentos = 4) {
   return ultimaRespuesta;
 }
 
-// Traduce un status HTTP del proveedor de IA a un mensaje generico para el
-// cliente, SIN exponer nunca el texto/JSON crudo que manda Groq (que puede
-// incluir detalles de la cuenta, del plan, o mencionar "groq" directamente).
-// Los detalles reales solo se loguean en el servidor (consola de Render).
 function mensajeErrorAmigableIA(status) {
   if (status === 429) return 'El modelo esta saturado ahora mismo (limite de uso alcanzado). Intenta de nuevo en unos minutos.';
   if (status === 402) return 'El servicio de IA no tiene creditos disponibles en este momento. Avisale al administrador.';
@@ -200,14 +147,9 @@ const MEMORY_FILE = path.join(MEMORY_DIR, 'historial.json');
 if (!fs.existsSync(MEMORY_DIR)) fs.mkdirSync(MEMORY_DIR, { recursive: true });
 if (!fs.existsSync(MEMORY_FILE)) fs.writeFileSync(MEMORY_FILE, JSON.stringify({ chats: [] }, null, 2));
 
-// Carpeta donde se guardan de forma persistente tanto las imagenes que manda
-// el usuario como las que la IA descarga de la web. Vive dentro de /public
-// para que express.static ya las sirva solas, sin rutas nuevas.
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-// Guarda un buffer de imagen a disco con nombre unico y devuelve la URL
-// relativa (algo como "/uploads/ab12cd34.jpg") para guardar en el historial.
 function guardarImagenDisco(buffer, mime) {
   const ext = (mime && mime.split('/')[1] ? mime.split('/')[1].replace('jpeg', 'jpg') : 'jpg').slice(0, 5);
   const nombre = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
@@ -215,20 +157,15 @@ function guardarImagenDisco(buffer, mime) {
   return `/uploads/${nombre}`;
 }
 
-// Borra un archivo guardado por guardarImagenDisco a partir de su URL
-// relativa. Nunca tira si el archivo ya no existe (borrado doble, etc).
 function borrarImagenDisco(urlRelativa) {
   if (!urlRelativa || !urlRelativa.startsWith('/uploads/')) return;
   const nombreArchivo = path.basename(urlRelativa);
   const rutaCompleta = path.join(UPLOADS_DIR, nombreArchivo);
   if (rutaCompleta.startsWith(UPLOADS_DIR)) {
-    fs.unlink(rutaCompleta, () => {}); // async, no importa si falla (ya no esta, etc)
+    fs.unlink(rutaCompleta, () => {}); 
   }
 }
 
-// Lee un archivo de /uploads y lo devuelve como data URL base64, para
-// volver a mandarselo al modelo (mantener "memoria visual" en turnos
-// siguientes de la misma conversacion).
 function imagenComoDataURL(urlRelativa, mimeFallback = 'image/jpeg') {
   try {
     const nombreArchivo = path.basename(urlRelativa);
@@ -243,19 +180,10 @@ function imagenComoDataURL(urlRelativa, mimeFallback = 'image/jpeg') {
   }
 }
 
-// Arma el historial que se le manda al modelo. Antes esto solo mandaba texto
-// (h.contenidoTexto) incluso para turnos que tenian imagenes, asi que el
-// modelo se "olvidaba" por completo de lo que habia en una foto apenas
-// pasaba un mensaje mas ("a que te referis con eso?"). Ahora, los turnos
-// recientes que tuvieron imagen las vuelven a mandar de verdad. Se limita a
-// las ultimas MAX_IMAGENES_RECORDADAS fotos (las mas nuevas primero) para no
-// disparar el tamano de cada pedido si la conversacion tiene muchas.
 const MAX_IMAGENES_RECORDADAS = 6;
 function construirHistorialParaModelo(historial) {
   const ultimos = historial.slice(-20);
 
-  // Contamos cuantas imagenes hay en total en esa ventana, de atras para
-  // adelante, para saber desde que turno para atras ya no re-mandamos fotos.
   let cupoImagenes = MAX_IMAGENES_RECORDADAS;
   const permiteImagenPorIndice = new Array(ultimos.length).fill(false);
   for (let i = ultimos.length - 1; i >= 0; i--) {
@@ -283,10 +211,6 @@ function construirHistorialParaModelo(historial) {
   });
 }
 
-// Progreso de lectura de la Biblia completa: versiculos tachados (leidos),
-// marcador de "donde te quedaste" y nivel de zoom. Se guarda en el servidor,
-// separado POR USUARIO, para que cada quien tenga su propio progreso aunque
-// entren varias personas distintas a esta misma app.
 const BIBLIA_PROGRESO_FILE = path.join(MEMORY_DIR, 'biblia-progreso.json');
 if (!fs.existsSync(BIBLIA_PROGRESO_FILE)) {
   fs.writeFileSync(BIBLIA_PROGRESO_FILE, JSON.stringify({ usuarios: {} }, null, 2));
@@ -298,7 +222,7 @@ function leerProgresoBiblia(usuario) {
   } catch (e) {
     raiz = { usuarios: {} };
   }
-  // Migracion: formato viejo, un solo progreso compartido por todos.
+  
   if (!raiz.usuarios) {
     const progresoViejo = { tachados: raiz.tachados || {}, marcador: raiz.marcador || null, zoom: raiz.zoom || 100 };
     raiz = { usuarios: { [`local:${APP_USER}`]: progresoViejo } };
@@ -319,12 +243,10 @@ function guardarProgresoBiblia(usuario, p) {
   if (!raiz.usuarios) raiz.usuarios = {};
   raiz.usuarios[usuario] = p;
   fs.writeFileSync(BIBLIA_PROGRESO_FILE, JSON.stringify(raiz, null, 2));
-  // Backup a MongoDB en background
+  
   guardarEnMongoBackground('biblia-progreso', raiz);
 }
 
-// API publica (RV1960) que usamos como fuente de la Biblia completa, para no
-// tener que empaquetar todo el texto biblico dentro del proyecto.
 const BIBLIA_API_BASE = 'https://bible-api.deno.dev/api';
 let cacheLibrosBiblia = null;
 const cacheCapitulosBiblia = new Map();
@@ -334,11 +256,6 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 *
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Handler para cuando el body-parser rechaza un JSON mal formado (sintaxis
-// invalida, comillas simples, comas sueltas, etc.). Por defecto Express manda
-// un HTML crudo "Bad Request" que rompe a cualquier cliente de API que espera
-// JSON. Aca lo interceptamos para devolver siempre JSON en las rutas /api/*,
-// igual que hace el resto de la app.
 app.use((err, req, res, next) => {
   if (err && (err.type === 'entity.parse.failed' || err.type === 'entity.too.large' || err.type === 'request.size.invalid')) {
     if (req.path && req.path.startsWith('/api/')) {
@@ -346,13 +263,12 @@ app.use((err, req, res, next) => {
       if (err.type === 'entity.too.large') mensaje = 'La peticion es demasiado grande.';
       return res.status(400).json({ ok: false, error: mensaje });
     }
-    // Para rutas no-API (HTML), dejamos el comportamiento default.
+    
     return res.status(400).type('text').send('Bad Request');
   }
   next(err);
 });
 
-// ---------- Login (sesion con cookie firmada, sin dependencias extra) ----------
 const APP_USER = process.env.APP_USER || 'admin';
 const APP_PASS = process.env.APP_PASS || 'cambia-esta-clave';
 const AUTH_SECRET = process.env.AUTH_SECRET || 'cambia-este-secreto-tambien';
@@ -391,17 +307,14 @@ function leerCookie(req, nombre) {
 function estaAutenticado(req) {
   return verificarValorFirmado(leerCookie(req, 'verbo_auth')) !== null;
 }
-// Devuelve el identificador del usuario actual: un email de Google (ej.
-// "persona@gmail.com") si entro con Google, o "local:admin" si entro con el
-// usuario/clave local. Este identificador es lo que separa los datos de cada
-// quien (chats, progreso de lectura biblica).
+
 function obtenerUsuarioActual(req) {
   return verificarValorFirmado(leerCookie(req, 'verbo_auth'));
 }
 
 const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/api/config']);
 app.use((req, res, next) => {
-  // Redireccion /info -> /info.html para que sea mas facil de recordar
+  
   if (req.path === '/info') return res.redirect(301, '/info.html');
   if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/')) return next();
   if (estaAutenticado(req)) return next();
@@ -409,9 +322,6 @@ app.use((req, res, next) => {
   return res.redirect('/login.html');
 });
 
-// ---------- Claves API (tokens tipo "verboai-XXXX") ----------
-// Por ahora esta seccion de Settings solo lo puede usar un conjunto chiquito
-// de correos. Cualquiera que no este en la lista ve "Prox" en su lugar.
 const EMAILS_AUTORIZADOS_API = new Set(
   (process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com')
     .split(',')
@@ -422,11 +332,9 @@ const EMAILS_AUTORIZADOS_API = new Set(
 const API_TOKENS_FILE = path.join(MEMORY_DIR, 'api-tokens.json');
 if (!fs.existsSync(API_TOKENS_FILE)) fs.writeFileSync(API_TOKENS_FILE, JSON.stringify({ tokens: [] }, null, 2));
 
-// Creditos y limites por defecto para cada token nuevo. Se pueden cambiar
-// por token despues si hace falta, pero arrancan con estos valores.
-const TOKEN_CREDITOS_INICIALES = 1000;        // cuantas peticiones puede hacer
-const TOKEN_RATE_LIMIT_VENTANA_MS = 60 * 1000; // ventana de 1 minuto
-const TOKEN_RATE_LIMIT_MAX = 20;               // max 20 peticiones por minuto
+const TOKEN_CREDITOS_INICIALES = 1000;        
+const TOKEN_RATE_LIMIT_VENTANA_MS = 60 * 1000; 
+const TOKEN_RATE_LIMIT_MAX = 20;               
 
 function leerApiTokens() {
   try {
@@ -439,23 +347,17 @@ function leerApiTokens() {
 function guardarApiTokens(tokens) {
   const valor = { tokens };
   fs.writeFileSync(API_TOKENS_FILE, JSON.stringify(valor, null, 2));
-  // Backup a MongoDB en background
+  
   guardarEnMongoBackground('api-tokens', valor);
 }
 
-// Devuelve true si el usuario actual (email o "local:admin") tiene acceso a la
-// seccion de Clave API. El admin local siempre entra (para probarlo).
 function tieneAccesoApiTokens(usuario) {
   return !!usuario;
 }
 
-// Genera un token aleatorio tipo "verboai-" + 24 digitos. Son solo digitos
-// para que sea facil de copiar y pegar en cualquier lado sin sorpresas con
-// caracteres raros. 24 digitos => 10^24 combinaciones, suficiente.
 function generarTokenVerboai() {
-  const digitos = crypto.randomBytes(12).toString('hex'); // 24 hex chars => 0-9 a-f
-  // Para que sean SOLO digitos (no hex), los mapeamos a 0-9 tomando cada
-  // par y haciendo modulo 10. Sigue siendo suficientemente aleatorio.
+  const digitos = crypto.randomBytes(12).toString('hex'); 
+
   let soloDigitos = '';
   for (let i = 0; i < digitos.length; i += 2) {
     const num = parseInt(digitos.slice(i, i + 2), 16);
@@ -464,28 +366,12 @@ function generarTokenVerboai() {
   return 'verboai-' + soloDigitos;
 }
 
-// Busca un token por su valor completo (lo que se manda en Authorization).
-// Devuelve el objeto del token o null. Tambien aplica la "poda" automatica
-// de tokens vencidos por inactividad (no se borran, solo se marcan).
 function buscarTokenPorValor(valor) {
   if (!valor) return null;
   const tokens = leerApiTokens();
   return tokens.find((t) => t.token === valor && t.activo !== false) || null;
 }
 
-// Registra una peticion contra un token: descuenta credito y revisa el rate
-// limit. Devuelve { ok: true } o { ok: false, status, error }.
-//
-// Opciones:
-//   - costo (numero, default 1): cuantos creditos consume esta peticion.
-//     NewserAdvanced por ejemplo pasa 5 aca.
-//   - rateLimitMax (numero, default TOKEN_RATE_LIMIT_MAX): limite de peticiones
-//     por minuto que aplica a esta llamada. NewserAdvanced pasa 10.
-//
-// El rate limit es por-token y por-ventana: contamos cuantas peticiones hizo
-// este token en los ultimos 60s y lo bloqueamos si se pasa. Como el costo y
-// el limite dependen del modelo, los pasamos como parametro en vez de tenerlos
-// fijos en el token.
 function registrarUsoToken(token, opciones = {}) {
   const costo = (typeof opciones.costo === 'number' && opciones.costo > 0) ? opciones.costo : 1;
   const rateLimitMax = (typeof opciones.rateLimitMax === 'number' && opciones.rateLimitMax > 0)
@@ -509,7 +395,7 @@ function registrarUsoToken(token, opciones = {}) {
   }
 
   const ahora = Date.now();
-  // Limpia el historial de la ventana actual (mas viejos que VENTANA_MS)
+  
   if (!Array.isArray(t.usos)) t.usos = [];
   t.usos = t.usos.filter((ts) => ahora - ts < TOKEN_RATE_LIMIT_VENTANA_MS);
   if (t.usos.length >= rateLimitMax) {
@@ -528,9 +414,6 @@ function registrarUsoToken(token, opciones = {}) {
   return { ok: true, creditosRestantes: t.creditos };
 }
 
-// Devuelve una version "sanitizada" del token para mandarle al frontend: SIN
-// el valor completo (solo los ultimos 4 digitos), para que nunca se exponga
-// el token en claro despues de creado (solo se ve 1 vez al generarlo).
 function tokenPublico(t) {
   const visible = t.token ? t.token.slice(-4) : '????';
   return {
@@ -547,28 +430,11 @@ function tokenPublico(t) {
   };
 }
 
-// ---------- Registro con correo + codigo de verificacion ----------
 const USUARIOS_FILE = path.join(MEMORY_DIR, 'usuarios.json');
 if (!fs.existsSync(USUARIOS_FILE)) fs.writeFileSync(USUARIOS_FILE, JSON.stringify({ usuarios: {} }, null, 2));
 
-// ---------- MongoDB (persistencia real, no se pierde al reiniciar) ----------
-// Ahora que todos los archivos de /memory estan declarados, agregamos la
-// integracion con MongoDB. Si MONGODB_URI esta configurada, todos los datos
-// (chats, usuarios, tokens API, progreso biblico) se guardan tambien ahi.
-// Si no esta o falla la conexion, todo sigue funcionando con los archivos
-// locales de /memory (como antes).
-//
-// Las funciones leerX()/guardarX() siguen siendo sincronas (no rompen el
-// codigo existente). Lo que hacemos es:
-//   1. Al arrancar el server, cargamos desde Mongo a los archivos locales
-//      (async, antes de app.listen).
-//   2. Cada guardarX() escribe al archivo local (sincrono, como antes) Y
-//      dispara un guardado a Mongo en background (async, no bloquea).
 const mongoDb = require('./db');
 
-// Carga inicial desde Mongo a los archivos locales. Se llama al arrancar,
-// antes de app.listen. Si Mongo no tiene datos todavia (primera vez), no
-// hace nada (los archivos locales ya estan con defaults vacios).
 async function cargarDesdeMongoAlArrancar() {
   if (!mongoDb.estaConectado()) {
     console.log('[mongo-sync] Mongo no conectado, saltando carga inicial.');
@@ -576,28 +442,25 @@ async function cargarDesdeMongoAlArrancar() {
   }
   console.log('[mongo-sync] Cargando datos desde MongoDB...');
   try {
-    // 1. Historial de chats
+    
     const historial = await mongoDb.leerDocumento('historial');
     if (historial && typeof historial === 'object') {
       fs.writeFileSync(MEMORY_FILE, JSON.stringify(historial, null, 2));
       console.log('[mongo-sync] historial.json cargado desde Mongo.');
     }
 
-    // 2. Usuarios
     const usuarios = await mongoDb.leerDocumento('usuarios');
     if (usuarios && typeof usuarios === 'object') {
       fs.writeFileSync(USUARIOS_FILE, JSON.stringify(usuarios, null, 2));
       console.log('[mongo-sync] usuarios.json cargado desde Mongo.');
     }
 
-    // 3. Tokens API
     const tokens = await mongoDb.leerDocumento('api-tokens');
     if (tokens && typeof tokens === 'object') {
       fs.writeFileSync(API_TOKENS_FILE, JSON.stringify(tokens, null, 2));
       console.log('[mongo-sync] api-tokens.json cargado desde Mongo.');
     }
 
-    // 4. Progreso biblico
     const progreso = await mongoDb.leerDocumento('biblia-progreso');
     if (progreso && typeof progreso === 'object') {
       fs.writeFileSync(BIBLIA_PROGRESO_FILE, JSON.stringify(progreso, null, 2));
@@ -608,12 +471,9 @@ async function cargarDesdeMongoAlArrancar() {
   }
 }
 
-// Dispara un guardado a Mongo en background (no bloquea la respuesta al
-// usuario). Si Mongo no esta conectado o falla, no pasa nada: el archivo
-// local ya quedo guardado antes de llamar a esto.
 function guardarEnMongoBackground(id, valor) {
   if (!mongoDb.estaConectado()) return;
-  // setImmediate para no bloquear el event loop actual
+  
   setImmediate(async () => {
     try {
       await mongoDb.guardarDocumento(id, valor);
@@ -634,7 +494,7 @@ function leerUsuarios() {
 function guardarUsuarios(usuarios) {
   const valor = { usuarios };
   fs.writeFileSync(USUARIOS_FILE, JSON.stringify(valor, null, 2));
-  // Backup a MongoDB en background
+  
   guardarEnMongoBackground('usuarios', valor);
 }
 
@@ -688,9 +548,7 @@ function verificarClave(clave, saleHash) {
   return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
 }
 
-// Codigos de verificacion pendientes (en memoria: se pierden si reinicias el
-// servidor a mitad de un registro, lo cual esta bien para algo de 10 minutos).
-const codigosPendientes = new Map(); // email -> { codigo, claveHash, expira }
+const codigosPendientes = new Map(); 
 
 let transporterCorreo = null;
 if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
@@ -711,9 +569,8 @@ if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
   console.warn('[registro] El registro por correo no va a poder mandar codigos hasta que los completes.');
 }
 
-// Función para enviar correo con fallback a Resend API
 async function enviarCorreoConFallback(destinatario, asunto, texto, html) {
-  // Intentar con SMTP primero
+  
   if (transporterCorreo) {
     try {
       await transporterCorreo.sendMail({
@@ -730,7 +587,6 @@ async function enviarCorreoConFallback(destinatario, asunto, texto, html) {
     }
   }
 
-  // Fallback a Resend API
   if (process.env.RESEND_API_KEY) {
     try {
       const response = await fetch('https://api.resend.com/emails', {
@@ -749,10 +605,7 @@ async function enviarCorreoConFallback(destinatario, asunto, texto, html) {
       
       if (!response.ok) {
         const error = await response.text();
-        // El error mas comun aca es que la cuenta de Resend sigue en modo
-        // sandbox: solo deja enviar al correo con el que te registraste,
-        // hasta que verifiques un dominio propio en resend.com/domains y
-        // configures RESEND_FROM_EMAIL con un remitente de ese dominio.
+
         if (error.includes('You can only send testing emails')) {
           console.error('[email] Resend esta en modo sandbox: verifica un dominio en https://resend.com/domains y configura RESEND_FROM_EMAIL (ej: "Verbo AI <codigo@tudominio.com>") para poder enviar a cualquier destinatario.');
         }
@@ -767,8 +620,6 @@ async function enviarCorreoConFallback(destinatario, asunto, texto, html) {
     }
   }
 
-  // Fallback a Brevo API (no requiere dominio propio: alcanza con verificar
-  // tu email de remitente con un codigo de 6 digitos en app.brevo.com)
   if (process.env.BREVO_API_KEY) {
     try {
       const response = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -872,11 +723,11 @@ app.post('/api/login', (req, res) => {
   if (usuario === APP_USER && clave === APP_PASS) {
     let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER}`))}; HttpOnly; Path=/; SameSite=Lax`;
     if (req.secure) cookieStr += '; Secure';
-    if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`; // 30 dias
+    if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`; 
     res.setHeader('Set-Cookie', cookieStr);
     return res.json({ ok: true });
   }
-  // Tambien revisamos si es un usuario registrado por correo
+  
   const usuarios = leerUsuarios();
   const cuenta = usuarios[usuario];
   if (cuenta && verificarClave(clave, cuenta.claveHash)) {
@@ -904,9 +755,6 @@ app.get('/api/whoami', (req, res) => {
   res.json({ usuario, nombre: (cuenta && cuenta.nombre) || usuario });
 });
 
-// Paso extra tras confirmar el codigo (registro o Google): elegir un nombre
-// para mostrar y aceptar los terminos basicos de uso. Requiere sesion ya
-// iniciada (el middleware de arriba ya exige la cookie de auth para esto).
 app.post('/api/perfil/nombre', (req, res) => {
   const usuarioActual = obtenerUsuarioActual(req);
   if (!usuarioActual) return res.status(401).json({ error: 'No autenticado.' });
@@ -917,9 +765,7 @@ app.post('/api/perfil/nombre', (req, res) => {
   if (!aceptaTerminos) return res.status(400).json({ error: 'Tenés que aceptar los terminos para continuar.' });
 
   if (usuarioActual.startsWith('local:')) {
-    // El usuario local (admin) no vive en usuarios.json; no hay donde
-    // guardarle un nombre distinto, pero no es un caso que pase por este
-    // paso de todos modos.
+
     return res.json({ ok: true });
   }
 
@@ -932,7 +778,6 @@ app.post('/api/perfil/nombre', (req, res) => {
   res.json({ ok: true, nombre: nombreLimpio });
 });
 
-// ---------- Login con Google (OAuth2, sin dependencias extra) ----------
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
@@ -943,10 +788,6 @@ if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
   console.log(`[google-auth] Client ID cargado: ${GOOGLE_CLIENT_ID.slice(0, 12)}...${GOOGLE_CLIENT_ID.slice(-20)}`);
 }
 
-// El redirect_uri se calcula segun por donde entraste (localhost o la IP de
-// tu red local), asi funciona igual desde la PC que desde el celular. Google
-// igual exige que CADA una de esas URLs este agregada de antemano en
-// "URIs de redireccionamiento autorizados" en Google Cloud Console.
 function calcularRedirectUri(req) {
   if (process.env.GOOGLE_REDIRECT_URI_FIJA) return process.env.GOOGLE_REDIRECT_URI_FIJA;
   return `${req.protocol}://${req.get('host')}/auth/google/callback`;
@@ -1008,7 +849,6 @@ app.get('/auth/google/callback', async (req, res) => {
     const userData = await userResp.json();
     if (!userData.email) return res.redirect('/login.html?error=google_sin_email');
 
-    // Si no hay configuración de email (SMTP ni Resend), entramos directo
     if (!transporterCorreo && !process.env.RESEND_API_KEY) {
       console.warn('[google-auth] No hay configuración de email: entrando sin pedir codigo extra.');
       let cookieDirecta = `verbo_auth=${encodeURIComponent(firmarValor(userData.email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
@@ -1044,8 +884,6 @@ app.get('/auth/google/callback', async (req, res) => {
       return res.redirect('/login.html?error=google_correo_codigo');
     }
 
-    // Cookie corta y firmada que solo guarda QUE correo de Google esta
-    // esperando su codigo; el codigo en si nunca viaja al cliente por aca.
     let cookiePendiente = `verbo_google_pendiente=${encodeURIComponent(firmarValor(userData.email))}; HttpOnly; Path=/; Max-Age=600; SameSite=Lax`;
     if (req.secure) cookiePendiente += '; Secure';
     res.setHeader('Set-Cookie', [cookiePendiente, 'verbo_oauth_state=; HttpOnly; Path=/; Max-Age=0']);
@@ -1056,10 +894,6 @@ app.get('/auth/google/callback', async (req, res) => {
   }
 });
 
-// Segundo paso del login con Google: confirmar el codigo de 6 digitos que se
-// mando al correo. El correo en si NUNCA se toma de lo que mande el cliente,
-// se lee de la cookie firmada que dejamos en el callback de arriba, para que
-// nadie pueda mandar cualquier email y "confirmar" una cuenta ajena.
 app.post('/api/google/confirmar', (req, res) => {
   const email = verificarValorFirmado(leerCookie(req, 'verbo_google_pendiente'));
   if (!email) return res.status(400).json({ error: 'No hay un login con Google pendiente. Volve a intentar desde el boton de Google.' });
@@ -1090,7 +924,6 @@ app.post('/api/google/confirmar', (req, res) => {
   res.json({ ok: true, necesitaNombre });
 });
 
-// Reenviar el codigo del login con Google, por si se vencio o no llego.
 app.post('/api/google/reenviar', async (req, res) => {
   const email = verificarValorFirmado(leerCookie(req, 'verbo_google_pendiente'));
   if (!email) return res.status(400).json({ error: 'No hay un login con Google pendiente. Volve a intentar desde el boton de Google.' });
@@ -1124,11 +957,6 @@ app.post('/api/google/reenviar', async (req, res) => {
   }
 });
 
-// ---------- Endpoints para gestionar los tokens de la API (Clave API) ----------
-// Requiere sesion iniciada (el middleware global de arriba ya lo asegura).
-// Solo los correos en EMAILS_AUTORIZADOS_API (o el admin local) pueden hacer
-// algo aca; cualquier otro recibe 403.
-
 app.get('/api/api-tokens/acceso', (req, res) => {
   const usuario = obtenerUsuarioActual(req);
   res.json({
@@ -1142,9 +970,7 @@ app.get('/api/api-tokens', (req, res) => {
   if (!tieneAccesoApiTokens(usuario)) {
     return res.status(403).json({ error: 'Tu cuenta no tiene acceso a Clave API por ahora.' });
   }
-  // El admin local y los correos autorizados ven SOLO sus propios tokens.
-  // Como los crea un usuario autorizado, filtramos por propietario. Si por
-  // ahora solo hay un usuario autorizado, va a verlos a todos igual.
+
   const tokens = leerApiTokens().filter((t) => t.propietario === usuario);
   res.json({ tokens: tokens.map(tokenPublico) });
 });
@@ -1154,14 +980,13 @@ app.post('/api/api-tokens/generar', (req, res) => {
   if (!tieneAccesoApiTokens(usuario)) {
     return res.status(403).json({ error: 'Tu cuenta no tiene acceso a Clave API por ahora.' });
   }
-  // Validacion estricta del nombre: solo string, max 40 chars. Rechazamos
-  // arrays/objetos/numeros para que no rompa String() ni .trim().
+
   if (req.body && req.body.nombre != null && typeof req.body.nombre !== 'string') {
     return res.status(400).json({ error: 'El nombre debe ser un texto valido.' });
   }
   const nombreLimpio = (req.body && req.body.nombre ? String(req.body.nombre) : '').trim().slice(0, 40);
   const tokens = leerApiTokens();
-  // Prevenimos que alguien llene el archivo a manotazos: max 10 tokens vivos.
+  
   const vivos = tokens.filter((t) => t.propietario === usuario && t.activo !== false);
   if (vivos.length >= 10) {
     return res.status(400).json({ error: 'Ya tenes 10 tokens activos. Borra alguno antes de crear otro.' });
@@ -1184,8 +1009,6 @@ app.post('/api/api-tokens/generar', (req, res) => {
   tokens.push(nuevoToken);
   guardarApiTokens(tokens);
 
-  // OJO: aca si le mandamos el token completo al frontend, PERO solo esta una
-  // vez. En listados posteriores solo se ve el prefijo "verboai-••••...1234".
   res.json({
     ok: true,
     token: nuevoToken.token,
@@ -1204,19 +1027,11 @@ app.delete('/api/api-tokens/:id', (req, res) => {
   const tokens = leerApiTokens();
   const idx = tokens.findIndex((t) => t.id === req.params.id && t.propietario === usuario);
   if (idx === -1) return res.status(404).json({ error: 'Token no encontrado.' });
-  // Lo borramos de verdad: como el token ya no se puede usar, no tiene sentido
-  // seguir acumulando creditos o usos de algo inactivo. Si despues se quiere
-  // auditoria, se puede cambiar a activo=false en vez de splice.
+
   tokens.splice(idx, 1);
   guardarApiTokens(tokens);
   res.json({ ok: true });
 });
-
-// ---------- API publica (consumible con un token "verboai-XXXX") ----------
-// Estas rutas NO pasan por el middleware de sesion de arriba: se autentican
-// con un Bearer token en el header Authorization. Es lo que usarias desde
-// otro proyecto (un bot de Discord, un script, otra web, etc.) para hablar
-// con Verbo AI sin tener que loguearse con Google.
 
 function leerBearerToken(req) {
   const h = req.headers['authorization'] || '';
@@ -1224,14 +1039,6 @@ function leerBearerToken(req) {
   return m ? m[1].trim() : null;
 }
 
-// Hace lo mismo que el /api/chat pero SIN streaming, SIN imagenes, SIN
-// historial: recibe { mensaje, modo, modelo } y devuelve { ok, respuesta }.
-// Pensado para integraciones programaticas (curl, fetch, SDKs).
-//
-// El campo "modelo" es opcional y por default es "NewserLite". Si mandas
-// "NewserAdvanced" (o cualquiera de las variantes case-insensitive), se usa el
-// modelo avanzado: consume 5 creditos en vez de 1 y tiene rate limit de 10/min
-// en vez de 20/min. Cualquier otro valor cae a NewserLite de forma segura.
 app.post('/api/v1/chat', async (req, res) => {
   const valorToken = leerBearerToken(req);
   if (!valorToken) {
@@ -1242,10 +1049,6 @@ app.post('/api/v1/chat', async (req, res) => {
     return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
   }
 
-  // Validacion estricta de tipos: rechazamos arrays, objetos, numeros, etc.
-  // antes de intentar usar el mensaje. Esto evita que un cliente malicioso
-  // mande {"mensaje": ["test", true, null]} u otras estructuras raras y haga
-  // colgar la peticion.
   if (req.body == null || typeof req.body !== 'object' || Array.isArray(req.body)) {
     return res.status(400).json({ ok: false, error: 'El cuerpo debe ser un objeto JSON.' });
   }
@@ -1260,23 +1063,10 @@ app.post('/api/v1/chat', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'El mensaje es demasiado largo (max 8000 caracteres).' });
   }
 
-  // Modo opcional: solo aceptamos "general" (default) o "catolico". Cualquier
-  // otro valor (o tipo no-string) cae a "general" para no romper.
   const modo = (typeof req.body.modo === 'string' && req.body.modo.trim() === 'catolico') ? 'catolico' : 'general';
 
-  // Modelo opcional: resolverModelo ya valida y cae al default si viene cualquier
-  // cosa rara (numero, objeto, nombre inexistente). Asi nunca rompe.
   const configModelo = resolverModelo(req.body.modelo);
 
-  // Registramos el uso CON el costo BASE del modelo y su rate limit. Si el
-  // token no tiene creditos suficientes (NewserAdvanced pide 5) o se paso del
-  // rate limit, aca se corta y devolvemos el error.
-  // 
-  // OJO: el costo final puede ser mayor si la respuesta dispara herramientas
-  // (IMAGEN +1, WEB +1, CLIMA +0). Ese extra se cobra DESPUES, cuando ya
-  // sabemos si la herramienta se activo o no. Si el token se queda sin
-  // creditos en ese momento, igual devolvemos la respuesta de texto (no la
-  // penalizamos) pero no se ejecuta la herramienta.
   const controlUso = registrarUsoToken(token, {
     costo: configModelo.costoCreditos,
     rateLimitMax: configModelo.rateLimitMax,
@@ -1285,17 +1075,11 @@ app.post('/api/v1/chat', async (req, res) => {
     return res.status(controlUso.status).json({ ok: false, error: controlUso.error });
   }
 
-  // Construimos el system prompt segun modo + modelo. NewserAdvanced recibe
-  // el bloque extra con las 3 herramientas exclusivas (IMAGEN, WEB, CLIMA).
   let systemPrompt = modo === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT;
   if (configModelo.nombre === 'NewserAdvanced') {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
   }
 
-  // Reemplazamos el placeholder __NOMBRE_MODELO__ con el nombre real del
-  // modelo elegido. Asi cuando el usuario tiene NewserAdvanced seleccionado y
-  // le pregunta "quien sos?", la IA responde "Soy NewserAdvanced" (no
-  // "NewserLite").
   systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
 
   const mensajesParaModelo = [
@@ -1303,11 +1087,6 @@ app.post('/api/v1/chat', async (req, res) => {
     { role: 'user', content: mensaje },
   ];
 
-  // ---- Atajo: "Generame [descripcion]" -> genera imagen directo, sin IA ----
-  // Si el mensaje empieza con "Genera", "Generame", "Dibujame", etc., vamos
-  // directo a pollinations.ai sin llamar a Groq. Esto consume +1 credito
-  // (encima del costo base del modelo) SOLO si el modelo es NewserAdvanced.
-  // Si es NewserLite, devolvemos un error claro.
   const intencionImagenApi = detectarGeneracionImagen(mensaje);
   if (intencionImagenApi.esGeneracion) {
     if (configModelo.nombre !== 'NewserAdvanced') {
@@ -1316,7 +1095,7 @@ app.post('/api/v1/chat', async (req, res) => {
         error: 'La generacion de imagenes solo esta disponible con NewserAdvanced. Mandá "modelo":"NewserAdvanced" en el body para usarla.',
       });
     }
-    // Verificamos si le alcanzan los creditos para el extra (+1)
+    
     const tokenActual = buscarTokenPorValor(valorToken);
     const costoTotalGen = configModelo.costoCreditos + 1;
     if (!tokenActual || tokenActual.creditos < 1) {
@@ -1325,7 +1104,7 @@ app.post('/api/v1/chat', async (req, res) => {
         error: `El token no tiene creditos suficientes para generar imagen (necesita +1, le quedan ${tokenActual ? tokenActual.creditos : 0}).`,
       });
     }
-    // Generamos la imagen
+    
     const resultado = await generarImagenPollinations(intencionImagenApi.prompt);
     if (!resultado || !resultado.img) {
       console.error('[api/v1/chat] generacion de imagen fallo:', resultado ? resultado.error : 'sin resultado');
@@ -1335,9 +1114,7 @@ app.post('/api/v1/chat', async (req, res) => {
       });
     }
     const img = resultado.img;
-    // Descontamos el costo extra (+1) del token. El costo base ya se cobró al
-    // inicio con registrarUsoToken. Si el token se quedó sin creditos aca (por
-    // un race condition), igual devolvemos la imagen pero avisamos.
+
     const tokensGen = leerApiTokens();
     const idxGen = tokensGen.findIndex((t) => t.id === tokenActual.id);
     if (idxGen !== -1) {
@@ -1388,23 +1165,17 @@ app.post('/api/v1/chat', async (req, res) => {
       try {
         const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
         console.error(`[api/v1/chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
-      } catch (e) { /* no se pudo leer el cuerpo */ }
+      } catch (e) {  }
       return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
     }
 
     const data = await respuestaGroq.json();
     const texto = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
 
-    // Detectar las etiquetas exclusivas de NewserAdvanced que la IA puede haber
-    // escrito: WEB y CLIMA (la etiqueta IMAGEN ya no se usa; las imagenes se
-    // generan automaticamente cuando el mensaje empieza con "Genera...").
-    // WEB consume +1 credito; CLIMA no consume.
     let webSearchQueryApi = null;
     let climaQueryApi = null;
     let textoLimpio = texto;
 
-    // Por las dudas, si el modelo igual escribió un [[IMAGEN::...]] (no debería
-    // porque el prompt le dice que no lo haga), lo limpiamos del texto.
     textoLimpio = textoLimpio.replace(/\[\[IMAGEN::[^\]]*\]\]/g, '');
 
     const reWebApi = /\[\[WEB::([^\]]+)\]\]/g;
@@ -1415,16 +1186,8 @@ app.post('/api/v1/chat', async (req, res) => {
     const mClima = [...texto.matchAll(reClimaApi)];
     if (mClima.length) { climaQueryApi = mClima[0][1].trim(); textoLimpio = textoLimpio.replace(reClimaApi, ''); }
 
-    // Quitamos las etiquetas originales pero EXTRAEMOS su contenido para
-    // agregarlo como texto plano a la respuesta. Asi el cliente de la API
-    // recibe la informacion util (el versiculo del cuaderno, la consulta de
-    // busqueda, etc.) sin necesidad del widget del cuadernito que solo existe
-    // en la web. Solo aplica aca (API), en la web las etiquetas se procesan
-    // aparte y se muestran como widgets.
     let textoExtraidoEtiquetas = '';
 
-    // CUADERNO: el formato es [[CUADERNO::referencia::texto del versiculo]]
-    // Extraemos "Referencia: texto" para que el cliente lo tenga como texto.
     const reCuadernoApi = /\[\[CUADERNO::(.+?)::([\s\S]*?)\]\]/g;
     const cuadernosApi = [...textoLimpio.matchAll(reCuadernoApi)];
     if (cuadernosApi.length) {
@@ -1432,7 +1195,6 @@ app.post('/api/v1/chat', async (req, res) => {
     }
     textoLimpio = textoLimpio.replace(reCuadernoApi, '');
 
-    // BUSCAR: [[BUSCAR::consulta]] -> lo convertimos en "[Busqueda solicitada: consulta]"
     const reBuscarApi = /\[\[BUSCAR::([^\]]+)\]\]/g;
     const buscarsApi = [...textoLimpio.matchAll(reBuscarApi)];
     if (buscarsApi.length) {
@@ -1441,7 +1203,6 @@ app.post('/api/v1/chat', async (req, res) => {
     }
     textoLimpio = textoLimpio.replace(reBuscarApi, '');
 
-    // INVESTIGAR: [[INVESTIGAR::consulta]] -> "[Investigacion solicitada: consulta]"
     const reInvestigarApi = /\[\[INVESTIGAR::([^\]]+)\]\]/g;
     const investigarsApi = [...textoLimpio.matchAll(reInvestigarApi)];
     if (investigarsApi.length) {
@@ -1450,7 +1211,6 @@ app.post('/api/v1/chat', async (req, res) => {
     }
     textoLimpio = textoLimpio.replace(reInvestigarApi, '');
 
-    // DESCARGAR: [[DESCARGAR::consulta::cantidad]] -> "[Descarga solicitada: consulta (N imagenes)]"
     const reDescargarApi = /\[\[DESCARGAR::([^:\]]+?)(?:::\s*(\d+))?\s*\]\]/g;
     const descargarsApi = [...textoLimpio.matchAll(reDescargarApi)];
     if (descargarsApi.length) {
@@ -1462,16 +1222,12 @@ app.post('/api/v1/chat', async (req, res) => {
     }
     textoLimpio = textoLimpio.replace(reDescargarApi, '');
 
-    // Pegamos el texto extraido al final de la respuesta limpia
     if (textoExtraidoEtiquetas) {
       textoLimpio = (textoLimpio + '\n\n' + textoExtraidoEtiquetas).replace(/\n{3,}/g, '\n\n').trim();
     }
 
-    // Limpieza final de saltos de linea extra
     textoLimpio = textoLimpio.replace(/\n{3,}/g, '\n\n').trim();
 
-    // Calcular costo adicional por herramientas usadas (solo si el modelo es
-    // NewserAdvanced, porque las etiquetas solo aparecen ahi).
     let costoExtra = 0;
     const herramientasUsadas = [];
     if (configModelo.nombre === 'NewserAdvanced') {
@@ -1480,13 +1236,6 @@ app.post('/api/v1/chat', async (req, res) => {
     }
     const costoTotal = configModelo.costoCreditos + costoExtra;
 
-    // Si hay costo extra, lo descontamos AHORA del token. Si no le alcanza,
-    // le devolvemos la respuesta de texto igual (no la penalizamos por algo
-    // que el modelo decidio hacer) pero no ejecutamos las herramientas y le
-    // avisamos en el JSON.
-    // Si hay costo extra (herramientas WEB), lo descontamos de los creditos
-    // GLOBALES del dueño del token. Si no le alcanza, omitimos las herramientas
-    // pero devolvemos la respuesta de texto igual.
     let herramientasResultado = [];
     let herramientasOmitidas = false;
     if (costoExtra > 0) {
@@ -1498,8 +1247,6 @@ app.post('/api/v1/chat', async (req, res) => {
       }
     }
 
-    // Ejecutar WEB (DuckDuckGo + fallback Google). Cada herramienta va con su
-    // propio try/catch para que si una falla, no se caiga toda la peticion.
     if (webSearchQueryApi) {
       try {
         const resultado = await buscarWebGoogle(webSearchQueryApi);
@@ -1522,7 +1269,6 @@ app.post('/api/v1/chat', async (req, res) => {
       }
     }
 
-    // Ejecutar CLIMA (wttr.in + fallback open-meteo, no consume creditos extra)
     if (climaQueryApi) {
       try {
         const clima = await consultarClimaOpenMeteo(climaQueryApi);
@@ -1546,10 +1292,6 @@ app.post('/api/v1/chat', async (req, res) => {
       }
     }
 
-    // Le devolvemos tambien cuantos creditos le quedan al token, asi el
-    // integrador puede avisarle al usuario o cortar a tiempo. Mandamos el
-    // modelo que efectivamente se uso (por si cayo al default), el costo
-    // total (base + extra por herramientas) y el detalle de cada herramienta.
     const actualizado = buscarTokenPorValor(valorToken);
     res.json({
       ok: true,
@@ -1571,18 +1313,12 @@ app.post('/api/v1/chat', async (req, res) => {
   }
 });
 
-// Info del token: util para que el integrador sepa cuantos creditos le
-// quedan sin tener que hacer una peticion de chat real. Tambien lista los
-// modelos disponibles y sus costos, asi el cliente sabe qué valores puede
-// mandar en el campo "modelo" de /api/v1/chat.
 app.get('/api/v1/info', (req, res) => {
   const valorToken = leerBearerToken(req);
   if (!valorToken) return res.status(401).json({ ok: false, error: 'Falta Authorization: Bearer verboai-XXXX' });
   const token = buscarTokenPorValor(valorToken);
   if (!token) return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
 
-  // Devolvemos la lista de modelos disponibles con su costo y rate limit,
-  // para que el integrador pueda elegir y mostrar en su UI.
   const modelos = Object.values(MODELOS_DISPONIBLES).map((m) => ({
     nombre: m.nombre,
     descripcion: m.descripcion,
@@ -1605,12 +1341,6 @@ app.get('/api/v1/info', (req, res) => {
   });
 });
 
-// Sin cache para los estaticos: en desarrollo es comun editar script.js o
-// style.css y luego seguir viendo el comportamiento viejo porque el navegador
-// sirvio una copia guardada (esto puede hacer que un boton "no funcione"
-// cuando en realidad el arreglo ya esta en el archivo, solo que el navegador
-// no lo volvio a pedir). Con pocos usuarios y archivos chicos, el costo de
-// no cachear es minimo.
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: false,
   lastModified: false,
@@ -1715,9 +1445,6 @@ Reglas que nunca cambian pase lo que pase:
 - Nunca escribas un link de imagen (formato ![texto](url)) ni inventes una URL de imagen o de descarga: para
   eso siempre usa la etiqueta BUSCAR como se explico arriba.`;
 
-// Prompt adicional que se agrega SOLO cuando el modelo activo es NewserAdvanced.
-// Define las 3 herramientas exclusivas de ese modelo: generar imagenes,
-// buscar en la web (Google) y consultar el clima (open-meteo).
 const SYSTEM_PROMPT_AVANCED_EXTRA = `
 
 HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserAdvanced):
@@ -1752,12 +1479,6 @@ Estas etiquetas [[WEB::...]] y [[CLIMA::...]] son invisibles para el usuario, se
 sistema. Nunca las menciones ni las escribas a la mitad del texto. Puedes combinar varias herramientas
 en la misma respuesta, cada una en su propia linea al final.`;
 
-// Modo "Catolicismo": mismo prompt base + un bloque que cambia el enfoque
-// hacia la fe y doctrina catolica. OJO: el LECTOR de la Biblia sigue usando
-// una traduccion protestante (RV1960/NVI/DHH), porque no hay una API gratuita
-// con una Biblia catolica real (con deuterocanonicos) conectada todavia. Por
-// eso el prompt le pide a la IA ser honesta sobre esto si el usuario pregunta
-// por libros deuterocanonicos especificos.
 const SYSTEM_PROMPT_CATOLICO = `${SYSTEM_PROMPT}
 
 MODO ACTIVO: CATOLICISMO
@@ -1778,9 +1499,6 @@ function generarId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-// Lee la base de datos completa de chats. Migra automaticamente el formato
-// viejo (un array plano de mensajes compartido por todos, o chats sin dueño
-// de antes de que existiera el login) asignandolos a la cuenta local.
 function leerDB() {
   let db;
   try {
@@ -1808,7 +1526,7 @@ function leerDB() {
 
 function guardarDB(db) {
   fs.writeFileSync(MEMORY_FILE, JSON.stringify(db, null, 2));
-  // Backup a MongoDB en background (no bloquea la respuesta al usuario)
+  
   guardarEnMongoBackground('historial', db);
 }
 
@@ -1830,17 +1548,12 @@ function listarChatsMeta(db, usuario) {
     .sort((a, b) => new Date(b.actualizadoEn) - new Date(a.actualizadoEn));
 }
 
-// ---------- Utilidades: YouTube ----------
 function extraerLinkYoutube(texto) {
   const re = /(https?:\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)[^\s]+)/i;
   const m = texto.match(re);
   return m ? m[1] : null;
 }
 
-// Intenta traer la transcripcion REAL (subtitulos/auto-captions) del video,
-// no solo el titulo. Esto es "mejor esfuerzo": no todos los videos tienen
-// subtitulos disponibles publicamente, y si no se puede, simplemente no se
-// agrega (el resto del contexto sigue funcionando igual).
 async function obtenerTranscripcionYoutube(html) {
   try {
     const m = html.match(/"captionTracks":(\[.*?\])/);
@@ -1853,7 +1566,6 @@ async function obtenerTranscripcionYoutube(html) {
     }
     if (!Array.isArray(tracks) || !tracks.length) return null;
 
-    // Preferencia: español manual > español automatico > cualquier manual > lo que haya
     const track =
       tracks.find((t) => t.languageCode && t.languageCode.startsWith('es') && t.kind !== 'asr') ||
       tracks.find((t) => t.languageCode && t.languageCode.startsWith('es')) ||
@@ -1895,7 +1607,7 @@ async function obtenerContextoYoutube(url) {
       if (oembed.title) partes.push(`Titulo del video: ${oembed.title}`);
       if (oembed.author_name) partes.push(`Canal: ${oembed.author_name}`);
     }
-  } catch (e) { /* seguimos sin oEmbed */ }
+  } catch (e) {  }
 
   let html = null;
   try {
@@ -1903,8 +1615,7 @@ async function obtenerContextoYoutube(url) {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36',
         'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
-        // Evita que YouTube devuelva la pantalla de "aceptar cookies" en vez
-        // de la pagina real (pasa seguido con servidores fuera de EEUU/UE).
+
         Cookie: 'CONSENT=YES+1',
       },
     });
@@ -1914,7 +1625,7 @@ async function obtenerContextoYoutube(url) {
                     html.match(/<meta property="og:description" content="([^"]*)"/);
       if (mDesc && mDesc[1]) partes.push(`Descripcion del video: ${mDesc[1].slice(0, 600)}`);
     }
-  } catch (e) { /* seguimos sin descripcion */ }
+  } catch (e) {  }
 
   if (html) {
     const transcripcion = await obtenerTranscripcionYoutube(html);
@@ -1929,9 +1640,6 @@ async function obtenerContextoYoutube(url) {
   return partes.join('\n');
 }
 
-// ---------- Utilidades: investigacion REAL (no decorativa) restringida a
-// sitios permitidos: Wikipedia (extracto real de texto) y busqueda real
-// dentro del texto biblico completo (misma API RV1960 del lector). ----------
 async function investigarWikipedia(query) {
   try {
     const urlBusqueda = `https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=1`;
@@ -1978,9 +1686,7 @@ async function investigarBiblia(query) {
     const url = `${BIBLIA_API_BASE}/read/rv1960/search?q=${encodeURIComponent(query)}&take=3`;
     const r = await fetchBiblia(url);
     const data = await r.json();
-    // El formato exacto de esta busqueda no esta 100% documentado; se prueban
-    // varias formas razonables y si no calza con ninguna, simplemente no se
-    // usa este resultado (no rompe el resto de la investigacion).
+
     const arr = data.verses || data.vers || data.results || data.data || (Array.isArray(data) ? data : []);
     if (!Array.isArray(arr) || !arr.length) {
       console.error(`[investigar] Busqueda biblica sin resultados reconocibles para "${query}". Respuesta cruda:`, JSON.stringify(data).slice(0, 300));
@@ -2003,9 +1709,6 @@ async function investigarBiblia(query) {
   }
 }
 
-// Con la informacion REAL ya obtenida (nunca inventada), pide un resumen
-// breve al modelo. Se le prohibe explicitamente agregar datos que no vinieron
-// en el contexto entregado.
 async function sintetizarInvestigacion(query, wiki, versiculos) {
   try {
     let contexto = '';
@@ -2035,7 +1738,7 @@ async function sintetizarInvestigacion(query, wiki, versiculos) {
         max_tokens: 300,
         stream: false,
       }),
-    }, () => {}); // llamada secundaria: no reenviamos sus propios eventos de reintento al chat
+    }, () => {}); 
 
     if (!resp.ok) return null;
     const data = await resp.json();
@@ -2047,7 +1750,6 @@ async function sintetizarInvestigacion(query, wiki, versiculos) {
   }
 }
 
-// ---------- Utilidades: busqueda de imagenes de referencia (Wikipedia, sin API key) ----------
 async function buscarImagenesWeb(query) {
   try {
     const url = `https://es.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=10&prop=pageimages|info&piprop=thumbnail&pithumbsize=600&inprop=url&format=json&origin=*`;
@@ -2069,10 +1771,6 @@ async function buscarImagenesWeb(query) {
   }
 }
 
-// ---------- Descarga real de imagenes (para la herramienta DESCARGAR) ----------
-// A diferencia de buscarImagenesWeb (que solo busca miniaturas chicas para
-// mostrar en el chat), esto pide una resolucion mas grande porque el
-// usuario se la va a llevar como archivo.
 async function buscarImagenesParaDescargar(query, cantidad) {
   try {
     const url = `https://es.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=${cantidad + 4}&prop=pageimages|info&piprop=thumbnail&pithumbsize=1400&inprop=url&format=json&origin=*`;
@@ -2090,10 +1788,6 @@ async function buscarImagenesParaDescargar(query, cantidad) {
   }
 }
 
-// Descarga de verdad el archivo (los bytes reales) de cada URL encontrada y
-// lo guarda a disco, devolviendo un link de descarga propio del servidor
-// (nunca el link crudo externo, para que funcione aunque el usuario este en
-// una red distinta y para poder borrarlo despues junto con el chat).
 async function descargarImagenAlDisco(item) {
   try {
     const resp = await fetch(item.url, { headers: HEADERS_BIBLIA });
@@ -2111,23 +1805,6 @@ async function descargarImagenAlDisco(item) {
   }
 }
 
-// ---------- Herramientas exclusivas de NewserAdvanced ----------
-// Estas 3 herramientas solo estan disponibles cuando el modelo activo es
-// NewserAdvanced. NewserLite no las ofrece. Cada una tiene un costo adicional
-// en creditos cuando se usan desde la API (Bearer token):
-//
-//   IMAGEN  (pollinations.ai)        -> +1 credito (encima del costo del modelo)
-//   WEB     (Google Custom Search)    -> +1 credito (rotacion de 5 CSE IDs)
-//   CLIMA   (open-meteo.com)          -> +0 creditos (gratis, no consume)
-//
-// En la WEB no se descuentan creditos (la web nunca consume creditos, solo
-// aplica el rate limit por usuario+modelo). El "costo extra" solo aplica al
-// endpoint /api/v1/chat.
-
-// 5 IDs de motor de busqueda personalizado (CSE) de Google, 100 peticiones/dia
-// cada uno = 500 peticiones diarias combinadas. Si un ID devuelve 429 (limite
-// excedido), el sistema rota automaticamente al siguiente (igual que el codigo
-// Python de referencia).
 const GOOGLE_CSE_IDS = [
   '007f53248834f4524',
   'd34a2db0057db4ff1',
@@ -2137,10 +1814,6 @@ const GOOGLE_CSE_IDS = [
 ];
 const GOOGLE_CSE_API_KEY = process.env.GOOGLE_CSE_API_KEY || '';
 
-// Busca informacion en la web usando Google Custom Search. Tolerante a
-// fallos: si un CSE ID agota su cuota diaria (HTTP 429), rota automaticamente
-// al siguiente ID de la lista. Devuelve { exito, cseUsado, resultados } o
-// { exito: false, error } si todos fallan.
 async function buscarWebGoogle(query) {
   const ddg = await buscarWebDuckDuckGo(query);
   if (ddg.exito) return ddg;
@@ -2325,29 +1998,10 @@ async function generarImagenPollinations(prompt, seed) {
 }
 
 // Detecta si un mensaje del usuario pide generar una imagen. La "palabra
-// secreta" es "Generame", "Genera", "Generá" (con o sin tilde) al inicio del
-// mensaje, seguida de la descripcion de la imagen. Ej:
-//   "Generame un leon descansando al atardecer"  -> "un leon descansando al atardecer"
-//   "Genera una montaña con nieve"                -> "una montaña con nieve"
-//   "generá un perro volando"                     -> "un perro volando"
-//
-// Devuelve { esGeneracion: true, prompt: "..." } o { esGeneracion: false }.
-// El prompt se pasa tal cual a pollinations (no se traduce ni se modifica,
-// pollinations maneja español razonablemente bien).
-//
-// OJO: esto reemplaza a la etiqueta [[IMAGEN::...]] que teniamos antes. Ahora
-// la IA no decide cuando generar imagenes: lo hace el usuario escribiendo
-// "Genera..." o "Generame..." al inicio del mensaje. Es mas directo, mas
-// barato (no pasa por la IA) y mas predecible.
+
 function detectarGeneracionImagen(mensaje) {
   if (!mensaje || typeof mensaje !== 'string') return { esGeneracion: false };
-  // Patrones aceptados al inicio del mensaje (case-insensitive):
-  //   - "Generame " / "Generáme "
-  //   - "Genera " / "Generá "
-  //   - "Generar "  (por si alguien escribe "Generar una casa")
-  //   - "Dibujame " / "Dibújame " / "Dibuja " / "Dibujá "
-  // Despues del verbo puede venir "una imagen de", "una foto de", "un dibujo de"
-  // (todo eso se descarta y se queda solo con la descripcion real).
+
   const re = /^\s*(generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé)\s+(?:una\s+imagen\s+(?:de|del|de la|de un|de una)\s*|una\s+foto\s+(?:de|del|de la|de un|de una)\s*|un\s+dibujo\s+(?:de|del|de la|de un|de una)\s*|imagen\s+(?:de|del|de la|de un|de una)\s*|foto\s+(?:de|del|de la|de un|de una)\s*)?(.+)$/i;
   const m = mensaje.match(re);
   if (!m) return { esGeneracion: false };
@@ -2356,12 +2010,6 @@ function detectarGeneracionImagen(mensaje) {
   return { esGeneracion: true, prompt: prompt.slice(0, 200) };
 }
 
-// Consulta el clima actual de una ubicacion usando open-meteo.com (API
-// gratuita, sin clave, sin limite serio). NO consume creditos.
-//
-// Recibe { lat, lon, nombre } o un string con el nombre del lugar (en cuyo
-// caso primero geocodifica con la API de open-meteo). Devuelve un resumen
-// textual corto para que la IA lo integre en su respuesta.
 async function consultarClimaOpenMeteo(consulta) {
   const wttr = await consultarClimaWttr(consulta);
   if (wttr) return wttr;
@@ -2410,8 +2058,6 @@ async function consultarClimaOpenMeteoReal(consulta) {
   } catch (e) { console.error("[open-meteo] Error:", e.message); return null; }
 }
 
-// Traduce el codigo de tiempo WMO usado por open-meteo a una descripcion
-// corta en español. Tabla oficial: https://open-meteo.com/en/docs (weather_code).
 function describirCodigoClima(code) {
   const mapa = {
     0: 'despejado',
@@ -2446,13 +2092,11 @@ function describirCodigoClima(code) {
   return mapa[code] || 'condiciones desconocidas';
 }
 
-// ---------- Lista de conversaciones guardadas (para el historial de chats) ----------
 app.get('/api/chats', (req, res) => {
   const db = leerDB();
   res.json(listarChatsMeta(db, obtenerUsuarioActual(req)));
 });
 
-// Crea una conversacion nueva y vacia
 app.post('/api/chats', (req, res) => {
   const db = leerDB();
   const chat = crearChat(db, obtenerUsuarioActual(req));
@@ -2460,9 +2104,6 @@ app.post('/api/chats', (req, res) => {
   res.json({ id: chat.id, titulo: chat.titulo, creadoEn: chat.creadoEn, actualizadoEn: chat.actualizadoEn });
 });
 
-// Borra del disco todas las imagenes (subidas o descargadas por la IA)
-// referenciadas por los mensajes de un chat, para que "eliminar" un chat lo
-// borre de verdad y no deje archivos huerfanos ocupando espacio.
 function borrarImagenesDeMensajes(mensajes) {
   if (!Array.isArray(mensajes)) return;
   for (const m of mensajes) {
@@ -2471,7 +2112,6 @@ function borrarImagenesDeMensajes(mensajes) {
   }
 }
 
-// Elimina una conversacion completa (solo si es tuya)
 app.delete('/api/chats/:id', (req, res) => {
   const db = leerDB();
   const usuario = obtenerUsuarioActual(req);
@@ -2482,7 +2122,6 @@ app.delete('/api/chats/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// Renombra una conversacion (solo si es tuya)
 app.patch('/api/chats/:id', (req, res) => {
   const { titulo } = req.body || {};
   if (!titulo || !titulo.trim()) return res.status(400).json({ error: 'Falta el titulo.' });
@@ -2494,7 +2133,6 @@ app.patch('/api/chats/:id', (req, res) => {
   res.json({ ok: true, titulo: chat.titulo });
 });
 
-// ---------- Devuelve el historial de UNA conversacion puntual (solo si es tuya) ----------
 app.get('/api/memoria', (req, res) => {
   const chatId = req.query.chatId;
   if (!chatId) return res.json([]);
@@ -2504,10 +2142,7 @@ app.get('/api/memoria', (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
-  // Devuelve la lista de modelos disponibles (para que el selector del chat
-  // se renderice solo, sin tener que tocar el frontend si mañana agregamos
-  // otro). Incluye costo en creditos y rate limit de cada uno, asi la UI
-  // puede mostrarle al usuario cuánto "gasta" cada modelo.
+
   const modelos = Object.values(MODELOS_DISPONIBLES).map((m) => ({
     nombre: m.nombre,
     descripcion: m.descripcion,
@@ -2528,7 +2163,6 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-// Borra los mensajes de UNA conversacion (no todas, y solo si es tuya)
 app.delete('/api/memoria', (req, res) => {
   const chatId = req.query.chatId;
   const db = leerDB();
@@ -2541,9 +2175,6 @@ app.delete('/api/memoria', (req, res) => {
   res.json({ ok: true });
 });
 
-// Headers de navegador real: algunas APIs gratuitas devuelven error (403/503)
-// a peticiones que no traen un User-Agent reconocible, como el fetch por
-// defecto de Node. Con esto, y un reintento, evitamos falsos "no ok".
 const HEADERS_BIBLIA = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36',
   Accept: 'application/json',
@@ -2565,7 +2196,6 @@ async function fetchBiblia(url, intentos = 2) {
   throw ultimoError;
 }
 
-// ---------- Biblia completa: lista de libros y texto de capitulos (RV1960) ----------
 app.get('/api/biblia/libros', async (req, res) => {
   try {
     if (!cacheLibrosBiblia) {
@@ -2594,13 +2224,10 @@ app.get('/api/biblia/capitulo/:libro/:capitulo', async (req, res) => {
   }
 });
 
-// ---------- Progreso de lectura de la Biblia (guardado en el servidor, por
-// usuario: cada quien ve su propio progreso desde cualquier dispositivo) ----------
 app.get('/api/biblia/progreso', (req, res) => {
   res.json(leerProgresoBiblia(obtenerUsuarioActual(req)));
 });
 
-// Guarda "donde te quedaste": el ultimo capitulo/versiculo que estabas leyendo
 app.post('/api/biblia/marcador', (req, res) => {
   const { libro, abrev, capitulo, verso } = req.body || {};
   if (!libro || !capitulo) return res.status(400).json({ error: 'Falta libro o capitulo.' });
@@ -2611,7 +2238,6 @@ app.post('/api/biblia/marcador', (req, res) => {
   res.json(p.marcador);
 });
 
-// Tacha/destacha un versiculo puntual (marcarlo como leido)
 app.post('/api/biblia/tachar', (req, res) => {
   const { abrev, capitulo, verso } = req.body || {};
   if (!abrev || !capitulo || !verso) return res.status(400).json({ error: 'Faltan datos del versiculo.' });
@@ -2626,7 +2252,6 @@ app.post('/api/biblia/tachar', (req, res) => {
   res.json({ key, tachados: p.tachados[key] });
 });
 
-// Guarda el nivel de zoom preferido del lector
 app.post('/api/biblia/zoom', (req, res) => {
   const zoom = Number(req.body && req.body.zoom);
   if (!zoom || zoom < 50 || zoom > 250) return res.status(400).json({ error: 'Zoom invalido.' });
@@ -2637,50 +2262,34 @@ app.post('/api/biblia/zoom', (req, res) => {
   res.json({ zoom: p.zoom });
 });
 
-// ---------- Endpoint principal de chat (streaming en tiempo real, NDJSON) ----------
 app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   const mensajeOriginal = (req.body.mensaje || '').trim();
   const chatId = (req.body.chatId || '').trim();
   const modoElegido = (req.body.modo || 'general').trim();
-  // Modelo opcional desde el frontend (selector del chat). resolverModelo
-  // valida y cae al default si viene cualquier cosa rara.
+
   const configModelo = resolverModelo(req.body.modelo);
   let imagenes = [];
 
   if (req.files && req.files.length) {
     imagenes = req.files.map((f) => ({ base64: f.buffer.toString('base64'), mime: f.mimetype, buffer: f.buffer }));
   }
-  // Se guardan a disco ya mismo (no solo en memoria), asi la conversacion
-  // puede volver a "verlas" en turnos siguientes y al recargar la pagina,
-  // y quedan asociadas a un archivo real que se puede borrar despues.
+
   const imagenesGuardadasUrls = imagenes.map((img) => guardarImagenDisco(img.buffer, img.mime));
 
   if (!mensajeOriginal && !imagenes.length) {
     return res.status(400).json({ error: 'Falta el mensaje o al menos una imagen.' });
   }
 
-  // Rate limit de la WEB (no consume creditos del token, solo limita frecuencia
-  // por usuario + modelo). Si se pasa, le devolvemos un error en JSON que el
-  // frontend muestra como mensaje normal. Esto evita que alguien desde la web
-  // ametralle NewserAdvanced (que es mas pesado para el proveedor).
   const usuarioActualRateLimit = obtenerUsuarioActual(req);
   const controlRateWeb = verificarRateLimitWeb(usuarioActualRateLimit, configModelo);
   if (!controlRateWeb.ok) {
     return res.status(controlRateWeb.status).json({ error: controlRateWeb.error });
   }
 
-  // ---- Atajo: "Generame [descripcion]" -> genera imagen directo, sin IA ----
-  // Si el mensaje empieza con "Genera", "Generame", "Dibujame", etc., vamos
-  // directo a pollinations.ai sin llamar a Groq. Es mas rapido, mas barato
-  // (no gasta tokens del proveedor) y mas predecible. La imagen se muestra
-  // como foto en el chat usando el mismo evento 'descargas' que ya sabe
-  // renderizar el frontend.
-  // OJO: esto requiere NewserAdvanced. Si el usuario tiene NewserLite, le
-  // devolvemos un aviso en vez de generar la imagen.
   const intencionImagen = detectarGeneracionImagen(mensajeOriginal);
   if (intencionImagen.esGeneracion) {
     if (configModelo.nombre !== 'NewserAdvanced') {
-      // Streaming para que el frontend lo muestre como mensaje normal
+      
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('X-Accel-Buffering', 'no');
@@ -2713,7 +2322,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       return;
     }
 
-    // Es NewserAdvanced: generamos la imagen directamente con pollinations.
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
@@ -2721,11 +2329,11 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     res.on('close', () => { if (!res.writableEnded) clienteDesconectadoGen = true; });
     const enviarGen = (obj) => {
       if (clienteDesconectadoGen || res.writableEnded) return;
-      try { res.write(JSON.stringify(obj) + '\n'); } catch (e) { /* conexion cerrada */ }
+      try { res.write(JSON.stringify(obj) + '\n'); } catch (e) {  }
     };
 
     try {
-      // Guardamos el mensaje del usuario y preparamos el chat para el historial
+      
       const usuarioActualGen = obtenerUsuarioActual(req);
       const dbGen = leerDB();
       let chatGen = chatId ? obtenerChat(dbGen, chatId, usuarioActualGen) : null;
@@ -2739,15 +2347,10 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         chatGen.titulo = mensajeOriginal.length > 40 ? mensajeOriginal.slice(0, 40) + '…' : mensajeOriginal;
       }
 
-      // Avisamos al frontend que estamos generando
       enviarGen({ type: 'chunk', text: `Generando imagen: **${intencionImagen.prompt}**...` });
       enviarGen({ type: 'investigando', query: `Generando imagen: ${intencionImagen.prompt}` });
       enviarGen({ type: 'investigando_sitio', sitio: 'image.pollinations.ai' });
 
-      // HEARTBEAT: mandamos un evento "ping" cada 5s para mantener la conexion
-      // viva. Sin esto, el navegador corta la conexion despues de ~30-60s sin
-      // recibir datos, y la imagen generada se pierde (el servidor la guarda
-      // pero el frontend nunca la recibe).
       const heartbeat = setInterval(() => {
         enviarGen({ type: 'ping' });
       }, 5000);
@@ -2762,11 +2365,9 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
       if (resultadoImg && resultadoImg.img) {
         const img = resultadoImg.img;
-        // Borramos el texto "Generando imagen..." y mandamos la imagen como
-        // descarga (el frontend la muestra como foto). Reusamos el evento
-        // 'descargas' que ya sabe renderizar el frontend.
+
         enviarGen({ type: 'descargas', items: [{ url: img.url, nombre: img.prompt, tamanoKB: img.tamanoKB }] });
-        // Guardamos en el historial la referencia a la imagen generada
+        
         chatGen.mensajes.push({
           role: 'assistant',
           contenidoTexto: `Imagen generada: ${intencionImagen.prompt}`,
@@ -2774,10 +2375,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
           descargas: [{ url: img.url, nombre: img.prompt, tamanoKB: img.tamanoKB }],
         });
       } else {
-        // Si pollinations fallo despues de todos los reintentos, le avisamos al
-        // usuario con un mensaje claro. El log del servidor ya tiene el detalle
-        // del error real (HTTP status, timeout, etc.) para que el admin pueda
-        // debuguear.
+
         const errMsg = (resultadoImg && resultadoImg.error) ? resultadoImg.error : 'error desconocido';
         console.error('[chat-generar-imagen] Pollinations fallo despues de 3 intentos. Ultimo error:', errMsg);
         enviarGen({ type: 'chunk', text: '\n\nNo pude generar la imagen en este momento. El servicio de generacion de imagenes esta caido o sobrecargado. Probá de nuevo en unos minutos.' });
@@ -2801,28 +2399,15 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     return;
   }
 
-  // A partir de aqui respondemos en streaming NDJSON (una linea JSON por evento).
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('X-Accel-Buffering', 'no');
   let clienteDesconectado = false;
   const enviar = (obj) => {
     if (clienteDesconectado || res.writableEnded) return;
-    try { res.write(JSON.stringify(obj) + '\n'); } catch (e) { /* conexion ya cerrada */ }
+    try { res.write(JSON.stringify(obj) + '\n'); } catch (e) {  }
   };
 
-  // Boton de "pausar" del cliente: cuando cancela el fetch, esto corta el
-  // pedido a Groq (no seguimos gastando tokens de algo que ya nadie mira) y
-  // dejamos de escribir al socket cerrado. El texto generado hasta ahi se
-  // guarda igual en el historial, como una respuesta pausada.
-  //
-  // IMPORTANTE: esto escucha en "res" (la respuesta), no en "req" (la
-  // peticion). req.on('close') dispara en falso apenas multer termina de
-  // leer el body (osea, en CUALQUIER mensaje con FormData, que es como el
-  // cliente manda todos los mensajes) mucho antes de que la respuesta
-  // siquiera empiece, marcando cada chat como "desconectado" y cancelando
-  // todo de inmediato. res.on('close') solo dispara con una desconexion real
-  // o al terminar la respuesta normalmente.
   const controladorGroq = new AbortController();
   res.on('close', () => {
     if (!res.writableEnded) {
@@ -2834,10 +2419,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   try {
     let mensajeParaModelo = mensajeOriginal;
 
-    // Contexto de YouTube si detectamos un link (arregla el "no puede analizar videos").
-    // Importante: le quitamos la URL cruda al mensaje que ve el modelo, porque el modelo
-    // base tiene un reflejo de rechazar peticiones apenas ve un link ("no puedo abrir
-    // enlaces externos"), aunque el system prompt le diga lo contrario.
     const linkYoutube = mensajeOriginal ? extraerLinkYoutube(mensajeOriginal) : null;
     if (linkYoutube) {
       const contexto = await obtenerContextoYoutube(linkYoutube);
@@ -2849,18 +2430,12 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
     }
 
-    // Cada conversacion (chat) guarda su propio historial, para que no se mezclen
-    // temas de conversaciones distintas y "Nuevo chat" empiece realmente en blanco.
-    // Ademas, cada usuario solo ve y puede escribir en sus propias conversaciones.
     const usuarioActual = obtenerUsuarioActual(req);
     const db = leerDB();
     let chat = chatId ? obtenerChat(db, chatId, usuarioActual) : null;
     if (!chat) chat = crearChat(db, usuarioActual);
     const historial = chat.mensajes;
-    // Si hay imagenes usamos el modelo de vision (que soporta multimodal);
-    // si no, el de texto del modelo elegido en el selector del chat.
-    // Esto permite que NewserAdvanced tambien procese imagenes (cae al modelo
-    // de vision que si soporta multimodal) sin romper.
+
     const modeloElegido = imagenes.length ? configModelo.modeloVision : configModelo.modeloTexto;
 
     let contenidoUsuario;
@@ -2873,18 +2448,11 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       contenidoUsuario = mensajeParaModelo;
     }
 
-    // Construimos el system prompt segun el modo (general/catolico) y el
-    // modelo (Lite/Avanced). NewserAdvanced recibe un bloque extra con las 3
-    // herramientas exclusivas (IMAGEN, WEB, CLIMA).
     let systemPrompt = modoElegido === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT;
     if (configModelo.nombre === 'NewserAdvanced') {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
     }
 
-    // Reemplazamos el placeholder __NOMBRE_MODELO__ con el nombre real del
-    // modelo elegido. Asi cuando el usuario tiene NewserAdvanced seleccionado y
-    // le pregunta "quien sos?", la IA responde "Soy NewserAdvanced" (no
-    // "NewserLite").
     systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
 
     const mensajesParaModelo = [
@@ -2910,12 +2478,11 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
     if (!respuestaGroq || !respuestaGroq.ok || !respuestaGroq.body) {
       const status = respuestaGroq ? respuestaGroq.status : 0;
-      // El detalle real (que puede mencionar al proveedor, la cuenta, etc.)
-      // solo se loguea en el servidor. Al cliente nunca le llega ese texto.
+
       try {
         const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
         console.error(`[chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
-      } catch (e) { /* no se pudo leer el cuerpo, no pasa nada */ }
+      } catch (e) {  }
       enviar({ type: 'error', message: mensajeErrorAmigableIA(status) });
       return res.end();
     }
@@ -2926,10 +2493,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let textoCompleto = '';
     let emitido = 0;
 
-    // Marcadores que cortan el stream: incluye los 4 originales + los 3 nuevos
-    // exclusivos de NewserAdvanced. Para NewserLite los nuevos nunca van a
-    // aparecer en la respuesta (no estan en el prompt), asi que es seguro
-    // agregarlos aca siempre.
     const MARCADORES = ['[[CUADERNO::', '[[BUSCAR::', '[[INVESTIGAR::', '[[DESCARGAR::', '[[IMAGEN::', '[[WEB::', '[[CLIMA::'];
     function calcularCorte(buffer) {
       let corte = buffer.length;
@@ -2951,9 +2514,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       try {
         leido = await reader.read();
       } catch (e) {
-        // Si esto paso porque el usuario pauso (aborto la conexion), no es un
-        // error real: cortamos el loop y seguimos abajo con lo que ya se
-        // escribio, para que quede guardado en el historial igual.
+
         if (clienteDesconectado) break;
         throw e;
       }
@@ -2978,25 +2539,19 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
               emitido = corte;
             }
           }
-        } catch (e) { /* linea SSE incompleta, se ignora */ }
+        } catch (e) {  }
       }
     }
 
-    // Extraer directivas ocultas del texto completo. Usamos regex GLOBAL para
-    // no romper si el modelo (por error) mete mas de una etiqueta: aunque solo
-    // usamos la primera para el widget, quitamos TODAS del texto visible para
-    // que nunca queden "[[CUADERNO::...]]" crudos pegados en el chat.
     let textoVisible = textoCompleto;
     let cuaderno = null;
     let busquedaQuery = null;
     let investigarQuery = null;
     let descargaQuery = null;
     let descargaCantidad = 1;
-    // Nuevas etiquetas exclusivas de NewserAdvanced:
-    // (imagenQuery ya no se usa: las imagenes se generan automaticamente con
-    // "Generame..." al inicio del mensaje, no por etiqueta)
-    let webSearchQuery = null;     // [[WEB::consulta google]]
-    let climaQuery = null;         // [[CLIMA::nombre del lugar]]
+
+    let webSearchQuery = null;     
+    let climaQuery = null;         
 
     const reCuadernoG = /\[\[CUADERNO::(.+?)::([\s\S]*?)\]\]/g;
     const coincidenciasCuaderno = [...textoVisible.matchAll(reCuadernoG)];
@@ -3020,10 +2575,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       textoVisible = textoVisible.replace(reInvestigarG, '');
     }
 
-    // El numero de cantidad es opcional en el regex: si el modelo se olvida
-    // de ponerlo (pasa con modelos de texto que no siguen el formato al pie
-    // de la letra), igual queremos que la descarga funcione en vez de que la
-    // directiva quede sin reconocer y aparezca como texto crudo en el chat.
     const reDescargarG = /\[\[DESCARGAR::([^:\]]+?)(?:::\s*(\d+))?\s*\]\]/g;
     const coincidenciasDescargar = [...textoVisible.matchAll(reDescargarG)];
     if (coincidenciasDescargar.length) {
@@ -3032,15 +2583,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       textoVisible = textoVisible.replace(reDescargarG, '');
     }
 
-    // ---- Nuevas etiquetas exclusivas de NewserAdvanced ----
-    // NOTA: la etiqueta [[IMAGEN::...]] ya no se usa. Las imagenes se generan
-    // automaticamente cuando el mensaje del usuario empieza con "Genera..."
-    // o "Generame...". Si la IA igual escribió un [[IMAGEN::...]] (no debería,
-    // porque el prompt le dice que no lo haga), lo limpiamos del texto visible
-    // para que no aparezca crudo en el chat.
     textoVisible = textoVisible.replace(/\[\[IMAGEN::[^\]]*\]\]/g, '');
 
-    // WEB: busca en Google Custom Search (con rotacion de 5 CSE IDs)
     const reWebG = /\[\[WEB::([^\]]+)\]\]/g;
     const coincidenciasWeb = [...textoVisible.matchAll(reWebG)];
     if (coincidenciasWeb.length) {
@@ -3048,7 +2592,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       textoVisible = textoVisible.replace(reWebG, '');
     }
 
-    // CLIMA: consulta open-meteo (no consume creditos extra)
     const reClimaG = /\[\[CLIMA::([^\]]+)\]\]/g;
     const coincidenciasClima = [...textoVisible.matchAll(reClimaG)];
     if (coincidenciasClima.length) {
@@ -3056,11 +2599,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       textoVisible = textoVisible.replace(reClimaG, '');
     }
 
-    // Red de seguridad: a veces el modelo entiende el pedido pero se olvida
-    // de escribir la directiva [[DESCARGAR::...]] (mas comun en modelos de
-    // texto chicos). Si el mensaje del usuario tiene intencion clara de
-    // "descargar/bajar" una imagen/foto y el modelo no disparo nada, lo
-    // detectamos igual por patron de texto en vez de dejar que no pase nada.
     if (!descargaQuery) {
       const pideDescarga = /\b(descarg\w*|baj\w*)\b[\s\S]{0,40}\b(imagen\w*|foto\w*)\b|\b(imagen\w*|foto\w*)\b[\s\S]{0,40}\b(descarg\w*|baj\w*|mandame\w*|mandamela\w*|pasame\w*|pasamela\w*)\b/i;
       if (pideDescarga.test(mensajeOriginal)) {
@@ -3079,19 +2617,14 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
     textoVisible = textoVisible.trim();
 
-    // Si quedo texto sin emitir (fuera de las directivas), lo mandamos ahora
     if (emitido < textoCompleto.length) {
       let restante = textoCompleto.slice(emitido);
       restante = restante.replace(reCuadernoG, '').replace(reBuscarG, '').replace(reInvestigarG, '').replace(reDescargarG, '').replace(/\[\[IMAGEN::[^\]]*\]\]/g, '').replace(reWebG, '').replace(reClimaG, '').trim();
       if (restante) enviar({ type: 'chunk', text: restante });
     }
 
-
     if (cuaderno) enviar({ type: 'notebook', referencia: cuaderno.referencia, texto: cuaderno.texto });
 
-    // Busqueda de imagenes (Wikipedia). El frame "investigando" ahora refleja
-    // el progreso REAL (no es una animacion decorativa): se avisa justo antes
-    // de cada consulta real que se hace.
     if (busquedaQuery) {
       enviar({ type: 'investigando', query: busquedaQuery });
       enviar({ type: 'investigando_sitio', sitio: 'es.wikipedia.org (imagenes)' });
@@ -3100,8 +2633,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       enviar({ type: 'investigando_fin' });
     }
 
-    // Investigacion real: Wikipedia (extracto de texto real) + busqueda real
-    // dentro del texto biblico completo. Nunca se inventa nada aca.
     if (investigarQuery) {
       enviar({ type: 'investigando', query: investigarQuery });
 
@@ -3131,10 +2662,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       enviar({ type: 'investigando_fin' });
     }
 
-    // Descarga real de imagenes: busca candidatas, y para cada una baja los
-    // bytes reales a disco. El tiempo que tarda es real (no fingido): cada
-    // descarga se muestra en su propio paso, asi que mientras mas imagenes
-    // pida el usuario, mas tarda de verdad, proporcional a la cantidad.
     let descargasFinales = [];
     if (descargaQuery) {
       enviar({ type: 'investigando', query: `Descargando: ${descargaQuery}` });
@@ -3156,12 +2683,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
     }
 
-    // (La etiqueta [[IMAGEN::]] ya no se procesa aca. Las imagenes se generan
-    // automaticamente al inicio del handler cuando el mensaje empieza con
-    // "Generame...", sin pasar por la IA. Ver bloque detectarGeneracionImagen
-    // arriba.)
-
-    // ---- WEB (NewserAdvanced): busca en Google Custom Search ----
     if (webSearchQuery) {
       enviar({ type: 'investigando', query: `Buscando en la web: ${webSearchQuery}` });
       enviar({ type: 'investigando_sitio', sitio: 'Google Custom Search' });
@@ -3169,7 +2690,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       enviar({ type: 'investigando_fin' });
 
       if (resultado.exito && resultado.resultados.length) {
-        // Sintetizamos los resultados y los mandamos como chunk + fuentes
+        
         const fuentesWeb = resultado.resultados.map((r) => ({ titulo: r.titulo, url: r.link }));
         const textoResultados = '\n\n**Resultados de la web:**\n' +
           resultado.resultados.map((r, i) => `${i + 1}. **${r.titulo}** — ${r.resumen}`).join('\n');
@@ -3183,7 +2704,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
     }
 
-    // ---- CLIMA (NewserAdvanced): consulta open-meteo (no consume creditos extra) ----
     if (climaQuery) {
       enviar({ type: 'investigando', query: `Consultando clima: ${climaQuery}` });
       enviar({ type: 'investigando_sitio', sitio: 'open-meteo.com' });
@@ -3215,7 +2735,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       descargas: descargasFinales.length ? descargasFinales : undefined,
     });
 
-    // Titulo automatico de la conversacion, tomado del primer mensaje del usuario
     if (chat.titulo === 'Nueva conversacion' && mensajeOriginal) {
       chat.titulo = mensajeOriginal.length > 40 ? mensajeOriginal.slice(0, 40) + '…' : mensajeOriginal;
     }
@@ -3225,15 +2744,10 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     enviar({ type: 'done', chatId: chat.id });
     res.end();
   } catch (err) {
-    // Cuando el usuario pausa (o cierra la pestana / pierde conexion) a media
-    // respuesta, el fetch a Groq se cancela a proposito y esto revienta como
-    // un AbortError. No es una falla real del servidor: no hay nada que
-    // reportarle a un cliente que ya no esta escuchando, asi que solo se deja
-    // una linea de registro corta en vez del stack completo, y no se intenta
-    // escribir en una respuesta que el cliente ya cerro.
+
     if (err.name === 'AbortError' || clienteDesconectado) {
       console.log('[chat] peticion cancelada por el cliente (pausa o desconexion).');
-      if (!res.writableEnded) { try { res.end(); } catch (e2) { /* ya cerrada */ } }
+      if (!res.writableEnded) { try { res.end(); } catch (e2) {  } }
       return;
     }
     console.error(err);
@@ -3246,10 +2760,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   }
 });
 
-// Estado de la conexion a MongoDB (solo para admin/diagnostico). No revela
-// datos sensibles, solo si Mongo esta conectado o no, y un mensaje de ayuda
-// si no lo esta. util para debugear desde el navegador sin tener que ir a los
-// logs de Render.
 app.get('/api/creditos', (req, res) => {
   const usuario = obtenerUsuarioActual(req);
   if (!usuario) return res.status(401).json({ error: 'No autenticado.' });
@@ -3283,12 +2793,6 @@ app.get('/api/mongo-status', (req, res) => {
   });
 });
 
-// Arranque: arrancamos el server INMEDIATAMENTE, y la conexion a MongoDB +
-// carga de datos persistente pasa en BACKGROUND. Esto es importante porque si
-// Mongo no conecta (timeout de 6s x 4 configs = 24s), el server igual
-// responde pedidos. Las primeras peticiones pueden no tener datos de Mongo
-// todavia, pero como los archivos locales arrancan vacios y se cargan en
-// background, en algunos segundos queda todo sincronizado.
 app.listen(PORT, () => {
   console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
   try {
@@ -3307,9 +2811,8 @@ app.listen(PORT, () => {
       console.log('Google Cloud Console -> Credenciales -> tu cliente OAuth -> "URIs de');
       console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
     }
-  } catch (e) { /* si falla, no pasa nada, el resto de la app funciona igual */ }
+  } catch (e) {  }
 
-  // Ahora si: conectar Mongo y cargar datos en background (no bloquea).
   (async () => {
     try {
       console.log('[startup] Conectando a MongoDB en background...');
@@ -3322,11 +2825,6 @@ app.listen(PORT, () => {
   })();
 });
 
-// Endpoint de prueba de conexion con el modelo de IA. Requiere sesion
-// iniciada (lo exige el middleware global de arriba). No revela nunca el
-// proveedor (Groq), la URL, la clave, ni el texto/JSON crudo de error: eso
-// solo queda en los logs del servidor. Al que lo llame solo le llega "ok" o
-// un mensaje generico.
 app.get('/api/test-btatesters', async (req, res) => {
   if (!CLAVES_GROQ.length) {
     return res.json({ ok: false, error: 'No hay ninguna clave de API configurada en el servidor.' });
@@ -3347,7 +2845,7 @@ app.get('/api/test-btatesters', async (req, res) => {
       try {
         const detalle = respuesta ? await respuesta.clone().text() : '(sin respuesta)';
         console.error(`[test-btatesters] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
-      } catch (e) { /* no se pudo leer el cuerpo */ }
+      } catch (e) {  }
       return res.json({ ok: false, error: mensajeErrorAmigableIA(status) });
     }
     const data = await respuesta.json();

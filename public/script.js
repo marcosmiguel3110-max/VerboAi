@@ -31,7 +31,6 @@ const btnMarcarAqui = document.getElementById('btnMarcarAqui');
 
 const elListaChats = document.getElementById('listaChats');
 
-// ---------- Menu lateral (un solo boton: abre/cierra en celular, colapsa/expande en PC) ----------
 const elSidebar = document.getElementById('sidebar');
 const elFondoSidebar = document.getElementById('fondoSidebar');
 const btnToggleSidebar = document.getElementById('btnAbrirSidebarMovil');
@@ -65,11 +64,6 @@ const elLightboxImg = document.getElementById('lightboxImg');
 const elLightboxCaption = document.getElementById('lightboxCaption');
 const btnCerrarLightbox = document.getElementById('btnCerrarLightbox');
 
-// ---------- Overlay de "Generando imagen..." con porcentaje ----------
-// Mientras la IA genera una imagen con pollinations, mostramos un overlay
-// gris medio oscuro en el centro de la pantalla con un porcentaje de progreso
-// simulado (porque pollinations no nos da progreso real). Los colores se
-// adaptan al tema activo (default / df-night) via CSS.
 const overlayGenerandoImagen = document.getElementById('overlayGenerandoImagen');
 const overlayGenerandoImagenPorcentaje = document.getElementById('overlayGenerandoImagenPorcentaje');
 const overlayGenerandoImagenBarra = document.getElementById('overlayGenerandoImagenBarra');
@@ -85,18 +79,14 @@ function mostrarOverlayGenerandoImagen(prompt) {
   if (overlayGenerandoImagenPrompt) overlayGenerandoImagenPrompt.textContent = prompt ? `"${prompt}"` : '';
   overlayGenerandoImagen.classList.remove('oculto');
 
-  // Simulamos progreso: arranca rapido (5% cada 500ms) y despues va mas lento
-  // a medida que se acerca al 90% (para que no llegue a 100% antes de que
-  // termine de verdad). Cuando termina, el handler de 'descargas' o 'done'
-  // llama a ocultarOverlayGenerandoImagen() que pone 100% y despues lo cierra.
   if (overlayGenerandoImagenInterval) clearInterval(overlayGenerandoImagenInterval);
   overlayGenerandoImagenInterval = setInterval(() => {
-    // Mas lento a medida que se acerca a 90
+    
     const incremento = overlayGenerandoImagenProgreso < 50 ? 3
       : overlayGenerandoImagenProgreso < 80 ? 1.5
       : overlayGenerandoImagenProgreso < 90 ? 0.5
       : 0;
-    if (incremento === 0) return; // arriba de 90% esperamos a que termine
+    if (incremento === 0) return; 
     overlayGenerandoImagenProgreso = Math.min(90, overlayGenerandoImagenProgreso + incremento);
     if (overlayGenerandoImagenPorcentaje) overlayGenerandoImagenPorcentaje.textContent = Math.floor(overlayGenerandoImagenProgreso) + '%';
     if (overlayGenerandoImagenBarra) overlayGenerandoImagenBarra.style.width = overlayGenerandoImagenProgreso + '%';
@@ -105,14 +95,14 @@ function mostrarOverlayGenerandoImagen(prompt) {
 
 function ocultarOverlayGenerandoImagen() {
   if (!overlayGenerandoImagen) return;
-  // Ponemos 100% por un instante para que se sienta que termino bien
+  
   if (overlayGenerandoImagenPorcentaje) overlayGenerandoImagenPorcentaje.textContent = '100%';
   if (overlayGenerandoImagenBarra) overlayGenerandoImagenBarra.style.width = '100%';
   if (overlayGenerandoImagenInterval) {
     clearInterval(overlayGenerandoImagenInterval);
     overlayGenerandoImagenInterval = null;
   }
-  // Pequeña pausa para que se vea el 100% antes de cerrar
+  
   setTimeout(() => {
     overlayGenerandoImagen.classList.add('oculto');
   }, 300);
@@ -120,12 +110,10 @@ function ocultarOverlayGenerandoImagen() {
 
 let imagenesSeleccionadas = [];
 let modoActual = localStorage.getItem('verboAiModo') || 'general';
-// Modelo activo en el selector del chat. Se persiste en localStorage para
-// que el usuario no tenga que volver a elegirlo cada vez que entra. Se carga
-// la lista completa de modelos disponibles desde /api/config al arrancar.
+
 let modeloActual = localStorage.getItem('verboAiModelo') || 'NewserLite';
 let modelosDisponibles = [
-  // Default hardcodeado por si /api/config tarda o falla: la UI sigue andando.
+  
   { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20, rateLimitMaxWeb: 30 },
   { nombre: 'NewserAdvanced', descripcion: 'Mas potente. Genera imagenes, busca en la web y consulta el clima.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8, badge: 'beta', disponible: true },
   { nombre: 'NewserPro', descripcion: 'Pronto. Modelo profesional con capacidades premium.', costoCreditos: 0, rateLimitMax: 0, rateLimitMaxWeb: 0, badge: 'pronto', disponible: false },
@@ -139,9 +127,6 @@ function fijarChatActual(id) {
   else localStorage.removeItem('verboAiChatId');
 }
 
-// Convierte un subconjunto simple de Markdown a HTML (negritas, cursivas,
-// citas ">", listas "-" y parrafos). El chat original no interpretaba nada
-// de esto y mostraba los simbolos "**" y ">" tal cual.
 function renderizarTexto(textoPlano) {
   const lineas = textoPlano.replace(/\r\n/g, '\n').split('\n');
   const bloques = [];
@@ -152,12 +137,10 @@ function renderizarTexto(textoPlano) {
   const cerrarCita = () => { if (citaActual) { bloques.push(citaActual); citaActual = null; } };
 
   const inline = (linea) => {
-    // Los links de imagen Markdown (![alt](url)) casi siempre son URLs inventadas
-    // por el modelo (nunca deberian aparecer, las imagenes reales llegan por la
-    // galeria de BUSCAR) -> los quitamos por completo en vez de mostrarlos rotos.
+
     let sinImagenes = linea.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, '');
     let html = escaparHtml(sinImagenes);
-    // Links normales en formato Markdown [texto](url) -> <a> real
+    
     html = html.replace(
       /\[([^\[\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
       (m, texto, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${texto}</a>`

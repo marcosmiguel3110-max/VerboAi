@@ -50,25 +50,13 @@ import platform
 import webbrowser
 from pathlib import Path
 
-# ----------------------------------------------------------------------------
-# Configuracion
-# ----------------------------------------------------------------------------
-
-# URL base de la API de Verbo AI (donde esta hosteada la app en Render).
-# Se puede sobreescribir con la variable de entorno VERBOAI_URL.
 API_URL_BASE = os.environ.get("VERBOAI_URL", "https://verboai.duckdns.org")
 
-# Puerto del servidor proxy local. Se puede cambiar con VERBOAI_PORT.
 PROXY_PORT = int(os.environ.get("VERBOAI_PORT", "7788"))
 
-# Carpeta donde se guarda la configuracion del CLI (token + modelo preferido).
 CONFIG_DIR = Path.home() / ".verboai"
 TOKEN_FILE = CONFIG_DIR / "token"
 CONFIG_FILE = CONFIG_DIR / "config.json"
-
-# ----------------------------------------------------------------------------
-# Utilidades basicas
-# ----------------------------------------------------------------------------
 
 def ensure_config_dir():
     """Crea ~/.verboai/ si no existe, con permisos seguros."""
@@ -77,7 +65,6 @@ def ensure_config_dir():
         os.chmod(CONFIG_DIR, 0o700)
     except OSError:
         pass
-
 
 def guardar_token(token):
     """Guarda el token en ~/.verboai/token con permisos 600."""
@@ -88,7 +75,6 @@ def guardar_token(token):
     except OSError:
         pass
 
-
 def leer_token():
     """Lee el token guardado. Devuelve None si no existe."""
     if not TOKEN_FILE.exists():
@@ -97,7 +83,6 @@ def leer_token():
         return TOKEN_FILE.read_text(encoding="utf-8").strip()
     except OSError:
         return None
-
 
 def guardar_config(config):
     """Guarda el config.json (modelo preferido, etc)."""
@@ -108,7 +93,6 @@ def guardar_config(config):
     except OSError:
         pass
 
-
 def leer_config():
     """Lee el config.json. Devuelve {} si no existe."""
     if not CONFIG_FILE.exists():
@@ -117,7 +101,6 @@ def leer_config():
         return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
-
 
 def http_get(url, token=None, timeout=15):
     """Hace un GET y devuelve (status, json_or_text, is_json)."""
@@ -139,7 +122,6 @@ def http_get(url, token=None, timeout=15):
             return e.code, None, False
     except urllib.error.URLError as e:
         return 0, {"error": f"No se pudo conectar a {url}: {e.reason}"}, True
-
 
 def http_post_json(url, body, token=None, timeout=120):
     """Hace un POST con JSON y devuelve (status, json_or_text, is_json)."""
@@ -164,11 +146,6 @@ def http_post_json(url, body, token=None, timeout=120):
     except urllib.error.URLError as e:
         return 0, {"error": f"No se pudo conectar a {url}: {e.reason}"}, True
 
-
-# ----------------------------------------------------------------------------
-# Colores ANSI para la terminal
-# ----------------------------------------------------------------------------
-
 class C:
     RESET = "\033[0m"
     BOLD = "\033[1m"
@@ -181,24 +158,17 @@ class C:
     CYAN = "\033[36m"
     GRAY = "\033[90m"
 
-
 def out(text, color=None, end="\n"):
     if color:
         print(f"{color}{text}{C.RESET}", end=end, flush=True)
     else:
         print(text, end=end, flush=True)
 
-
 def banner():
     out("=" * 56, C.DIM)
     out(f"  {C.BOLD}{C.CYAN}Verbo AI{C.RESET} - Cliente de terminal", C.BOLD)
     out(f"  Servidor: {API_URL_BASE}", C.DIM)
     out("=" * 56, C.DIM)
-
-
-# ----------------------------------------------------------------------------
-# Comando: verboai:TUTOKEN  (guardar y validar token)
-# ----------------------------------------------------------------------------
 
 def cmd_guardar_token(token):
     banner()
@@ -217,7 +187,6 @@ def cmd_guardar_token(token):
         out(f"Token invalido: {msg}", C.RED)
         sys.exit(1)
 
-    # Token valido: lo guardamos
     guardar_token(token)
     out("Token valido y guardado.", C.GREEN)
     out(f"  Nombre:    {data.get('nombre', '-')}", C.DIM)
@@ -230,11 +199,6 @@ def cmd_guardar_token(token):
     out(f"Ahora podes correr:  {C.BOLD}python verboai.py run{C.RESET}", C.GREEN)
     out("")
 
-
-# ----------------------------------------------------------------------------
-# Servidor proxy local (seguridad: el token vive en el proceso, no en la URL)
-# ----------------------------------------------------------------------------
-
 class ProxyHandler(http.server.BaseHTTPRequestHandler):
     """
     Proxy muy simple: recibe POST /chat en localhost y lo reenvia a la API
@@ -244,7 +208,7 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
     """
 
     def log_message(self, format, *args):
-        # Silenciamos los logs del servidor (se ven feos en la terminal)
+        
         pass
 
     def _enviar_json(self, status, obj):
@@ -275,7 +239,6 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
             self._enviar_json(404, {"ok": False, "error": "Ruta no encontrada. Usa POST /chat."})
             return
 
-        # Leemos el body del request entrante
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode("utf-8")
@@ -284,7 +247,6 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
             self._enviar_json(400, {"ok": False, "error": f"JSON invalido: {e}"})
             return
 
-        # Reenviamos a la API real con el token
         status, data, _ = http_post_json(
             f"{API_URL_BASE}/api/v1/chat",
             payload,
@@ -293,16 +255,15 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
         )
         self._enviar_json(status if status else 500, data if data else {"ok": False, "error": "sin respuesta"})
 
-
 def iniciar_proxy_local():
     """Levanta el servidor proxy en un hilo daemon. Devuelve el puerto real."""
     try:
         server = socketserver.TCPServer(("127.0.0.1", PROXY_PORT), ProxyHandler)
     except OSError as e:
-        # Puerto en uso: intentamos uno aleatorio
+        
         if "Address already in use" in str(e):
             out(f"  Puerto {PROXY_PORT} en uso. Cerrando proceso viejo...", C.YELLOW)
-            # Buscamos y matamos cualquier proceso que tenga el puerto
+            
             try:
                 if platform.system() == "Windows":
                     subprocess.run(["netstat", "-ano"], capture_output=True)
@@ -321,11 +282,6 @@ def iniciar_proxy_local():
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return PROXY_PORT
-
-
-# ----------------------------------------------------------------------------
-# REPL interactivo (chat)
-# ----------------------------------------------------------------------------
 
 def elegir_modelo(config):
     """Pregunta al usuario que modelo quiere usar. Devuelve el nombre."""
@@ -364,22 +320,20 @@ def elegir_modelo(config):
                 return modelos[idx]["nombre"]
         except ValueError:
             pass
-        # Tambien aceptamos el nombre directo
+        
         for m in modelos:
             if eleccion.lower() == m["nombre"].lower():
                 return m["nombre"]
         out(f"Opcion invalida. Probá 1-{len(modelos)} o el nombre del modelo.", C.RED)
 
-
 def abrir_imagen(url):
     """Descarga una imagen del servidor y la abre con el visor del sistema."""
-    # Si la URL es relativa (/uploads/xxx.jpg), la hacemos absoluta contra el server
+    
     if url.startswith("/"):
         url_completa = f"{API_URL_BASE}{url}"
     else:
         url_completa = url
 
-    # Descargamos a /tmp (o equivalente en Windows)
     import tempfile
     try:
         req = urllib.request.Request(url_completa)
@@ -404,20 +358,19 @@ def abrir_imagen(url):
         return
 
     out(f"  Imagen guardada en: {tmp}", C.DIM)
-    # Abrir con el visor predeterminado del sistema
+    
     try:
         sistema = platform.system()
-        if sistema == "Darwin":  # macOS
+        if sistema == "Darwin":  
             subprocess.Popen(["open", str(tmp)])
         elif sistema == "Windows":
             subprocess.Popen(["start", "", str(tmp)], shell=True)
-        else:  # Linux y similares
+        else:  
             subprocess.Popen(["xdg-open", str(tmp)])
         out(f"  {C.GREEN}Abriendo imagen...{C.RESET}", C.GREEN)
     except Exception as e:
         out(f"  No se pudo abrir el visor automaticamente: {e}", C.YELLOW)
         out(f"  Abrila manualmente: {tmp}", C.DIM)
-
 
 def enviar_mensaje(mensaje, modelo):
     """Envia un mensaje a la API y devuelve la respuesta parseada."""
@@ -438,7 +391,6 @@ def enviar_mensaje(mensaje, modelo):
         return data if data else {"ok": False, "error": f"HTTP {status}"}
     return data
 
-
 def cmd_run():
     banner()
     token = leer_token()
@@ -448,7 +400,6 @@ def cmd_run():
         out("")
         sys.exit(1)
 
-    # Validamos que el token siga activo
     out("Validando token...", C.DIM)
     status, data, _ = http_get(f"{API_URL_BASE}/api/v1/info", token=token)
     if status != 200:
@@ -459,13 +410,11 @@ def cmd_run():
 
     out(f"{C.GREEN}Token valido.{C.RESET}  Creditos: {(data or {}).get('creditos', '?')}/{(data or {}).get('creditosIniciales', '?')}", C.GREEN)
 
-    # Elegir modelo
     modelo = elegir_modelo(data if isinstance(data, dict) else {})
     out("")
     out(f"{C.BOLD}Modelo activo:{C.RESET} {C.CYAN}{modelo}{C.RESET}", C.BOLD)
     out("")
 
-    # Levantar proxy local
     out(f"Levantando servidor proxy local en http://127.0.0.1:{PROXY_PORT} ...", C.DIM)
     puerto = iniciar_proxy_local()
     if puerto is None:
@@ -481,7 +430,7 @@ def cmd_run():
 
     while True:
         try:
-            # Prompt con color
+            
             prompt = f"{C.BOLD}{C.CYAN}{modelo}>{C.RESET} "
             mensaje = input(prompt).strip()
         except (EOFError, KeyboardInterrupt):
@@ -491,7 +440,6 @@ def cmd_run():
         if not mensaje:
             continue
 
-        # Comandos especiales
         if mensaje.lower() in ("/salir", "/exit", "/quit", "/q"):
             out("Chau! :)", C.YELLOW)
             break
@@ -539,11 +487,9 @@ def cmd_run():
             out("")
             continue
 
-        # Mensaje normal: enviar a la API
         out("...", C.DIM, end="\r")
         respuesta = enviar_mensaje(mensaje, modelo)
 
-        # Limpiar la linea de "..."
         out(" " * 60, C.DIM, end="\r")
 
         if not respuesta.get("ok"):
@@ -558,18 +504,15 @@ def cmd_run():
         else:
             out("(sin respuesta de texto)", C.DIM)
 
-        # Si vino una imagen en la respuesta, la abrimos
         if respuesta.get("imagen"):
             img = respuesta["imagen"]
             out(f"  {C.MAGENTA}[Imagen generada: {img.get('prompt', '')}]{C.RESET}", C.MAGENTA)
             abrir_imagen(img.get("url", ""))
 
-        # Si trajo creditos restantes, los mostramos
         creditos = respuesta.get("creditosRestantes")
         if creditos is not None:
             out(f"  {C.GRAY}[creditos restantes: {creditos}]{C.RESET}", C.DIM)
 
-        # Si trajo herramientas (web, clima), las mostramos
         herramientas = respuesta.get("herramientas", [])
         for h in herramientas:
             if h.get("herramienta") == "web":
@@ -587,11 +530,6 @@ def cmd_run():
                     f"viento {h.get('viento', '?')} km/h")
 
         out("")
-
-
-# ----------------------------------------------------------------------------
-# Comando: verboai info  (info del token sin levantar REPL)
-# ----------------------------------------------------------------------------
 
 def cmd_info():
     banner()
@@ -618,11 +556,6 @@ def cmd_info():
         out(f"      {m.get('descripcion', '')}", C.DIM)
     out("")
 
-
-# ----------------------------------------------------------------------------
-# Punto de entrada
-# ----------------------------------------------------------------------------
-
 def mostrar_ayuda():
     banner()
     out(f"{C.BOLD}Uso:{C.RESET}")
@@ -646,7 +579,6 @@ def mostrar_ayuda():
     out(f"  /salir     Cerrar y salir")
     out("")
 
-
 def main():
     args = sys.argv[1:]
 
@@ -656,37 +588,30 @@ def main():
 
     primer_arg = args[0]
 
-    # Formato: verboai.py login TUTOKEN
     if primer_arg == "login" and len(args) >= 2:
         cmd_guardar_token(args[1])
         return
 
-    # Atajo: verboai.py verboai-XXXX (token directo como primer arg)
     if primer_arg.startswith("verboai-"):
         cmd_guardar_token(primer_arg)
         return
 
-    # Formato: verboai.py run
     if primer_arg == "run":
         cmd_run()
         return
 
-    # Formato: verboai.py info
     if primer_arg in ("info", "--info", "-i"):
         cmd_info()
         return
 
-    # Formato: verboai.py ayuda
     if primer_arg in ("ayuda", "help", "--help", "-h"):
         mostrar_ayuda()
         return
 
-    # Si llego aca, no reconocimos el comando
     out(f"Comando no reconocido: {primer_arg}", C.RED)
     out("")
     mostrar_ayuda()
     sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

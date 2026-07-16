@@ -1,4 +1,4 @@
-// ---------- Referencias ----------
+
 const formLogin = document.getElementById('formLogin');
 const formRegistro = document.getElementById('formRegistro');
 const formCodigo = document.getElementById('formCodigo');
@@ -21,7 +21,7 @@ const btnConfirmarNombre = document.getElementById('btnConfirmarNombre');
 const elErrorNombre = document.getElementById('mensajeErrorNombre');
 
 let emailPendienteVerificacion = '';
-let origenCodigo = 'registro'; // 'registro' o 'google'
+let origenCodigo = 'registro'; 
 const parametrosURL = new URLSearchParams(window.location.search);
 
 function mostrarVista(vista) {
@@ -64,8 +64,6 @@ reenviarCodigo.addEventListener('click', async (ev) => {
   }
 });
 
-// Si Google nos devolvio y falta el codigo de verificacion (paso 2 del login
-// con Google), mostramos directamente la pantalla del codigo.
 if (parametrosURL.get('paso') === 'google_codigo') {
   origenCodigo = 'google';
   correoCodigoTexto.textContent = parametrosURL.get('correo') || 'tu correo de Google';
@@ -73,7 +71,6 @@ if (parametrosURL.get('paso') === 'google_codigo') {
   mostrarVista(formCodigo);
 }
 
-// Si Google nos devolvio con un error (?error=...), mostrarlo
 if (parametrosURL.get('error')) {
   const mensajes = {
     google_denegado: 'Cancelaste el inicio de sesion con Google.',
@@ -89,7 +86,6 @@ if (parametrosURL.get('error')) {
   elError.classList.remove('oculto');
 }
 
-// ---------- Iniciar sesion ----------
 formLogin.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   elError.classList.add('oculto');
@@ -122,7 +118,6 @@ formLogin.addEventListener('submit', async (ev) => {
   }
 });
 
-// ---------- Crear cuenta: pedir el codigo ----------
 formRegistro.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   elErrorRegistro.classList.add('oculto');
@@ -167,7 +162,6 @@ formRegistro.addEventListener('submit', async (ev) => {
   }
 });
 
-// ---------- Confirmar el codigo ----------
 formCodigo.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   elErrorCodigo.classList.add('oculto');
@@ -207,7 +201,6 @@ formCodigo.addEventListener('submit', async (ev) => {
   }
 });
 
-// ---------- Elegir nombre y aceptar terminos (cuentas nuevas) ----------
 formNombre.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   elErrorNombre.classList.add('oculto');

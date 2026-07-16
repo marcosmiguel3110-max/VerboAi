@@ -18,7 +18,6 @@ echo.
 echo ════════════════════════════════════════════════
 echo.
 
-:: Verificar si Python está instalado
 python --version >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Python no esta instalado.
@@ -28,10 +27,8 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: Crear directorio de configuracion
 if not exist "%USERPROFILE%\.verboai" mkdir "%USERPROFILE%\.verboai"
 
-:: Descargar el CLI si no existe
 if not exist "%USERPROFILE%\.verboai\verboai.py" (
     echo Descargando cliente de Verbo AI...
     powershell -Command "Invoke-WebRequest -Uri 'https://verboai.duckdns.org/verboai-cli.py' -OutFile '%USERPROFILE%\.verboai\verboai.py'"
@@ -43,7 +40,6 @@ if not exist "%USERPROFILE%\.verboai\verboai.py" (
     )
 )
 
-:: Pedir token si no esta guardado
 if not exist "%USERPROFILE%\.verboai\token" (
     echo.
     set /p TOKEN="Pega tu token (verboai-XXXX): "
@@ -53,7 +49,6 @@ if not exist "%USERPROFILE%\.verboai\token" (
     echo.
 )
 
-:: Menu principal
 :menu
 echo ════════════════════════════════════════════════
 echo   ¿Que queres hacer?
