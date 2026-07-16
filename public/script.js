@@ -81,12 +81,12 @@ function mostrarOverlayGenerandoImagen(prompt) {
 
   if (overlayGenerandoImagenInterval) clearInterval(overlayGenerandoImagenInterval);
   overlayGenerandoImagenInterval = setInterval(() => {
-    
+
     const incremento = overlayGenerandoImagenProgreso < 50 ? 3
       : overlayGenerandoImagenProgreso < 80 ? 1.5
       : overlayGenerandoImagenProgreso < 90 ? 0.5
       : 0;
-    if (incremento === 0) return; 
+    if (incremento === 0) return;
     overlayGenerandoImagenProgreso = Math.min(90, overlayGenerandoImagenProgreso + incremento);
     if (overlayGenerandoImagenPorcentaje) overlayGenerandoImagenPorcentaje.textContent = Math.floor(overlayGenerandoImagenProgreso) + '%';
     if (overlayGenerandoImagenBarra) overlayGenerandoImagenBarra.style.width = overlayGenerandoImagenProgreso + '%';
@@ -95,14 +95,14 @@ function mostrarOverlayGenerandoImagen(prompt) {
 
 function ocultarOverlayGenerandoImagen() {
   if (!overlayGenerandoImagen) return;
-  
+
   if (overlayGenerandoImagenPorcentaje) overlayGenerandoImagenPorcentaje.textContent = '100%';
   if (overlayGenerandoImagenBarra) overlayGenerandoImagenBarra.style.width = '100%';
   if (overlayGenerandoImagenInterval) {
     clearInterval(overlayGenerandoImagenInterval);
     overlayGenerandoImagenInterval = null;
   }
-  
+
   setTimeout(() => {
     overlayGenerandoImagen.classList.add('oculto');
   }, 300);
@@ -113,7 +113,7 @@ let modoActual = localStorage.getItem('verboAiModo') || 'general';
 
 let modeloActual = localStorage.getItem('verboAiModelo') || 'NewserLite';
 let modelosDisponibles = [
-  
+
   { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20, rateLimitMaxWeb: 30 },
   { nombre: 'NewserAdvanced', descripcion: 'Mas potente. Genera imagenes, busca en la web y consulta el clima.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8, badge: 'beta', disponible: true },
   { nombre: 'NewserPro', descripcion: 'Pronto. Modelo profesional con capacidades premium.', costoCreditos: 0, rateLimitMax: 0, rateLimitMaxWeb: 0, badge: 'pronto', disponible: false },
@@ -140,7 +140,7 @@ function renderizarTexto(textoPlano) {
 
     let sinImagenes = linea.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, '');
     let html = escaparHtml(sinImagenes);
-    
+
     html = html.replace(
       /\[([^\[\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
       (m, texto, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${texto}</a>`
@@ -192,7 +192,6 @@ function renderizarTexto(textoPlano) {
   return out;
 }
 
-// ---------- Utilidades de render ----------
 function escaparHtml(texto) {
   const div = document.createElement('div');
   div.textContent = texto;
@@ -216,21 +215,12 @@ function crearBurbuja(rol, esError = false) {
   return div;
 }
 
-// Actualiza el contenido de una burbuja de IA con el texto acumulado, PERO
-// preserva cualquier grid de imagenes (.adjuntas-grid) u otros widgets que
-// se hayan agregado durante el stream (por ejemplo, cuando llega el evento
-// 'descargas' con una imagen generada por IA).
-//
-// Sin esto, el handler de 'done' hace burbujaIA.innerHTML = texto, lo cual
-// BORRA las imagenes que ya estaban agregadas. Bug encontrado y arreglado.
 function actualizarBurbujaPreservandoImagenes(burbuja, texto) {
   if (!burbuja) return;
-  // Guardamos los grids de imagenes y otros elementos no-texto que haya
   const elementosAPreservar = [];
   burbuja.querySelectorAll('.adjuntas-grid, .hoja-cuaderno, .fuentes-lista, .referencia-imagenes').forEach((el) => {
     elementosAPreservar.push(el.cloneNode(true));
   });
-  // Reconstruimos el contenido: primero el texto, despues los elementos preservados
   burbuja.innerHTML = renderizarTexto(texto);
   elementosAPreservar.forEach((el) => {
     burbuja.appendChild(el);
@@ -269,7 +259,6 @@ async function cargarMemoria(chatId) {
   }
 }
 
-// ---------- Lista de conversaciones (historial de chats) ----------
 let ultimosChatsCargados = [];
 
 async function cargarListaChats() {
@@ -329,7 +318,6 @@ function pintarListaChats(chats) {
   });
 }
 
-// ---------- Settings: Modos (General / Catolicismo) + Fondo (tema) ----------
 const btnAbrirSettings = document.getElementById('btnAbrirSettings');
 const overlaySettings = document.getElementById('overlaySettings');
 const btnCerrarSettings = document.getElementById('btnCerrarSettings');
@@ -349,7 +337,6 @@ document.querySelectorAll('.opcion-modo').forEach((boton) => {
   });
 });
 
-// Navegacion interna del panel de Settings (Modos / Fondo / Clave API / Creditos)
 document.querySelectorAll('.settings-nav-item').forEach((boton) => {
   boton.addEventListener('click', () => {
     document.querySelectorAll('.settings-nav-item').forEach((b) => b.classList.remove('activa'));
@@ -367,7 +354,6 @@ document.querySelectorAll('.settings-nav-item').forEach((boton) => {
   });
 });
 
-// ---------- Creditos globales + estadisticas ----------
 let creditosPollingInterval = null;
 let ultimoCreditosNumero = null;
 
@@ -441,11 +427,6 @@ document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && !overlaySettings.classList.contains('oculto')) overlaySettings.classList.add('oculto');
 });
 
-// ---------- Clave API: tokens tipo "verboai-XXXX" ----------
-// Por ahora la seccion solo la ve marcos.miguel.3110@gmail.com (o el admin
-// local). El resto ve el cartel "Prox". El servidor decide quien entra via
-// /api/api-tokens/acceso, asi si mañana se agregan mas correos autorizados
-// no hace falta tocar el frontend.
 let claveApiAccesoVerificado = false;
 let claveApiTieneAcceso = false;
 let claveApiCargandoTokens = false;
@@ -470,7 +451,6 @@ async function verificarAccesoClaveApi() {
     aplicarEstadoClaveApi();
     if (claveApiTieneAcceso) cargarTokensClaveApi();
   } catch (e) {
-    // Si ni siquiera podemos preguntar, lo dejamos en "Prox" para no romper.
     claveApiAccesoVerificado = true;
     claveApiTieneAcceso = false;
     aplicarEstadoClaveApi();
@@ -478,8 +458,6 @@ async function verificarAccesoClaveApi() {
 }
 
 function aplicarEstadoClaveApi() {
-  // El badge "Prox" se oculta cuando el usuario tiene acceso; el panel
-  // principal se oculta cuando no lo tiene.
   if (claveApiTieneAcceso) {
     if (badgeProxClaveApi) badgeProxClaveApi.classList.add('oculto');
     if (claveApiProx) claveApiProx.classList.add('oculto');
@@ -560,7 +538,6 @@ function renderTokensClaveApi(tokens) {
     `;
   }).join('');
 
-  // Botones de borrar
   claveApiListaTokens.querySelectorAll('.btn-revocar-token').forEach((b) => {
     b.addEventListener('click', () => revocarTokenClaveApi(b.dataset.id));
   });
@@ -590,11 +567,9 @@ async function generarTokenClaveApi() {
       alert(d.error || 'No se pudo generar el token.');
       return;
     }
-    // Mostramos el token UNA vez en claro
     claveApiTokenRecienValor.textContent = d.token;
     claveApiTokenRecien.classList.remove('oculto');
     if (claveApiNombreNuevo) claveApiNombreNuevo.value = '';
-    // Refrescamos la lista para que aparezca el nuevo (con prefijo oculto)
     await cargarTokensClaveApi();
   } catch (e) {
     alert('No se pudo generar el token. Probá de nuevo.');
@@ -625,7 +600,6 @@ async function copiarAlPortapapeles(texto) {
     await navigator.clipboard.writeText(texto);
     return true;
   } catch (e) {
-    // Fallback para navegadores sin clipboard API (http en lugar de https)
     try {
       const ta = document.createElement('textarea');
       ta.value = texto;
@@ -658,11 +632,6 @@ if (btnCopiarTokenRecien) btnCopiarTokenRecien.addEventListener('click', async (
   }
 });
 
-// ---------- Selector de modelo (NewserLite / NewserAdvanced) ----------
-// Boton "Nombre + flecha" que va al lado del microfono en el input del chat.
-// Al click lo abre, la flecha rota (apunta arriba) y se muestran las opciones
-// con su costo en creditos. La seleccion se persiste en localStorage y tambien
-// actualiza el subtitulo del header ("Modelo: XXX").
 const btnSelectorModelo = document.getElementById('btnSelectorModelo');
 const selectorModeloMenu = document.getElementById('selectorModeloMenu');
 const selectorModeloNombre = document.getElementById('selectorModeloNombre');
@@ -702,8 +671,6 @@ function renderOpcionesModelo() {
 
 function aplicarModeloUI() {
   if (selectorModeloNombre) selectorModeloNombre.textContent = modeloActual;
-  // Tambien actualizamos el subtitulo del header ("Modelo: XXX") para que
-  // refleje el modelo elegido en el selector.
   const headerSub = document.getElementById('chatHeaderSub');
   if (headerSub) headerSub.textContent = 'Modelo: ' + modeloActual;
   if (selectorModeloMenu) {
@@ -743,22 +710,18 @@ if (btnSelectorModelo) {
   });
 }
 
-// Click fuera del selector -> lo cierra
 document.addEventListener('click', (ev) => {
   if (!selectorModeloMenu || selectorModeloMenu.classList.contains('oculto')) return;
   const contenedor = document.getElementById('selectorModelo');
   if (contenedor && !contenedor.contains(ev.target)) cerrarSelectorModelo();
 });
 
-// Escape -> cierra el selector (mismo patron que el panel de Settings)
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && selectorModeloMenu && !selectorModeloMenu.classList.contains('oculto')) {
     cerrarSelectorModelo();
   }
 });
 
-// Carga la lista real de modelos desde el servidor. Si falla, no pasa nada:
-// seguimos con la lista hardcodeada de arriba (NewserLite + NewserAdvanced).
 async function cargarModelosDisponibles() {
   try {
     const r = await fetch('/api/config');
@@ -766,8 +729,6 @@ async function cargarModelosDisponibles() {
     const d = await r.json();
     if (Array.isArray(d.modelos) && d.modelos.length) {
       modelosDisponibles = d.modelos;
-      // Si el modelo guardado en localStorage ya no existe en la nueva lista
-      // (porque lo sacamos del servidor), caemos al default.
       if (!modelosDisponibles.some((m) => m.nombre === modeloActual)) {
         modeloActual = d.modeloDefault || 'NewserLite';
         localStorage.setItem('verboAiModelo', modeloActual);
@@ -779,17 +740,14 @@ async function cargarModelosDisponibles() {
     renderOpcionesModelo();
     aplicarModeloUI();
   } catch (e) {
-    // Sin conexion o error: seguimos con los defaults
     renderOpcionesModelo();
     aplicarModeloUI();
   }
 }
 
-// Render inicial con los defaults, despues actualizamos desde el servidor.
 renderOpcionesModelo();
 aplicarModeloUI();
 
-// ---------- Fondo (tema claro/oscuro), se guarda en localStorage ----------
 let temaActual = localStorage.getItem('verboAiTema') || 'default';
 function aplicarTema() {
   document.documentElement.classList.toggle('tema-night', temaActual === 'df-night');
@@ -863,9 +821,6 @@ async function cambiarDeChat(id) {
   cerrarSidebarMovil();
 }
 
-// Crea una conversacion nueva de verdad en el servidor (arregla el bug de
-// "Nuevo chat", que antes solo limpiaba la pantalla pero seguia usando el
-// historial viejo por detras).
 async function iniciarNuevoChat(actualizarLista = true) {
   try {
     const res = await fetch('/api/chats', { method: 'POST' });
@@ -880,7 +835,6 @@ async function iniciarNuevoChat(actualizarLista = true) {
   cerrarSidebarMovil();
 }
 
-// ---------- Visor de imagenes a pantalla completa ----------
 function abrirLightbox(url, titulo, fuente) {
   elLightboxImg.src = url;
   elLightboxImg.alt = titulo || '';
@@ -909,7 +863,6 @@ document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && !elLightbox.classList.contains('oculto')) cerrarLightbox();
 });
 
-// ---------- Cuadernito (se apila: cada cosa nueva se agrega abajo, con scroll) ----------
 function limpiarCuaderno() {
   elCuadernoLista.innerHTML = '';
   hayCuaderno = false;
@@ -923,9 +876,6 @@ function agregarHojaCuaderno(nodo) {
   hayCuaderno = true;
   btnCuaderno.classList.remove('oculto');
   elCuadernoLista.scrollTop = elCuadernoLista.scrollHeight;
-  // En celular el cuadernito ocupa toda la pantalla (para que se lea bien),
-  // asi que no lo abrimos solo -- taparia el chat entero sin avisar. Solo
-  // resaltamos el boton para que lo abras vos cuando quieras.
   if (window.innerWidth <= 768) {
     btnCuaderno.classList.add('btn-cuaderno-nuevo');
   } else {
@@ -959,8 +909,6 @@ function mostrarCuaderno(referencia, texto) {
   agregarHojaCuaderno(hoja);
 }
 
-// Ademas de mostrarse en el chat, las imagenes que la IA busca tambien se
-// guardan como una hoja extra en el cuadernito.
 function mostrarImagenesEnCuaderno(query, items) {
   if (!items.length) return;
   const hoja = document.createElement('div');
@@ -999,19 +947,12 @@ btnCuaderno.addEventListener('click', () => {
   btnCuaderno.classList.remove('btn-cuaderno-nuevo');
 });
 
-// ---------- Biblia completa: lector con zoom, tachar versiculos leidos y
-// marcador de "donde te quedaste". Todo se guarda en el servidor, asi que se
-// ve igual entrando desde cualquier dispositivo a esta misma app. ----------
 let librosBiblia = [];
 let progresoBiblia = { tachados: {}, marcador: null, zoom: 100 };
 let libroActual = null;
 let capituloActual = null;
 
 function nombreLibro(l) {
-  // Campo real confirmado en la API: "names" (arreglo, ej. ["Genesis"] o
-  // ["Exodo","Exodus"]) -- la documentacion decia "name" (singular) pero la
-  // respuesta real usa "names", por eso antes siempre caia en el valor de
-  // respaldo "Libro" y mandaba una peticion invalida.
   const n = l.names || l.name;
   if (Array.isArray(n)) return n[0] || 'Libro';
   return n || l.nombre || l.book || l.title || 'Libro';
@@ -1023,9 +964,6 @@ function numCapitulos(l) {
   return 1;
 }
 function extraerVersos(data) {
-  // Esquema real confirmado de la API: { vers: [ { verse: "texto...", number: 1, id }, ... ] }
-  // OJO: el campo "verse" trae el TEXTO del versiculo, y "number" trae el numero
-  // (nombres cruzados respecto a lo que se asumia antes, por eso no se veia nada).
   const arr = data.vers || data.verses || data.versiculos || (Array.isArray(data) ? data : []);
   return arr.map((v, i) => ({
     numero: Number(v.number != null ? v.number : v.numero != null ? v.numero : i + 1),
@@ -1058,7 +996,6 @@ async function cargarLibrosBiblia() {
   }
 }
 
-// ---------- Selector de libro / capitulo (pantalla propia dentro del lector) ----------
 let testamentoActivo = 'Antiguo Testamento';
 
 function abrirSelectorLibro() {
@@ -1083,7 +1020,7 @@ document.querySelectorAll('.tab-testamento').forEach((tab) => {
 
 function pintarListaLibros() {
   const filtrados = librosBiblia.filter((l) => (l.testament || l.testamento) === testamentoActivo);
-  const lista = filtrados.length ? filtrados : librosBiblia; // si la API no trae "testament", mostramos todos
+  const lista = filtrados.length ? filtrados : librosBiblia;
   elListaLibros.innerHTML = '';
   lista.forEach((libro) => {
     const item = document.createElement('button');
@@ -1143,7 +1080,6 @@ async function cargarCapituloBiblia(libro, capitulo, irAlMarcador = false) {
   }
 }
 
-// Prev/next con salto automatico al libro anterior/siguiente en los limites
 function actualizarBotonesNavCapitulo() {
   const idxLibro = librosBiblia.findIndex((l) => nombreLibro(l) === nombreLibro(libroActual));
   btnCapAnterior.disabled = capituloActual <= 1 && idxLibro <= 0;
@@ -1231,7 +1167,7 @@ async function alternarTachado(abrev, capitulo, verso, elVerso) {
     const data = await res.json();
     progresoBiblia.tachados[data.key] = data.tachados;
   } catch (e) {
-    elVerso.classList.toggle('tachado'); // revertimos si no se pudo guardar
+    elVerso.classList.toggle('tachado');
   }
 }
 
@@ -1293,7 +1229,6 @@ btnMarcarAqui.addEventListener('click', async () => {
   setTimeout(() => elAvisoMarcador.classList.add('oculto'), 4000);
 });
 
-// ---------- Galeria de imagenes de referencia ----------
 function pintarGaleria(query, items) {
   const detalles = document.createElement('details');
   detalles.className = 'referencia-imagenes';
@@ -1328,8 +1263,6 @@ function pintarGaleria(query, items) {
   elMensajes.scrollTop = elMensajes.scrollHeight;
 }
 
-// ---------- Efecto de escritura: revela el texto letra por letra a un ritmo
-// constante, en vez de pegarlo de un tiron cuando llega del servidor ----------
 function crearEscritorTexto(contenedor, cursorEl) {
   let cola = '';
   const nodoTexto = document.createTextNode('');
@@ -1348,7 +1281,6 @@ function crearEscritorTexto(contenedor, cursorEl) {
   };
 }
 
-// ---------- Indicador de "modelo saturado, reintentando en Xs" ----------
 let temporizadorReintento = null;
 function mostrarReintento(intento, maxIntentos, espera) {
   if (temporizadorReintento) clearInterval(temporizadorReintento);
@@ -1377,8 +1309,6 @@ function ocultarReintento() {
   elIndicador.querySelector('span').textContent = 'Meditando la respuesta...';
 }
 
-// ---------- Frame "investigando la web" (progreso REAL: cada sitio que se
-// muestra es uno que el servidor realmente consulto, no una animacion falsa) ----------
 const ICONO_BIBLIA_SVG = `<svg class="investigando-favicon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>`;
 const ICONO_LUPA_SVG = `<svg class="investigando-favicon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>`;
 
@@ -1439,7 +1369,6 @@ function crearFrameInvestigando(query) {
   };
 }
 
-// ---------- Fuentes reales consultadas (transparencia: para que puedas verificar) ----------
 function mostrarFuentes(items) {
   if (!items || !items.length) return;
   const cont = document.createElement('div');
@@ -1467,7 +1396,6 @@ function mostrarFuentes(items) {
   elMensajes.scrollTop = elMensajes.scrollHeight;
 }
 
-// ---------- Envio de mensajes (streaming NDJSON) ----------
 let urlsMiniaturas = [];
 function actualizarPreviewImagenes() {
   urlsMiniaturas.forEach((u) => URL.revokeObjectURL(u));
@@ -1495,9 +1423,6 @@ function actualizarPreviewImagenes() {
   });
 }
 
-// Agrega archivos a lo ya seleccionado (en vez de reemplazarlo), filtra que
-// sean imagenes, evita pasarse de 5 en total, y evita duplicar el mismo
-// archivo (mismo nombre + tamaño) si lo agregan dos veces por error.
 function agregarImagenes(listaArchivos) {
   const nuevas = Array.from(listaArchivos).filter((f) => f.type.startsWith('image/'));
   if (!nuevas.length) return;
@@ -1514,12 +1439,11 @@ function agregarImagenes(listaArchivos) {
 
 elInputImagen.addEventListener('change', () => {
   agregarImagenes(elInputImagen.files || []);
-  elInputImagen.value = ''; // limpio el input para poder re-agregar el mismo archivo si lo sacan y lo vuelven a poner
+  elInputImagen.value = '';
 });
 
-// ---------- Arrastrar y soltar una imagen sobre el chat ----------
 const elChat = document.querySelector('.chat');
-let contadorArrastre = 0; // dragenter/dragleave se disparan tambien en los hijos, este contador evita parpadeos
+let contadorArrastre = 0;
 elChat.addEventListener('dragenter', (ev) => {
   ev.preventDefault();
   contadorArrastre++;
@@ -1539,7 +1463,6 @@ elChat.addEventListener('drop', (ev) => {
   }
 });
 
-// ---------- Pegar una imagen con Ctrl+V ----------
 document.addEventListener('paste', (ev) => {
   const items = ev.clipboardData && ev.clipboardData.items;
   if (!items) return;
@@ -1553,7 +1476,6 @@ document.addEventListener('paste', (ev) => {
   if (archivosImagen.length) agregarImagenes(archivosImagen);
 });
 
-// ---------- Microfono: dictado por voz (Web Speech API del navegador) ----------
 const btnMicrofono = document.getElementById('btnMicrofono');
 const iconoMic = btnMicrofono.querySelector('.icono-mic');
 const iconoPausa = btnMicrofono.querySelector('.icono-pausa');
@@ -1563,8 +1485,6 @@ let reconocimiento = null;
 let escuchando = false;
 
 if (!ReconocimientoVoz) {
-  // Safari en iPhone no soporta esta API todavia; dejamos el boton visible
-  // pero avisamos en vez de fallar en silencio.
   btnMicrofono.classList.add('no-disponible');
   btnMicrofono.title = 'Dictado por voz no disponible en este navegador';
 } else {
@@ -1617,7 +1537,6 @@ if (!ReconocimientoVoz) {
   });
 }
 
-// ---------- Boton enviar <-> pausar ----------
 const btnEnviar = document.getElementById('btnEnviar');
 const iconoEnviar = btnEnviar.querySelector('.icono-enviar');
 const iconoDetener = btnEnviar.querySelector('.icono-detener');
@@ -1655,18 +1574,12 @@ elForm.addEventListener('submit', async (ev) => {
   elInputTexto.value = '';
   elIndicador.classList.remove('oculto');
 
-  // Si el mensaje empieza con "Generame", "Genera", "Dibujame", etc. Y el
-  // modelo es NewserAdvanced, mostramos el overlay de "Generando imagen..."
-  // con porcentaje simulado. El server va a tardar 10-60s en generar la
-  // imagen, y sin el overlay el usuario no sabe si esta pasando algo.
-  // Usamos la misma regex que el server para detectar la intencion.
   const _esGeneracionImagen = (() => {
     if (modeloActual !== 'NewserAdvanced') return false;
     const re = /^\s*(generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé)\s+/i;
     return re.test(texto);
   })();
   if (_esGeneracionImagen) {
-    // Extraemos el prompt (lo que viene despues del verbo) para mostrarlo
     const re = /^\s*(?:generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé)\s+(?:una\s+imagen\s+(?:de|del|de la|de un|de una)\s*|una\s+foto\s+(?:de|del|de la|de un|de una)\s*|un\s+dibujo\s+(?:de|del|de la|de un|de una)\s*|imagen\s+(?:de|del|de la|de un|de una)\s*|foto\s+(?:de|del|de la|de un|de una)\s*)?(.+)$/i;
     const m = texto.match(re);
     const prompt = m ? m[1].trim() : texto;
@@ -1677,9 +1590,6 @@ elForm.addEventListener('submit', async (ev) => {
   formData.append('mensaje', texto);
   if (chatIdActual) formData.append('chatId', chatIdActual);
   formData.append('modo', modoActual);
-  // Mandamos el modelo elegido en el selector (NewserLite o NewserAdvanced).
-  // Si por algun motivo no se cargo la config, mandamos el default y el
-  // servidor lo resuelve igual.
   formData.append('modelo', modeloActual);
   imagenesSeleccionadas.forEach((f) => formData.append('imagenes', f));
   imagenesSeleccionadas = [];
@@ -1735,9 +1645,6 @@ elForm.addEventListener('submit', async (ev) => {
         if (evt.type === 'retry') {
           mostrarReintento(evt.intento, evt.maxIntentos, evt.espera);
         } else if (evt.type === 'ping') {
-          // Heartbeat del servidor: no hace falta hacer nada, solo sirve para
-          // mantener la conexion viva mientras se genera una imagen (que
-          // puede tardar 30-60s). Si no mandamos nada, el navegador corta.
         } else if (evt.type === 'chunk') {
           ocultarReintento();
           asegurarBurbuja();
@@ -1757,28 +1664,15 @@ elForm.addEventListener('submit', async (ev) => {
           pintarGaleria(evt.query, evt.items);
           mostrarImagenesEnCuaderno(evt.query, evt.items);
         } else if (evt.type === 'descargas') {
-          // Imagenes generadas (pollinations) o descargadas de la web.
-          // Las mostramos como imagenes en la burbuja de la IA, clickeables
-          // para abrir el lightbox. Cada item tiene { url, nombre, tamanoKB }.
           ocultarReintento();
           asegurarBurbuja();
-          // Detenemos el escritor y limpiamos el cursor + texto "Generando..."
-          // antes de agregar la imagen. Sin esto, la imagen se agrega pero el
-          // cursor queda titilando encima y a veces el navegador no renderiza
-          // bien la imagen hasta que termina el stream.
           if (escritor) {
             escritor.detener();
           }
           if (burbujaIA) {
-            // Quitamos el cursor titilante si existe
             const cursorViejo = burbujaIA.querySelector('.cursor-escribiendo');
             if (cursorViejo) cursorViejo.remove();
-            // Si el unico contenido es "Generando imagen: ..." lo limpiamos
-            // para que la imagen quede sola en la burbuja. Si ya hay otro texto
-            // (mas de un nodo de texto), lo dejamos.
             const hijos = Array.from(burbujaIA.childNodes).filter((n) => n.nodeType !== 8);
-            // Si solo esta el texto de "Generando imagen..." (un text node),
-            // lo borramos. Si hay mas cosas, no tocamos.
             if (burbujaIA.children.length === 0 && hijos.length === 1 && hijos[0].nodeType === 3) {
               const texto = hijos[0].textContent || '';
               if (/^Generando imagen:/i.test(texto.trim())) {
@@ -1802,14 +1696,13 @@ elForm.addEventListener('submit', async (ev) => {
             });
             if (grid.children.length && burbujaIA) {
               burbujaIA.appendChild(grid);
-              // Forzar reflow para asegurar que el navegador pinte la imagen
               void burbujaIA.offsetHeight;
               elMensajes.scrollTop = elMensajes.scrollHeight;
             }
           }
         } else if (evt.type === 'error') {
           ocultarReintento();
-          ocultarOverlayGenerandoImagen(); // por si estaba generando imagen
+          ocultarOverlayGenerandoImagen();
           if (escritor) escritor.detener();
           if (burbujaIA) {
             burbujaIA.remove();
@@ -1818,8 +1711,6 @@ elForm.addEventListener('submit', async (ev) => {
           if (frameInvestigando) { frameInvestigando.finalizar(); frameInvestigando = null; }
           pintarMensajeCompleto('assistant', evt.message || 'Ocurrio un error.', null, true);
         } else if (evt.type === 'done') {
-          // Ocultamos el overlay de generando imagen (si estaba activo)
-          // antes de finalizar la burbuja.
           ocultarOverlayGenerandoImagen();
           await new Promise((resolve) => {
             const finalizar = () => {
@@ -1846,9 +1737,6 @@ elForm.addEventListener('submit', async (ev) => {
     if (burbujaIA && cursor && cursor.parentNode) cursor.remove();
   } catch (e) {
     if (e.name === 'AbortError') {
-      // El usuario pauso a proposito: no es un error, solo dejamos de tipear
-      // lo que ya se alcanzo a mostrar (el servidor igual guarda lo generado
-      // hasta ese momento en el historial).
       ocultarOverlayGenerandoImagen();
       if (escritor) escritor.detener();
       if (burbujaIA) actualizarBurbujaPreservandoImagenes(burbujaIA, textoAcumulado.trim());
@@ -1878,7 +1766,6 @@ btnBorrarMemoria.addEventListener('click', async () => {
   cargarListaChats();
 });
 
-// ---------- Menu del perfil (arriba del avatar) ----------
 const perfilUsuario = document.getElementById('perfilUsuario');
 const perfilMenu = document.getElementById('perfilMenu');
 perfilUsuario.addEventListener('click', (ev) => {
@@ -1897,7 +1784,6 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
   window.location.href = '/login.html';
 });
 
-// ---------- Arranque ----------
 (async function iniciar() {
   cargarProgresoBiblia();
 
@@ -1913,12 +1799,8 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
     })
     .catch(() => {});
 
-  // Verifica si el usuario actual tiene acceso a la seccion "Clave API".
-  // Es no-bloqueante: si tarda o falla, el resto de la app sigue igual.
   verificarAccesoClaveApi();
 
-  // Carga la lista de modelos disponibles desde el servidor (para el selector
-  // del chat). No bloquea el arranque: si tarda, ya tenemos defaults.
   cargarModelosDisponibles();
 
   let chats = [];
@@ -1930,7 +1812,6 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
   if (chatIdActual && chats.some((c) => c.id === chatIdActual)) {
     await cargarMemoria(chatIdActual);
   } else if (chats.length) {
-    // Retoma la conversacion mas reciente si no hay una activa valida
     fijarChatActual(chats[0].id);
     await cargarMemoria(chats[0].id);
   } else {

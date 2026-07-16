@@ -21,7 +21,7 @@ const btnConfirmarNombre = document.getElementById('btnConfirmarNombre');
 const elErrorNombre = document.getElementById('mensajeErrorNombre');
 
 let emailPendienteVerificacion = '';
-let origenCodigo = 'registro'; 
+let origenCodigo = 'registro';
 const parametrosURL = new URLSearchParams(window.location.search);
 
 function mostrarVista(vista) {

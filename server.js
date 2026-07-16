@@ -13,7 +13,7 @@ app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 
 const CLAVES_GROQ = [...new Set([process.env.GROQ_API_KEY, process.env.BTATESTERS_KEY].filter(Boolean))];
-const BTATESTERS_KEY = CLAVES_GROQ[0]; 
+const BTATESTERS_KEY = CLAVES_GROQ[0];
 
 const GROQ_MODEL_TEXTO = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
 const GROQ_MODEL_VISION = process.env.GROQ_MODEL_VISION || 'meta-llama/llama-4-scout-17b-16e-instruct';
@@ -72,7 +72,7 @@ function resolverModelo(valor) {
   return config;
 }
 
-const RATE_LIMIT_WEB = new Map(); 
+const RATE_LIMIT_WEB = new Map();
 const RATE_LIMIT_WEB_VENTANA_MS = 60 * 1000;
 
 function verificarRateLimitWeb(usuario, configModelo) {
@@ -106,7 +106,7 @@ async function llamarGroqConReintentos(opcionesBase, enviar, maxIntentos = 4) {
 
   for (const clave of claves) {
     const headers = { ...(opcionesBase.headers || {}) };
-    delete headers.Authorization; 
+    delete headers.Authorization;
     if (clave) headers.Authorization = `Bearer ${clave}`;
     const opciones = { ...opcionesBase, headers };
 
@@ -162,7 +162,7 @@ function borrarImagenDisco(urlRelativa) {
   const nombreArchivo = path.basename(urlRelativa);
   const rutaCompleta = path.join(UPLOADS_DIR, nombreArchivo);
   if (rutaCompleta.startsWith(UPLOADS_DIR)) {
-    fs.unlink(rutaCompleta, () => {}); 
+    fs.unlink(rutaCompleta, () => {});
   }
 }
 
@@ -222,7 +222,7 @@ function leerProgresoBiblia(usuario) {
   } catch (e) {
     raiz = { usuarios: {} };
   }
-  
+
   if (!raiz.usuarios) {
     const progresoViejo = { tachados: raiz.tachados || {}, marcador: raiz.marcador || null, zoom: raiz.zoom || 100 };
     raiz = { usuarios: { [`local:${APP_USER}`]: progresoViejo } };
@@ -243,7 +243,7 @@ function guardarProgresoBiblia(usuario, p) {
   if (!raiz.usuarios) raiz.usuarios = {};
   raiz.usuarios[usuario] = p;
   fs.writeFileSync(BIBLIA_PROGRESO_FILE, JSON.stringify(raiz, null, 2));
-  
+
   guardarEnMongoBackground('biblia-progreso', raiz);
 }
 
@@ -263,7 +263,7 @@ app.use((err, req, res, next) => {
       if (err.type === 'entity.too.large') mensaje = 'La peticion es demasiado grande.';
       return res.status(400).json({ ok: false, error: mensaje });
     }
-    
+
     return res.status(400).type('text').send('Bad Request');
   }
   next(err);
@@ -314,7 +314,7 @@ function obtenerUsuarioActual(req) {
 
 const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/api/config']);
 app.use((req, res, next) => {
-  
+
   if (req.path === '/info') return res.redirect(301, '/info.html');
   if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/')) return next();
   if (estaAutenticado(req)) return next();
@@ -332,9 +332,9 @@ const EMAILS_AUTORIZADOS_API = new Set(
 const API_TOKENS_FILE = path.join(MEMORY_DIR, 'api-tokens.json');
 if (!fs.existsSync(API_TOKENS_FILE)) fs.writeFileSync(API_TOKENS_FILE, JSON.stringify({ tokens: [] }, null, 2));
 
-const TOKEN_CREDITOS_INICIALES = 1000;        
-const TOKEN_RATE_LIMIT_VENTANA_MS = 60 * 1000; 
-const TOKEN_RATE_LIMIT_MAX = 20;               
+const TOKEN_CREDITOS_INICIALES = 1000;
+const TOKEN_RATE_LIMIT_VENTANA_MS = 60 * 1000;
+const TOKEN_RATE_LIMIT_MAX = 20;
 
 function leerApiTokens() {
   try {
@@ -347,7 +347,7 @@ function leerApiTokens() {
 function guardarApiTokens(tokens) {
   const valor = { tokens };
   fs.writeFileSync(API_TOKENS_FILE, JSON.stringify(valor, null, 2));
-  
+
   guardarEnMongoBackground('api-tokens', valor);
 }
 
@@ -356,7 +356,7 @@ function tieneAccesoApiTokens(usuario) {
 }
 
 function generarTokenVerboai() {
-  const digitos = crypto.randomBytes(12).toString('hex'); 
+  const digitos = crypto.randomBytes(12).toString('hex');
 
   let soloDigitos = '';
   for (let i = 0; i < digitos.length; i += 2) {
@@ -395,7 +395,7 @@ function registrarUsoToken(token, opciones = {}) {
   }
 
   const ahora = Date.now();
-  
+
   if (!Array.isArray(t.usos)) t.usos = [];
   t.usos = t.usos.filter((ts) => ahora - ts < TOKEN_RATE_LIMIT_VENTANA_MS);
   if (t.usos.length >= rateLimitMax) {
@@ -442,7 +442,7 @@ async function cargarDesdeMongoAlArrancar() {
   }
   console.log('[mongo-sync] Cargando datos desde MongoDB...');
   try {
-    
+
     const historial = await mongoDb.leerDocumento('historial');
     if (historial && typeof historial === 'object') {
       fs.writeFileSync(MEMORY_FILE, JSON.stringify(historial, null, 2));
@@ -473,7 +473,7 @@ async function cargarDesdeMongoAlArrancar() {
 
 function guardarEnMongoBackground(id, valor) {
   if (!mongoDb.estaConectado()) return;
-  
+
   setImmediate(async () => {
     try {
       await mongoDb.guardarDocumento(id, valor);
@@ -494,7 +494,7 @@ function leerUsuarios() {
 function guardarUsuarios(usuarios) {
   const valor = { usuarios };
   fs.writeFileSync(USUARIOS_FILE, JSON.stringify(valor, null, 2));
-  
+
   guardarEnMongoBackground('usuarios', valor);
 }
 
@@ -548,7 +548,7 @@ function verificarClave(clave, saleHash) {
   return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
 }
 
-const codigosPendientes = new Map(); 
+const codigosPendientes = new Map();
 
 let transporterCorreo = null;
 if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
@@ -570,7 +570,7 @@ if (process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD) {
 }
 
 async function enviarCorreoConFallback(destinatario, asunto, texto, html) {
-  
+
   if (transporterCorreo) {
     try {
       await transporterCorreo.sendMail({
@@ -602,7 +602,7 @@ async function enviarCorreoConFallback(destinatario, asunto, texto, html) {
           html: html,
         }),
       });
-      
+
       if (!response.ok) {
         const error = await response.text();
 
@@ -611,7 +611,7 @@ async function enviarCorreoConFallback(destinatario, asunto, texto, html) {
         }
         throw new Error(`Resend API error: ${error}`);
       }
-      
+
       console.log('[email] Enviado via Resend API');
       return;
     } catch (e) {
@@ -723,11 +723,11 @@ app.post('/api/login', (req, res) => {
   if (usuario === APP_USER && clave === APP_PASS) {
     let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER}`))}; HttpOnly; Path=/; SameSite=Lax`;
     if (req.secure) cookieStr += '; Secure';
-    if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`; 
+    if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
     return res.json({ ok: true });
   }
-  
+
   const usuarios = leerUsuarios();
   const cuenta = usuarios[usuario];
   if (cuenta && verificarClave(clave, cuenta.claveHash)) {
@@ -986,7 +986,7 @@ app.post('/api/api-tokens/generar', (req, res) => {
   }
   const nombreLimpio = (req.body && req.body.nombre ? String(req.body.nombre) : '').trim().slice(0, 40);
   const tokens = leerApiTokens();
-  
+
   const vivos = tokens.filter((t) => t.propietario === usuario && t.activo !== false);
   if (vivos.length >= 10) {
     return res.status(400).json({ error: 'Ya tenes 10 tokens activos. Borra alguno antes de crear otro.' });
@@ -1095,7 +1095,7 @@ app.post('/api/v1/chat', async (req, res) => {
         error: 'La generacion de imagenes solo esta disponible con NewserAdvanced. Mandá "modelo":"NewserAdvanced" en el body para usarla.',
       });
     }
-    
+
     const tokenActual = buscarTokenPorValor(valorToken);
     const costoTotalGen = configModelo.costoCreditos + 1;
     if (!tokenActual || tokenActual.creditos < 1) {
@@ -1104,7 +1104,7 @@ app.post('/api/v1/chat', async (req, res) => {
         error: `El token no tiene creditos suficientes para generar imagen (necesita +1, le quedan ${tokenActual ? tokenActual.creditos : 0}).`,
       });
     }
-    
+
     const resultado = await generarImagenPollinations(intencionImagenApi.prompt);
     if (!resultado || !resultado.img) {
       console.error('[api/v1/chat] generacion de imagen fallo:', resultado ? resultado.error : 'sin resultado');
@@ -1344,8 +1344,12 @@ app.get('/api/v1/info', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: false,
   lastModified: false,
-  setHeaders: (res) => {
+  setHeaders: (res, path) => {
     res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    if (path.endsWith('.bat') || path.endsWith('.sh') || path.endsWith('.py')) {
+      res.setHeader('Content-Disposition', 'attachment');
+      res.setHeader('Content-Type', 'application/octet-stream');
+    }
   },
 }));
 
@@ -1526,7 +1530,7 @@ function leerDB() {
 
 function guardarDB(db) {
   fs.writeFileSync(MEMORY_FILE, JSON.stringify(db, null, 2));
-  
+
   guardarEnMongoBackground('historial', db);
 }
 
@@ -1738,7 +1742,7 @@ async function sintetizarInvestigacion(query, wiki, versiculos) {
         max_tokens: 300,
         stream: false,
       }),
-    }, () => {}); 
+    }, () => {});
 
     if (!resp.ok) return null;
     const data = await resp.json();
@@ -1900,44 +1904,20 @@ async function buscarWebGoogleReal(query) {
   return { exito: false, error: ultimoError || 'Todos los CSE IDs fallaron.' };
 }
 
-// Genera una imagen con pollinations.ai. La URL misma es la "generadora":
-// pollinations devuelve la imagen ya renderizada al hacer GET a esa URL.
-// Lo que hacemos aca es descargar los bytes reales, guardarlos a disco (como
-// con DESCARGAR) y devolver un link local que el usuario puede ver y guardar.
-//
-// Pollinations a veces tarda mucho (60-90s) o devuelve 502/503 cuando esta
-// sobrecargado. Por eso hacemos hasta 3 reintentos con timeout creciente.
-//
-// Devuelve: { img: {...}, error: null } si salio bien, o { img: null, error: "..." } si fallo.
-// El caller puede usar .img para verificar y .error para log/mensaje.
-//
-// Parametros:
-//   prompt  -> texto descriptivo de la imagen (se URL-encodea)
-//   seed    -> semilla opcional para reproducibilidad (si no viene, se
-//              genera una aleatoria asi cada pedido da algo distinto)
 async function generarImagenPollinations(prompt, seed) {
   const promptLimpio = (prompt || '').trim().slice(0, 200);
   if (!promptLimpio) return { img: null, error: 'Prompt vacio' };
   const seedFinal = (typeof seed === 'number' && seed > 0) ? seed : Math.floor(Math.random() * 1000000);
 
-  // 3 intentos con timeout razonable: 30s, 45s, 60s. Pollinations a veces
-  // tarda la primera vez, pero si pasa de 60s es que algo anda mal y no tiene
-  // sentido seguir esperando (el navegador ya va a haber cortado la conexion).
-  // Total maximo de espera: 30+45+60 = 135s (2.25 min) — aguanta bien.
   const timeouts = [30000, 45000, 60000];
   let ultimoError = null;
 
   for (let intento = 0; intento < timeouts.length; intento++) {
     try {
-      // URL con parametros: width/height (1024x1024 es buen balance), seed
-      // para reproducibilidad, nologo=true para sacar la marca de agua.
-      // model=flux es el modelo default de pollinations (rapido y bueno).
       const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?width=1024&height=1024&seed=${seedFinal}&nologo=true&model=flux`;
 
       console.log(`[pollinations] Intento ${intento + 1}/${timeouts.length} - prompt: "${promptLimpio.slice(0, 50)}..."`);
       const resp = await fetch(url, {
-        // No mandamos Accept: image/* porque a veces pollinations lo interpreta
-        // mal y devuelve error. Solo User-Agent basico.
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         signal: AbortSignal.timeout(timeouts[intento]),
       });
@@ -1945,15 +1925,12 @@ async function generarImagenPollinations(prompt, seed) {
       if (!resp.ok) {
         ultimoError = `HTTP ${resp.status}`;
         console.warn(`[pollinations] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
-        // Si es 4xx (error del cliente), no tiene sentido reintentar
         if (resp.status >= 400 && resp.status < 500) break;
-        // Si es 5xx o 429, esperamos un poco y reintentamos
         await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
 
       const mime = resp.headers.get('content-type') || 'image/jpeg';
-      // A veces pollinations devuelve text/html cuando hay error interno
       if (!mime.startsWith('image/')) {
         ultimoError = `Content-Type inesperado: ${mime}`;
         console.warn(`[pollinations] Intento ${intento + 1} devolvio ${mime} (esperaba image/*)`);
@@ -1969,7 +1946,6 @@ async function generarImagenPollinations(prompt, seed) {
         continue;
       }
 
-      // Todo OK: guardamos a disco y devolvemos
       const urlLocal = guardarImagenDisco(buffer, mime);
       console.log(`[pollinations] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
       return {
@@ -1984,7 +1960,6 @@ async function generarImagenPollinations(prompt, seed) {
     } catch (e) {
       ultimoError = e.message;
       console.warn(`[pollinations] Intento ${intento + 1} fallo: ${e.message}`);
-      // Si fue timeout o error de red, reintentamos. Si fue otra cosa, no.
       if (e.name === 'AbortError' || e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT') {
         await new Promise((r) => setTimeout(r, 2000));
         continue;
@@ -1996,8 +1971,6 @@ async function generarImagenPollinations(prompt, seed) {
   console.error(`[pollinations] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
   return { img: null, error: ultimoError || 'Error desconocido' };
 }
-
-// Detecta si un mensaje del usuario pide generar una imagen. La "palabra
 
 function detectarGeneracionImagen(mensaje) {
   if (!mensaje || typeof mensaje !== 'string') return { esGeneracion: false };
@@ -2289,7 +2262,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   const intencionImagen = detectarGeneracionImagen(mensajeOriginal);
   if (intencionImagen.esGeneracion) {
     if (configModelo.nombre !== 'NewserAdvanced') {
-      
+
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('X-Accel-Buffering', 'no');
@@ -2333,7 +2306,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     };
 
     try {
-      
+
       const usuarioActualGen = obtenerUsuarioActual(req);
       const dbGen = leerDB();
       let chatGen = chatId ? obtenerChat(dbGen, chatId, usuarioActualGen) : null;
@@ -2367,7 +2340,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         const img = resultadoImg.img;
 
         enviarGen({ type: 'descargas', items: [{ url: img.url, nombre: img.prompt, tamanoKB: img.tamanoKB }] });
-        
+
         chatGen.mensajes.push({
           role: 'assistant',
           contenidoTexto: `Imagen generada: ${intencionImagen.prompt}`,
@@ -2550,8 +2523,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let descargaQuery = null;
     let descargaCantidad = 1;
 
-    let webSearchQuery = null;     
-    let climaQuery = null;         
+    let webSearchQuery = null;
+    let climaQuery = null;
 
     const reCuadernoG = /\[\[CUADERNO::(.+?)::([\s\S]*?)\]\]/g;
     const coincidenciasCuaderno = [...textoVisible.matchAll(reCuadernoG)];
@@ -2690,7 +2663,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       enviar({ type: 'investigando_fin' });
 
       if (resultado.exito && resultado.resultados.length) {
-        
+
         const fuentesWeb = resultado.resultados.map((r) => ({ titulo: r.titulo, url: r.link }));
         const textoResultados = '\n\n**Resultados de la web:**\n' +
           resultado.resultados.map((r, i) => `${i + 1}. **${r.titulo}** — ${r.resumen}`).join('\n');
