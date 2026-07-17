@@ -990,6 +990,7 @@ html.tema-night .chat-fondo-cresta-1 { fill: var(--boton-nuevo-noche); opacity: 
 html.tema-night .chat-fondo-cresta-2 { fill: var(--chat-activo-noche-fondo); opacity: 0.6; }
 
 .chat-header, .mensajes, .indicador-carga, .entrada { position: relative; z-index: 1; }
+.chat-header { z-index: 3; }
 
 .chat-header {
   display: flex;

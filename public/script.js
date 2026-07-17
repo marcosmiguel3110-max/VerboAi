@@ -797,16 +797,6 @@ if (btnSelectorModeloHeader) {
   });
 }
 
-document.addEventListener('click', (ev) => {
-  if (ev.target.closest && (ev.target.closest('.opcion-modelo') || ev.target.closest('.btn-selector-modelo') || ev.target.closest('.selector-modelo-menu'))) return;
-  var menuHeader = document.getElementById('selectorModeloMenuHeader');
-  var menuOculto = true;
-  if (selectorModeloMenu && !selectorModeloMenu.classList.contains('oculto')) menuOculto = false;
-  if (menuHeader && !menuHeader.classList.contains('oculto')) menuOculto = false;
-  if (menuOculto) return;
-  cerrarSelectorModelo();
-});
-
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape') {
     var menuHeader = document.getElementById('selectorModeloMenuHeader');
