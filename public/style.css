@@ -2666,46 +2666,56 @@ html.tema-night .anuncio-creditos-contenedor {
 }
 
 .selector-modelo-header .selector-modelo-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  min-width: 260px;
-  background: var(--crema, #FAF6EF);
-  border: 1px solid var(--borde, #E5DDD0);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-  padding: 6px;
-  z-index: 600;
-  max-height: 400px;
-  overflow-y: auto;
+  position: absolute !important;
+  top: calc(100% + 6px) !important;
+  right: 0 !important;
+  bottom: auto !important;
+  min-width: 280px !important;
+  background: #FAF6EF !important;
+  border: 1px solid #E5DDD0 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25) !important;
+  padding: 8px !important;
+  z-index: 9999 !important;
+  max-height: 420px !important;
+  overflow-y: auto !important;
+  display: block !important;
 }
 html.tema-night .selector-modelo-header .selector-modelo-menu {
-  background: var(--fondo-noche, #1B1E29);
-  border-color: var(--borde-noche, #2A2E40);
+  background: #1B1E29 !important;
+  border-color: #2A2E40 !important;
 }
-.selector-modelo-header .selector-modelo-menu.oculto { display: none; }
+.selector-modelo-header .selector-modelo-menu.oculto { display: none !important; }
 .selector-modelo-header .opcion-modelo {
-  background: var(--crema-oscuro, #F0E6D8);
-  border: 1px solid var(--borde, #E5DDD0);
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 4px;
-  cursor: pointer;
-  text-align: left;
-  font-family: inherit;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  background: #F0E6D8 !important;
+  border: 1px solid #E5DDD0 !important;
+  border-radius: 8px !important;
+  padding: 12px !important;
+  margin-bottom: 6px !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  font-family: inherit !important;
+  width: 100% !important;
 }
 html.tema-night .selector-modelo-header .opcion-modelo {
-  background: var(--hover-noche, #1B1E29);
-  border-color: var(--borde-noche, #2A2E40);
+  background: #232840 !important;
+  border-color: #2A2E40 !important;
 }
-.selector-modelo-header .opcion-modelo:hover { background: var(--acento-suave); }
-.selector-modelo-header .opcion-modelo.activa { border-color: var(--acento); background: var(--acento-suave); }
-.selector-modelo-header .opcion-modelo.no-disponible { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
-.selector-modelo-header .opcion-modelo-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.selector-modelo-header .opcion-modelo-nombre { font-size: 13.5px; font-weight: 600; color: var(--texto); }
-.selector-modelo-header .opcion-modelo-badges { display: flex; gap: 5px; align-items: center; }
-.selector-modelo-header .opcion-modelo-desc { font-size: 11.5px; color: var(--texto-suave); line-height: 1.4; margin-top: 2px; }
+.selector-modelo-header .opcion-modelo:last-child { margin-bottom: 0 !important; }
+.selector-modelo-header .opcion-modelo:hover { background: #F5E0D0 !important; }
+html.tema-night .selector-modelo-header .opcion-modelo:hover { background: #2A3045 !important; }
+.selector-modelo-header .opcion-modelo.activa { border-color: #C9663A !important; background: #F5E0D0 !important; }
+html.tema-night .selector-modelo-header .opcion-modelo.activa { background: #2A3045 !important; }
+.selector-modelo-header .opcion-modelo.no-disponible { opacity: 0.6 !important; cursor: not-allowed !important; pointer-events: none !important; }
+.selector-modelo-header .opcion-modelo-fila { display: flex !important; align-items: center !important; justify-content: space-between !important; gap: 8px !important; }
+.selector-modelo-header .opcion-modelo-nombre { font-size: 14px !important; font-weight: 600 !important; color: #333 !important; }
+html.tema-night .selector-modelo-header .opcion-modelo-nombre { color: #e6e6e6 !important; }
+.selector-modelo-header .opcion-modelo-badges { display: flex !important; gap: 5px !important; align-items: center !important; flex-shrink: 0 !important; }
+.selector-modelo-header .opcion-modelo-desc { font-size: 12px !important; color: #888 !important; line-height: 1.4 !important; margin-top: 4px !important; }
+html.tema-night .selector-modelo-header .opcion-modelo-desc { color: #999 !important; }
+.selector-modelo-header .opcion-modelo-badge { font-size: 10px !important; font-weight: 600 !important; padding: 2px 6px !important; border-radius: 6px !important; }
+.selector-modelo-header .opcion-modelo-badge-beta { background: #2E8B57 !important; color: white !important; }
+.selector-modelo-header .opcion-modelo-badge-pronto { background: #6c757d !important; color: white !important; }
