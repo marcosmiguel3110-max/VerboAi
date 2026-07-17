@@ -90,6 +90,10 @@ const POLLINATIONS_TEXT_MODEL = process.env.POLLINATIONS_TEXT_MODEL || 'openai-f
 const POLLINATIONS_TEXT_URL = process.env.POLLINATIONS_TEXT_URL || 'https://text.pollinations.ai/openai';
 const POLLINATIONS_TEXT_TIMEOUT = parseInt(process.env.POLLINATIONS_TEXT_TIMEOUT || '60000', 10);
 const POLLINATIONS_TEXT_REFERER = process.env.POLLINATIONS_TEXT_REFERER || 'https://verboai.duckdns.org';
+// Token OPCIONAL de Pollinations (registrarse gratis en https://enter.pollinations.ai).
+// Si esta seteado, se envia como Authorization: Bearer <token> y desbloquea los
+// modelos "nectar" (glm-5.2, etc). Sin token, solo openai-fast (anonimo).
+const POLLINATIONS_TEXT_API_TOKEN = process.env.POLLINATIONS_TEXT_API_TOKEN || '';
 
 const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 
@@ -287,6 +291,10 @@ async function llamarPollinationsTexto(messages, systemPrompt, opciones = {}) {
 
   const headers = { 'Content-Type': 'application/json' };
   if (POLLINATIONS_TEXT_REFERER) headers['Referer'] = POLLINATIONS_TEXT_REFERER;
+  // Si hay token configurado, lo enviamos para desbloquear modelos nectar (glm-5.2, etc)
+  if (POLLINATIONS_TEXT_API_TOKEN) {
+    headers['Authorization'] = `Bearer ${POLLINATIONS_TEXT_API_TOKEN}`;
+  }
 
   const body = {
     model: POLLINATIONS_TEXT_MODEL,
@@ -317,7 +325,8 @@ async function llamarPollinationsTexto(messages, systemPrompt, opciones = {}) {
       console.error('[pollinations-text] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
       return { ok: false, error: 'Respuesta vacia de Pollinations texto' };
     }
-    console.log(`[pollinations-text] OK - ${texto.length} chars devueltos por ${modeloReal}`);
+    const authMode = POLLINATIONS_TEXT_API_TOKEN ? 'nectar' : 'anonymous';
+    console.log(`[pollinations-text] OK [${authMode}] - ${texto.length} chars devueltos por ${modeloReal}`);
     return { ok: true, texto: texto.trim(), modelo: modeloReal };
   } catch (e) {
     if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return { ok: false, error: 'cancelado' };
