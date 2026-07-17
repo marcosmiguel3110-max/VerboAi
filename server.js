@@ -31,6 +31,18 @@ const GROQ_MODEL_TEXTO = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
 const GROQ_MODEL_VISION = process.env.GROQ_MODEL_VISION || 'meta-llama/llama-4-scout-17b-16e-instruct';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
+// NewserPro (solo admin): texto + razonamiento + vision. Mismo feature set que
+// NewserAdvanced1.5, pero con otra config de imagen (flux-realism 16:9).
+// NOTA: "Qwen 3.6 27B" no existe en Groq hoy; el modelo Qwen3 mas cercano es qwen3-32b.
+// Si Groq agrega ese modelo (o queres usar otro proveedor), sobrescribilo con GROQ_MODEL_QWEN_PRO.
+const GROQ_MODEL_PRO_TEXTO = process.env.GROQ_MODEL_PRO || process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b';
+const GROQ_MODEL_PRO_RAZONAMIENTO = process.env.GROQ_MODEL_QWEN_PRO || process.env.GROQ_MODEL_QWEN || 'qwen/qwen3-32b';
+
+// Config de Pollinations para NewserPro: flux-realism + enhance + 1024x576 (16:9).
+const POLLINATIONS_PRO_MODEL = process.env.POLLINATIONS_MODEL_PRO || 'flux-realism';
+const POLLINATIONS_PRO_WIDTH = parseInt(process.env.POLLINATIONS_WIDTH_PRO || '1024', 10);
+const POLLINATIONS_PRO_HEIGHT = parseInt(process.env.POLLINATIONS_HEIGHT_PRO || '576', 10);
+
 const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 
 const MODELOS_DISPONIBLES = {
@@ -73,26 +85,38 @@ const MODELOS_DISPONIBLES = {
   },
   NewserPro: {
     nombre: 'NewserPro',
-    descripcion: 'Pronto. Modelo profesional con capacidades premium.',
-    modeloTexto: null,
-    modeloVision: null,
+    descripcion: 'Exclusivo admin. Razonamiento profundo (Qwen3 + GPT-OSS-120B), ejecuta codigo real, busca en la web, y genera imagenes en alta calidad con flux-realism (16:9, 1024x576). Mismo feature set que NewserAdvanced1.5.',
+    modeloTexto: GROQ_MODEL_PRO_TEXTO,
+    modeloTextoRazonamiento: GROQ_MODEL_PRO_RAZONAMIENTO,
+    modeloVision: GROQ_MODEL_VISION,
     costoCreditos: 0,
-    rateLimitMax: 0,
-    rateLimitMaxWeb: 0,
-    maxTokens: 0,
-    badge: 'pronto',
-    disponible: false,
+    rateLimitMax: 5,
+    rateLimitMaxWeb: 6,
+    maxTokens: 3072,
+    badge: 'admin',
+    disponible: true,
+    soloAdmin: true,
+    imagenModelo: POLLINATIONS_PRO_MODEL,
+    imagenAncho: POLLINATIONS_PRO_WIDTH,
+    imagenAlto: POLLINATIONS_PRO_HEIGHT,
+    imagenEnhance: true,
   },
 };
 const MODELO_DEFAULT = 'NewserLite';
 
-function resolverModelo(valor) {
+function resolverModelo(valor, usuario) {
   if (typeof valor !== 'string') return MODELOS_DISPONIBLES[MODELO_DEFAULT];
   const limpio = valor.trim();
   if (!limpio) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
   const clave = Object.keys(MODELOS_DISPONIBLES).find((k) => k.toLowerCase() === limpio.toLowerCase());
   if (!clave) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
   const config = MODELOS_DISPONIBLES[clave];
+  if (config.soloAdmin && !usuarioEsAdmin(usuario)) {
+    const err = new Error('El modelo "' + config.nombre + '" es exclusivo para cuentas administrador. Si crees que deberias tener acceso, contacta al administrador.');
+    err.codigo = 403;
+    err.modeloBloqueado = true;
+    throw err;
+  }
   if (config.disponible === false) {
     const err = new Error('El modelo "' + config.nombre + '" no esta disponible aun. Usa NewserLite, NewserAdvanced o NewserAdvanced1.5.');
     err.codigo = 400;
@@ -476,6 +500,16 @@ const ADMIN_EMAILS = new Set(
 );
 function esAdmin(usuario) {
   if (!usuario || usuario.startsWith('local:')) return false;
+  return ADMIN_EMAILS.has(usuario.toLowerCase());
+}
+
+// "Admin completo" a efectos de NewserPro: incluye tanto al admin local
+// (el que entra con APP_USER/APP_PASS, prefix "local:") como a los emails
+// listados en ADMIN_EMAILS. Esto es lo que usa resolverModelo() y el
+// filtro de /api/config para mostrar u ocultar NewserPro.
+function usuarioEsAdmin(usuario) {
+  if (!usuario) return false;
+  if (usuario.startsWith('local:')) return true;
   return ADMIN_EMAILS.has(usuario.toLowerCase());
 }
 
@@ -1344,10 +1378,10 @@ app.post('/api/v1/chat', async (req, res) => {
 
   let configModelo;
   try {
-    configModelo = resolverModelo(req.body.modelo);
+    configModelo = resolverModelo(req.body.modelo, token.propietario);
   } catch (e) {
-    if (e.modeloBloqueado) return res.status(400).json({ ok: false, error: e.message });
-    configModelo = resolverModelo(null);
+    if (e.modeloBloqueado) return res.status(e.codigo || 400).json({ ok: false, error: e.message });
+    configModelo = resolverModelo(null, token.propietario);
   }
 
   const controlUso = registrarUsoToken(token, {
@@ -1368,10 +1402,12 @@ app.post('/api/v1/chat', async (req, res) => {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
   } else if (configModelo.nombre === 'NewserAdvanced1.5') {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_ADVANCED_15_EXTRA;
+  } else if (configModelo.nombre === 'NewserPro') {
+    systemPrompt = systemPrompt + SYSTEM_PROMPT_PRO_EXTRA;
   }
 
   let razonamientoPrevioApi = '';
-  if (configModelo.nombre === 'NewserAdvanced1.5' && configModelo.modeloTextoRazonamiento) {
+  if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') && configModelo.modeloTextoRazonamiento) {
     try {
       const respRaz = await llamarGroqConReintentos({
         method: 'POST',
@@ -1406,15 +1442,16 @@ app.post('/api/v1/chat', async (req, res) => {
 
   const intencionImagenApi = detectarGeneracionImagen(mensaje);
   if (intencionImagenApi.esGeneracion) {
-    if (configModelo.nombre !== 'NewserAdvanced' && configModelo.nombre !== 'NewserAdvanced1.5') {
+    if (configModelo.nombre !== 'NewserAdvanced' && configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPro') {
       return res.status(400).json({
         ok: false,
-        error: 'La generacion de imagenes solo esta disponible con NewserAdvanced o NewserAdvanced1.5. Mandá "modelo":"NewserAdvanced" o "NewserAdvanced1.5" en el body para usarla.',
+        error: 'La generacion de imagenes solo esta disponible con NewserAdvanced, NewserAdvanced1.5 o NewserPro. Mandá "modelo":"NewserAdvanced", "NewserAdvanced1.5" o "NewserPro" en el body para usarla.',
       });
     }
 
     const tokenActual = buscarTokenPorValor(valorToken);
     const esDetallada = configModelo.nombre === 'NewserAdvanced1.5';
+    const esPro = configModelo.nombre === 'NewserPro';
 
     if (esDetallada) {
       const controlImg15 = verificarLimiteImagen15(tokenActual ? `token:${tokenActual.id}` : null);
@@ -1431,7 +1468,13 @@ app.post('/api/v1/chat', async (req, res) => {
       });
     }
 
-    const resultado = await generarImagenPollinations(intencionImagenApi.prompt, undefined, { detallada: esDetallada });
+    const resultado = await generarImagenPollinations(intencionImagenApi.prompt, undefined, {
+      detallada: esDetallada,
+      modeloOverride: esPro ? configModelo.imagenModelo : null,
+      anchoOverride: esPro ? configModelo.imagenAncho : null,
+      altoOverride: esPro ? configModelo.imagenAlto : null,
+      enhanceOverride: esPro ? configModelo.imagenEnhance : null,
+    });
     if (!resultado || !resultado.img) {
       console.error('[api/v1/chat] generacion de imagen fallo:', resultado ? resultado.error : 'sin resultado');
       return res.status(502).json({
@@ -1515,15 +1558,15 @@ app.post('/api/v1/chat', async (req, res) => {
 
     const reCodeApi = /\[\[CODE::([^:\]]+)::([\s\S]*?)\]\]/g;
     const mCode = [...texto.matchAll(reCodeApi)];
-    if (mCode.length && configModelo.nombre === 'NewserAdvanced1.5') { codeQueryApi = { lenguaje: mCode[0][1].trim(), codigo: mCode[0][2].trim() }; }
+    if (mCode.length && (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro')) { codeQueryApi = { lenguaje: mCode[0][1].trim(), codigo: mCode[0][2].trim() }; }
     textoLimpio = textoLimpio.replace(reCodeApi, '');
 
     const reApidataApi = /\[\[APIDATA::([^\]]+)\]\]/g;
     const mApidata = [...texto.matchAll(reApidataApi)];
-    if (mApidata.length && configModelo.nombre === 'NewserAdvanced1.5') { apidataQueryApi = mApidata[0][1].trim(); }
+    if (mApidata.length && (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro')) { apidataQueryApi = mApidata[0][1].trim(); }
     textoLimpio = textoLimpio.replace(reApidataApi, '');
 
-    if (configModelo.nombre !== 'NewserAdvanced1.5') {
+    if (configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPro') {
       const reClimaApi = /\[\[CLIMA::([^\]]+)\]\]/g;
       const mClima = [...texto.matchAll(reClimaApi)];
       if (mClima.length) { climaQueryApi = mClima[0][1].trim(); textoLimpio = textoLimpio.replace(reClimaApi, ''); }
@@ -1716,18 +1759,22 @@ app.get('/api/v1/info', (req, res) => {
   if (!token) return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
 
   const esAdmin = token.propietario && token.propietario.startsWith('local:');
+  const esAdminToken = usuarioEsAdmin(token.propietario);
   const creditosGlobales = leerCreditosGlobales(token.propietario);
 
-  const modelos = Object.values(MODELOS_DISPONIBLES).map((m) => ({
-    nombre: m.nombre,
-    descripcion: m.descripcion,
-    costoCreditos: m.costoCreditos,
-    rateLimitMax: m.rateLimitMax,
-    rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
-    maxTokens: m.maxTokens,
-    badge: m.badge || null,
-    disponible: m.disponible !== false,
-  }));
+  const modelos = Object.values(MODELOS_DISPONIBLES)
+    .filter((m) => !m.soloAdmin || esAdminToken)
+    .map((m) => ({
+      nombre: m.nombre,
+      descripcion: m.descripcion,
+      costoCreditos: m.costoCreditos,
+      rateLimitMax: m.rateLimitMax,
+      rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
+      maxTokens: m.maxTokens,
+      badge: m.badge || null,
+      disponible: m.disponible !== false,
+      soloAdmin: !!m.soloAdmin,
+    }));
 
   res.json({
     ok: true,
@@ -1944,6 +1991,55 @@ intentes escribir ninguna etiqueta de imagen tu mismo.
 NOTA: este modelo NO tiene la herramienta CLIMA (fue reemplazada por estas dos herramientas nuevas). Si
 te preguntan por el clima, respondeles que en este modelo no esta disponible y sugeriles cambiar a
 NewserAdvanced para eso.
+
+HERRAMIENTA "CODE" (para ejecutar codigo real y devolver el resultado real, nunca inventado):
+Cuando el usuario te pida ejecutar codigo, probar un snippet, ver el resultado de un programa, o cuando
+vos mismo quieras verificar que un codigo funciona antes de dárselo, agregas al FINAL de tu respuesta,
+en su propia linea, EXACTAMENTE este formato:
+[[CODE::lenguaje::codigo]]
+Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real dentro de la etiqueta.
+Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
+rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r.
+Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
+Esto ejecuta el codigo REAL en un sandbox (Judge0 API) y el resultado real (stdout/stderr) se agrega
+despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
+esta herramienta en vez de imaginarte el resultado.
+
+HERRAMIENTA "APIDATA" (para traer datos de ejemplo reales desde una API REST de prueba, util para
+explicar estructuras JSON, endpoints, o mostrar como luce una respuesta de API real):
+Cuando el usuario pida ver un ejemplo de API REST, un endpoint de prueba, o datos de ejemplo (posts,
+usuarios, comentarios, tareas, albumes, fotos), agregas al FINAL de tu respuesta, en su propia linea,
+EXACTAMENTE este formato:
+[[APIDATA::recurso]]
+Donde "recurso" es uno de: posts, comments, albums, photos, todos, users (opcionalmente podes pedir uno
+solo agregando /ID, ej "posts/1" o "users/3").
+Ejemplo: "mostrame un ejemplo de un post de una API" -> tu respuesta breve + [[APIDATA::posts/1]]
+Esto consulta JSONPlaceholder (API REST publica de prueba) y agrega el JSON real despues de tu respuesta.
+
+Estas etiquetas [[CODE::...]] y [[APIDATA::...]] son invisibles para el usuario, se procesan aparte por el
+sistema. Nunca las menciones ni las escribas a la mitad del texto. Podes combinar varias herramientas
+en la misma respuesta (WEB, CODE, APIDATA), cada una en su propia linea al final.`;
+
+const SYSTEM_PROMPT_PRO_EXTRA = `
+
+TENES RAZONAMIENTO EXTRA: antes de esta respuesta, otro modelo (Qwen3-32B) ya penso un borrador interno
+del plan de respuesta; si ves una seccion "[RAZONAMIENTO INTERNO PREVIO...]" en tu contexto, usala solo
+como guia para pensar mejor, nunca la repitas literalmente ni la menciones al usuario.
+
+HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserPro):
+Sos el modelo premium exclusivo para cuentas administrador. Tenes exactamente el mismo feature set que
+NewserAdvanced1.5 (CUADERNO, BUSCAR, DESCARGAR, INVESTIGAR, WEB, CODE, APIDATA) pero con generacion de
+imagenes en alta calidad usando flux-realism en formato 16:9 (1024x576).
+
+NOTA IMPORTANTE SOBRE IMAGENES: si el usuario quiere generar/crear una imagen, NO tenes que hacer nada.
+El sistema detecta automaticamente cuando un mensaje empieza con "Genera", "Generame", "Genera", etc. y
+genera la imagen sin pasar por vos. Si te preguntan si podes generar imagenes, decis que si, y que para
+hacerlo tienen que escribir "Generame [descripcion]" como mensaje. En este modelo las imagenes se generan
+con flux-realism en 16:9 (1024x576), alta calidad con enhance. NO intentes escribir ninguna etiqueta de
+imagen tu mismo.
+
+NOTA: este modelo NO tiene la herramienta CLIMA (al igual que NewserAdvanced1.5). Si te preguntan por el
+clima, respondeles que en este modelo no esta disponible y sugeriles cambiar a NewserAdvanced para eso.
 
 HERRAMIENTA "CODE" (para ejecutar codigo real y devolver el resultado real, nunca inventado):
 Cuando el usuario te pida ejecutar codigo, probar un snippet, ver el resultado de un programa, o cuando
@@ -2411,18 +2507,27 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
   if (!promptLimpio) return { img: null, error: 'Prompt vacio' };
   const seedFinal = (typeof seed === 'number' && seed > 0) ? seed : Math.floor(Math.random() * 1000000);
   const detallada = !!opciones.detallada;
+
+  // Override exclusivo de NewserPro: modelo flux-realism, 1024x576 (16:9), enhance=true.
+  // Si llegan modeloOverride/anchoOverride/altoOverride, se respetan por encima del
+  // comportamiento default (cuadrado de 1024 o 1536 segun detallada).
+  const modeloFinal = opciones.modeloOverride || 'flux';
+  const anchoFinal = Number.isInteger(opciones.anchoOverride) ? opciones.anchoOverride : (detallada ? 1536 : 1024);
+  const altoFinal = Number.isInteger(opciones.altoOverride) ? opciones.altoOverride : (detallada ? 1536 : 1024);
+  const enhanceFinal = (typeof opciones.enhanceOverride === 'boolean') ? opciones.enhanceOverride : detallada;
+
   // Modo detallada (NewserAdvanced1.5): mas resolucion y "enhance=true" (un segundo modelo de IA
   // que reescribe/mejora el prompt antes de renderizar la imagen final), por eso tarda un poco mas.
-  const dimension = detallada ? 1536 : 1024;
-  const timeouts = detallada ? [45000, 60000, 75000] : [30000, 45000, 60000];
+  // Modo Pro (NewserPro): flux-realism + 1024x576 + enhance=true (alta calidad 16:9).
+  const timeouts = (detallada || enhanceFinal) ? [45000, 60000, 75000] : [30000, 45000, 60000];
   let ultimoError = null;
 
   for (let intento = 0; intento < timeouts.length; intento++) {
     try {
-      const paramsExtra = detallada ? '&enhance=true' : '';
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?width=${dimension}&height=${dimension}&seed=${seedFinal}&nologo=true&model=flux${paramsExtra}`;
+      const paramsExtra = enhanceFinal ? '&enhance=true' : '';
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${encodeURIComponent(modeloFinal)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true${paramsExtra}`;
 
-      console.log(`[pollinations] Intento ${intento + 1}/${timeouts.length}${detallada ? ' [alta calidad]' : ''} - prompt: "${promptLimpio.slice(0, 50)}..."`);
+      console.log(`[pollinations] Intento ${intento + 1}/${timeouts.length}${detallada ? ' [alta calidad]' : ''}${opciones.modeloOverride ? ` [modelo=${modeloFinal} ${anchoFinal}x${altoFinal}]` : ''} - prompt: "${promptLimpio.slice(0, 50)}..."`);
       const resp = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         signal: AbortSignal.timeout(timeouts[intento]),
@@ -2461,6 +2566,10 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
           seed: seedFinal,
           tamanoKB: Math.round(buffer.length / 1024),
           detallada,
+          modelo: modeloFinal,
+          ancho: anchoFinal,
+          alto: altoFinal,
+          enhance: enhanceFinal,
         },
         error: null,
       };
@@ -2723,16 +2832,21 @@ app.get('/api/memoria', (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
+  const usuarioActual = obtenerUsuarioActual(req);
+  const esAdminConfig = usuarioEsAdmin(usuarioActual);
 
-  const modelos = Object.values(MODELOS_DISPONIBLES).map((m) => ({
-    nombre: m.nombre,
-    descripcion: m.descripcion,
-    costoCreditos: m.costoCreditos,
-    rateLimitMax: m.rateLimitMax,
-    rateLimitMaxWeb: m.rateLimitMaxWeb,
-    badge: m.badge || null,
-    disponible: m.disponible !== false,
-  }));
+  const modelos = Object.values(MODELOS_DISPONIBLES)
+    .filter((m) => !m.soloAdmin || esAdminConfig)
+    .map((m) => ({
+      nombre: m.nombre,
+      descripcion: m.descripcion,
+      costoCreditos: m.costoCreditos,
+      rateLimitMax: m.rateLimitMax,
+      rateLimitMaxWeb: m.rateLimitMaxWeb,
+      badge: m.badge || null,
+      disponible: m.disponible !== false,
+      soloAdmin: !!m.soloAdmin,
+    }));
   res.json({
     app: "Verbo AI",
     desarrollador: "VerboAITeams",
@@ -2740,6 +2854,7 @@ app.get('/api/config', (req, res) => {
     documentacion: "/info",
     modelo: MODELO_DEFAULT,
     modeloDefault: MODELO_DEFAULT,
+    esAdmin: esAdminConfig,
     modelos,
   });
 });
@@ -2848,10 +2963,12 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   const chatId = (req.body.chatId || '').trim();
   const modoElegido = (req.body.modo || 'general').trim();
 
+  const usuarioParaModelo = obtenerUsuarioActual(req);
   let configModelo;
   try {
-    configModelo = resolverModelo(req.body.modelo);
+    configModelo = resolverModelo(req.body.modelo, usuarioParaModelo);
   } catch (e) {
+    if (e.modeloBloqueado) return res.status(e.codigo || 400).json({ error: e.message });
     return res.status(400).json({ error: e.message });
   }
   let imagenes = [];
@@ -2874,7 +2991,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
   const intencionImagen = detectarGeneracionImagen(mensajeOriginal);
   if (intencionImagen.esGeneracion) {
-    if (configModelo.nombre !== 'NewserAdvanced' && configModelo.nombre !== 'NewserAdvanced1.5') {
+    if (configModelo.nombre !== 'NewserAdvanced' && configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPro') {
 
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
@@ -2891,7 +3008,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         });
         chatGen.mensajes.push({
           role: 'assistant',
-          contenidoTexto: 'La generacion de imagenes solo esta disponible con NewserAdvanced o NewserAdvanced1.5. Cambiá el modelo en el selector de abajo para usarla.',
+          contenidoTexto: 'La generacion de imagenes solo esta disponible con NewserAdvanced, NewserAdvanced1.5 o NewserPro. Cambiá el modelo en el selector de abajo para usarla.',
           fecha: new Date().toISOString(),
         });
         if (chatGen.titulo === 'Nueva conversacion' && mensajeOriginal) {
@@ -2899,7 +3016,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         }
         chatGen.actualizadoEn = new Date().toISOString();
         guardarDB(dbGen);
-        res.write(JSON.stringify({ type: 'chunk', text: 'La generacion de imagenes solo esta disponible con **NewserAdvanced** o **NewserAdvanced1.5**. Cambiá el modelo en el selector de abajo (al lado del microfono) para usarla.' }) + '\n');
+        res.write(JSON.stringify({ type: 'chunk', text: 'La generacion de imagenes solo esta disponible con **NewserAdvanced**, **NewserAdvanced1.5** o **NewserPro**. Cambiá el modelo en el selector de abajo (al lado del microfono) para usarla.' }) + '\n');
         res.write(JSON.stringify({ type: 'done', chatId: chatGen.id }) + '\n');
         res.end();
       } catch (e) {
@@ -2909,6 +3026,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
 
     const esDetalladaWeb = configModelo.nombre === 'NewserAdvanced1.5';
+    const esProWeb = configModelo.nombre === 'NewserPro';
     if (esDetalladaWeb) {
       const usuarioActualImg15 = obtenerUsuarioActual(req);
       const controlImg15Web = verificarLimiteImagen15(usuarioActualImg15 ? `web:${usuarioActualImg15}` : null);
@@ -2968,7 +3086,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         chatGen.titulo = mensajeOriginal.length > 40 ? mensajeOriginal.slice(0, 40) + '…' : mensajeOriginal;
       }
 
-      enviarGen({ type: 'chunk', text: esDetalladaWeb ? `Generando imagen en alta calidad (2 modelos de IA): **${intencionImagen.prompt}**...` : `Generando imagen: **${intencionImagen.prompt}**...` });
+      enviarGen({ type: 'chunk', text: (esDetalladaWeb || esProWeb) ? `Generando imagen en alta calidad${esProWeb ? ' (flux-realism 16:9)' : ' (2 modelos de IA)'}: **${intencionImagen.prompt}**...` : `Generando imagen: **${intencionImagen.prompt}**...` });
       enviarGen({ type: 'investigando', query: `Generando imagen: ${intencionImagen.prompt}` });
       enviarGen({ type: 'investigando_sitio', sitio: 'image.pollinations.ai' });
 
@@ -2978,7 +3096,13 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
       let resultadoImg = null;
       try {
-        resultadoImg = await generarImagenPollinations(intencionImagen.prompt, undefined, { detallada: esDetalladaWeb });
+        resultadoImg = await generarImagenPollinations(intencionImagen.prompt, undefined, {
+          detallada: esDetalladaWeb,
+          modeloOverride: esProWeb ? configModelo.imagenModelo : null,
+          anchoOverride: esProWeb ? configModelo.imagenAncho : null,
+          altoOverride: esProWeb ? configModelo.imagenAlto : null,
+          enhanceOverride: esProWeb ? configModelo.imagenEnhance : null,
+        });
       } finally {
         clearInterval(heartbeat);
       }
@@ -2991,7 +3115,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
         chatGen.mensajes.push({
           role: 'assistant',
-          contenidoTexto: esDetalladaWeb ? `Imagen generada en alta calidad: ${intencionImagen.prompt}` : `Imagen generada: ${intencionImagen.prompt}`,
+          contenidoTexto: (esDetalladaWeb || esProWeb) ? `Imagen generada en alta calidad${esProWeb ? ' (flux-realism)' : ''}: ${intencionImagen.prompt}` : `Imagen generada: ${intencionImagen.prompt}`,
           fecha: new Date().toISOString(),
           descargas: [{ url: img.url, nombre: img.prompt, tamanoKB: img.tamanoKB }],
         });
@@ -3074,13 +3198,15 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
     } else if (configModelo.nombre === 'NewserAdvanced1.5') {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_ADVANCED_15_EXTRA;
+    } else if (configModelo.nombre === 'NewserPro') {
+      systemPrompt = systemPrompt + SYSTEM_PROMPT_PRO_EXTRA;
     }
 
     if (imagenes.length) {
       systemPrompt += `\n\nNOTA SOBRE IMAGENES ADJUNTAS: el usuario adjunto ${imagenes.length > 1 ? 'imagenes' : 'una imagen'} en este mensaje. Antes de responder, analizala con maxima atencion y en detalle: fijate bien en TODOS los elementos visibles (texto, numeros, colores, personas, objetos, disposicion, errores, codigo, capturas de pantalla, etc.), no te quedes con una descripcion superficial ni generica. Si el usuario pide una tarea concreta sobre la imagen (resolver algo, identificar un error, transcribir texto, explicar un codigo, comparar cosas, etc.), primero examina la imagen a fondo y recien despues cumplí exactamente lo que se te pide, basandote solo en lo que realmente se ve, sin inventar ni asumir detalles que no esten claramente visibles.`;
     }
 
-    if (configModelo.nombre === 'NewserAdvanced1.5' && configModelo.modeloTextoRazonamiento && !imagenes.length) {
+    if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') && configModelo.modeloTextoRazonamiento && !imagenes.length) {
       enviar({ type: 'investigando', query: 'Razonando con Qwen3-32B...' });
       enviar({ type: 'investigando_sitio', sitio: 'Modulo de razonamiento (Qwen3-32B)' });
       try {
@@ -3254,7 +3380,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
 
     const reClimaG = /\[\[CLIMA::([^\]]+)\]\]/g;
-    if (configModelo.nombre !== 'NewserAdvanced1.5') {
+    if (configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPro') {
       const coincidenciasClima = [...textoVisible.matchAll(reClimaG)];
       if (coincidenciasClima.length) {
         climaQuery = coincidenciasClima[0][1].trim();
@@ -3265,7 +3391,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
 
     const reCodeG = /\[\[CODE::([^:\]]+)::([\s\S]*?)\]\]/g;
-    if (configModelo.nombre === 'NewserAdvanced1.5') {
+    if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') {
       const coincidenciasCode = [...textoVisible.matchAll(reCodeG)];
       if (coincidenciasCode.length) {
         codeQuery = { lenguaje: coincidenciasCode[0][1].trim(), codigo: coincidenciasCode[0][2].trim() };
@@ -3274,7 +3400,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     textoVisible = textoVisible.replace(reCodeG, '');
 
     const reApidataG = /\[\[APIDATA::([^\]]+)\]\]/g;
-    if (configModelo.nombre === 'NewserAdvanced1.5') {
+    if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') {
       const coincidenciasApidata = [...textoVisible.matchAll(reApidataG)];
       if (coincidenciasApidata.length) {
         apidataQuery = coincidenciasApidata[0][1].trim();
@@ -3326,7 +3452,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       const versiculos = await esperarMinimo(investigarBiblia(investigarQuery), 1000);
 
       let webInvestigacion = null;
-      if (configModelo.nombre === 'NewserAdvanced1.5') {
+      if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') {
         enviar({ type: 'investigando_sitio', sitio: 'Busqueda web adicional (investigacion profunda)' });
         const resWeb = await esperarMinimo(buscarWebGoogle(investigarQuery), 1000);
         if (resWeb && resWeb.exito && resWeb.resultados.length) webInvestigacion = resWeb.resultados;
@@ -3338,7 +3464,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       if (webInvestigacion) webInvestigacion.forEach((r) => fuentes.push({ titulo: r.titulo, url: r.link }));
 
       if (wiki || (versiculos && versiculos.length) || webInvestigacion) {
-        const textoInvestigado = await sintetizarInvestigacion(investigarQuery, wiki, versiculos, webInvestigacion, configModelo.nombre === 'NewserAdvanced1.5' ? configModelo.modeloTexto : null);
+        const textoInvestigado = await sintetizarInvestigacion(investigarQuery, wiki, versiculos, webInvestigacion, (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') ? configModelo.modeloTexto : null);
         if (textoInvestigado) {
           enviar({ type: 'chunk', text: `\n\n${textoInvestigado}` });
           textoVisible = `${textoVisible}\n\n${textoInvestigado}`.trim();
