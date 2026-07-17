@@ -2337,8 +2337,13 @@ html.tema-night .btn-menu-movil:hover { background: var(--hover-noche); }
   /* Modal de la Biblia y lightbox ya son pantalla completa, solo achicamos texto */
   .biblia-capitulo-titulo { font-size: 20px; }
 
-  .entrada { gap: 8px; }
-  .entrada textarea, .entrada input[type="text"] { font-size: 16px; } /* evita zoom automatico en iOS */
+  .entrada { gap: 6px; margin: 10px 4%; padding: 6px 8px; }
+  .entrada textarea, .entrada input[type="text"] { font-size: 16px; }
+  .btn-icono { width: 32px; height: 32px; }
+  .btn-icono svg { width: 17px; height: 17px; }
+  .btn-selector-modelo { padding: 0 8px; font-size: 12px; height: 32px; }
+  .selector-modelo-flecha { width: 10px; height: 10px; }
+  .selector-modelo-nombre { font-size: 12px; }
 }
 
 @media (max-width: 480px) {
@@ -2349,7 +2354,15 @@ html.tema-night .btn-menu-movil:hover { background: var(--hover-noche); }
   .nav-item-nuevo { font-size: 13px; padding: 10px; }
   .item-chat { font-size: 12.5px; }
 
-  .biblia-nav-capitulo { order: 3; }
+  .entrada { gap: 4px; margin: 8px 2%; padding: 5px 6px; }
+  .btn-icono { width: 30px; height: 30px; flex-shrink: 0; }
+  .btn-icono svg { width: 16px; height: 16px; }
+  .btn-selector-modelo { padding: 0 6px; font-size: 11px; height: 30px; }
+  .selector-modelo-nombre { font-size: 11px; }
+  .selector-modelo-flecha { width: 9px; height: 9px; }
+  #inputTexto { font-size: 16px; padding: 6px; }
+  .selector-modelo-menu { min-width: 220px; right: 0; }
+  .preview-imagen { margin: 0 2% 6px; }
   .biblia-zoom { order: 3; }
   .biblia-btn-marcar { order: 4; width: 100%; justify-content: center; margin-left: 0; margin-top: 6px; }
   .biblia-aviso-marcador { font-size: 11.5px; }
