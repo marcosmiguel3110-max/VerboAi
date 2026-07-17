@@ -726,14 +726,25 @@ function aplicarModeloUI() {
 
 function abrirSelectorModelo() {
   if (!selectorModeloMenu) return;
-  const btnActivo = document.activeElement;
-  const btnHeader = document.getElementById('btnSelectorModeloHeader');
   if (btnSelectorModelo) {
     btnSelectorModelo.classList.add('abierto');
     btnSelectorModelo.setAttribute('aria-expanded', 'true');
   }
-  if (btnHeader) {
-    btnHeader.classList.add('abierto');
+  const btnHeader = document.getElementById('btnSelectorModeloHeader');
+  if (btnHeader) btnHeader.classList.add('abierto');
+  const menuHeader = document.getElementById('selectorModeloMenuHeader');
+  if (menuHeader) {
+    menuHeader.innerHTML = selectorModeloMenu.innerHTML;
+    menuHeader.classList.remove('oculto');
+    menuHeader.querySelectorAll('.opcion-modelo').forEach((op) => {
+      if (op.disabled) return;
+      op.addEventListener('click', () => {
+        modeloActual = op.dataset.modelo;
+        localStorage.setItem('verboAiModelo', modeloActual);
+        aplicarModeloUI();
+        cerrarSelectorModelo();
+      });
+    });
   }
   selectorModeloMenu.classList.remove('oculto');
   aplicarModeloUI();
@@ -748,6 +759,8 @@ function cerrarSelectorModelo() {
   }
   const btnHeader = document.getElementById('btnSelectorModeloHeader');
   if (btnHeader) btnHeader.classList.remove('abierto');
+  const menuHeader = document.getElementById('selectorModeloMenuHeader');
+  if (menuHeader) menuHeader.classList.add('oculto');
 }
 
 function toggleSelectorModelo() {

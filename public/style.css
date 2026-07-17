@@ -2347,10 +2347,12 @@ html.tema-night .btn-menu-movil:hover { background: var(--hover-noche); }
   .selector-modelo-nombre { font-size: 12px; }
   .selector-modelo-header { display: block !important; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); }
   .selector-modelo-header .btn-selector-modelo { background: var(--crema-oscuro); border: 1px solid var(--borde); font-size: 12px; height: 30px; padding: 0 8px; }
+  .selector-modelo-header .selector-modelo-menu { position: absolute; top: 100%; right: 0; margin-top: 6px; min-width: 240px; z-index: 500; }
+  .selector-modelo-header .selector-modelo-menu.oculto { display: none; }
   .selector-modelo { position: absolute; width: 0; height: 0; overflow: visible; opacity: 0; pointer-events: none; }
   .selector-modelo .btn-selector-modelo { display: none; }
-  .selector-modelo-menu { position: fixed !important; top: 56px !important; right: 8px !important; left: auto !important; min-width: 240px; z-index: 500; }
-  .selector-modelo-menu.oculto { display: none !important; }
+  .selector-modelo-menu { z-index: 500; }
+  .selector-modelo-menu.oculto { display: none; }
   .btn-cuaderno-toggle { display: none; }
 }
 
