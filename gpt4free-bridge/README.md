@@ -1,74 +1,56 @@
-# Puente GPT4Free para GLM-4
+# Puente GLM-4 (GPT4Free, SIN API KEY)
 
-Mini-servicio en Python/Flask que expone `POST /v1/chat/completions` (formato OpenAI) y llama a **GLM-4** gratis. Diseñado para usarse con el endpoint `NewserPro` de VerboAI.
+Puente Python/Flask que expone `POST /v1/chat/completions` (formato OpenAI) y llama a **GLM-4 gratis** usando la librería `g4f`. **No requiere token, no requiere registro, no requiere API key.**
 
-## Dos modos de uso
+## Deploy en Render (5 minutos)
 
-### Modo A: Zhipu AI oficial (RECOMENDADO, más confiable)
+1. **Subí estos archivos a un repo nuevo de GitHub** (`verboai-glm-bridge`):
+   - `bridge.py`
+   - `requirements.txt`
+   - `Procfile`
+   - `README.md`
 
-Zhipu AI (los creadores de GLM-4) ofrece una API con tier gratuito generoso.
+2. **En Render** (https://dashboard.render.com):
+   - **"New +"** → **"Web Service"**
+   - Conectá tu repo `verboai-glm-bridge`
+   - **Name**: `verboai-glm-bridge`
+   - **Runtime**: Python 3
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `python bridge.py`
+   - **Plan**: Free
+   - **NO hace falta ninguna Environment Variable** ← sin token, sin config
+   - Click **"Create Web Service"**
 
-1. **Registrarse** en https://open.bigmodel.cn/ (es gratis, dan tokens gratuitos al registrarse)
-2. **Obtener API key**: Dashboard → API Keys → Create
-3. **Deployar este puente en Render**:
-   - Crear nuevo Web Service en https://render.com
-   - Conectar este repositorio/carpeta
-   - Runtime: **Python 3**
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `python bridge.py` (o dejar el Procfile)
-   - Environment Variables:
-     ```
-     USE_ZHIPU=true
-     ZHIPU_API_KEY=tu_api_key_de_bigmodel_cn
-     ```
-   - Plan: **Free** (alcanza para testing)
-4. **Copiar la URL** del servicio (ej: `https://verboai-glm-bridge.onrender.com`)
-5. **En tu `.env` de VerboAI** (el deploy principal, no este puente):
-   ```
-   GPT4FREE_ENABLED_PRO=true
-   GPT4FREE_URL=https://verboai-glm-bridge.onrender.com
-   GPT4FREE_MODEL=glm-4
-   ```
-6. Reiniciar VerboAI y probar con `curl`:
+3. **Esperá 2-3 minutos** a que deploye
+
+4. **Copiá la URL** (algo como `https://verboai-glm-bridge.onrender.com`)
+
+5. **Probá que funciona**:
    ```bash
-   curl -X POST https://verboai.duckdns.org/api/v1/pro-hybrid \
-     -H "Authorization: Bearer verboai-XXXX" \
-     -H "Content-Type: application/json" \
-     -d '{"mensaje":"Hola, quien eres?"}'
+   curl https://verboai-glm-bridge.onrender.com/health
    ```
-   La respuesta debería tener `capaGlm: true`.
+   Debería devolver:
+   ```json
+   {"status":"ok","service":"glm-bridge","mode":"g4f-free","api_key_required":false,"g4f_available":true}
+   ```
 
-### Modo B: g4f gratis sin registro (menos confiable)
+## Conectar con tu VerboAI
 
-Si no querés registrarte en Zhipu, podés usar la librería `g4f` que scrapea providers públicos de GLM-4. **Es menos confiable** porque los providers se caen seguido, pero funciona sin API key.
-
-1. **Deployar este puente en Render** (igual que arriba, pero SIN setear `USE_ZHIPU` ni `ZHIPU_API_KEY`).
-2. El puente usará `g4f` automáticamente.
-3. Setear `GPT4FREE_URL` en tu `.env` de VerboAI apuntando al puente.
-
-## Verificar que el puente funciona
-
-Una vez deployado, probá:
-
-```bash
-curl https://tu-bridge.onrender.com/health
+En tu servicio de VerboAI en Render → **Environment** → agregá estas 3 variables:
+```
+GPT4FREE_ENABLED_PRO=true
+GPT4FREE_URL=https://verboai-glm-bridge.onrender.com
+GPT4FREE_MODEL=glm-4
 ```
 
-Debería devolver:
-```json
-{"status":"ok","service":"gpt4free-bridge","mode":"zhipu","model":"glm-4","zhipu_configured":true}
+Reiniciá VerboAI y probá:
+```powershell
+$body = @{ mensaje = "Hola, ¿quién eres?" } | ConvertTo-Json
+Invoke-RestMethod -Uri "https://verboai.duckdns.org/api/v1/pro-hybrid" -Method Post -Headers $headers -Body $body
 ```
-
-Y una prueba de chat:
-
-```bash
-curl -X POST https://tu-bridge.onrender.com/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"glm-4","messages":[{"role":"user","content":"Hola"}]}'
-```
+Deberías ver `capaGlm: True` ✅
 
 ## Notas
-
-- El puente es **stateless** — no guarda nada, solo pasa la petición a GLM-4.
-- Render Free Tier puede dormir el servicio después de 15 min de inactividad. La primera petición después de dormir tarda ~30s extra. Para evitarlo, considerá un plan pago o un keep-alive (cron-job.org que pegue a `/health` cada 10 min).
-- Si usás modo g4f y falla seguido, cambiá a modo Zhipu (oficial) — es mucho más estable.
+- **100% gratis, sin token, sin registro** — usa la librería g4f que scrapea providers públicos de GLM-4.
+- g4f puede ser menos confiable que la API oficial (los providers se caen seguido). Si falla mucho, decime y te lo cambio a la API oficial de Zhipu (que también tiene tier gratis, pero requiere registro).
+- Render Free Tier duerme el servicio después de 15 min sin actividad. La primera petición después de dormir tarda ~30s extra.
