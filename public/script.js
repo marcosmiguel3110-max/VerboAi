@@ -716,6 +716,7 @@ function abrirSelectorModelo() {
       btnSelectorModelo.setAttribute('aria-expanded', 'true');
     }
   }
+  crearOverlaySelectorModelo();
   aplicarModeloUI();
 }
 
@@ -735,6 +736,7 @@ function cerrarSelectorModelo() {
   }
   var btnHeader = document.getElementById('btnSelectorModeloHeader');
   if (btnHeader) btnHeader.classList.remove('abierto');
+  quitarOverlaySelectorModelo();
 }
 
 function renderOpcionesModeloEn(contenedor) {
@@ -798,18 +800,17 @@ if (btnSelectorModeloHeader) {
   };
 }
 
-document.addEventListener('click', (ev) => {
-  var menuHeader = document.getElementById('selectorModeloMenuHeader');
-  var menuOculto = true;
-  if (selectorModeloMenu && !selectorModeloMenu.classList.contains('oculto')) menuOculto = false;
-  if (menuHeader && !menuHeader.classList.contains('oculto')) menuOculto = false;
-  if (menuOculto) return;
-  var contInput = document.getElementById('selectorModelo');
-  var contHeader = document.getElementById('selectorModeloHeader');
-  if (contInput && contInput.contains(ev.target)) return;
-  if (contHeader && contHeader.contains(ev.target)) return;
-  cerrarSelectorModelo();
-});
+var overlaySelectorModelo = null;
+function crearOverlaySelectorModelo() {
+  if (overlaySelectorModelo) return;
+  overlaySelectorModelo = document.createElement('div');
+  overlaySelectorModelo.style.cssText = 'position:fixed;inset:0;z-index:550;background:transparent;';
+  overlaySelectorModelo.onclick = function() { cerrarSelectorModelo(); };
+  document.body.appendChild(overlaySelectorModelo);
+}
+function quitarOverlaySelectorModelo() {
+  if (overlaySelectorModelo) { overlaySelectorModelo.remove(); overlaySelectorModelo = null; }
+}
 
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape') {
