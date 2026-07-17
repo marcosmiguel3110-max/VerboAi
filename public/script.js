@@ -725,18 +725,29 @@ function aplicarModeloUI() {
 }
 
 function abrirSelectorModelo() {
-  if (!selectorModeloMenu || !btnSelectorModelo) return;
+  if (!selectorModeloMenu) return;
+  const btnActivo = document.activeElement;
+  const btnHeader = document.getElementById('btnSelectorModeloHeader');
+  if (btnSelectorModelo) {
+    btnSelectorModelo.classList.add('abierto');
+    btnSelectorModelo.setAttribute('aria-expanded', 'true');
+  }
+  if (btnHeader) {
+    btnHeader.classList.add('abierto');
+  }
   selectorModeloMenu.classList.remove('oculto');
-  btnSelectorModelo.classList.add('abierto');
-  btnSelectorModelo.setAttribute('aria-expanded', 'true');
   aplicarModeloUI();
 }
 
 function cerrarSelectorModelo() {
-  if (!selectorModeloMenu || !btnSelectorModelo) return;
+  if (!selectorModeloMenu) return;
   selectorModeloMenu.classList.add('oculto');
-  btnSelectorModelo.classList.remove('abierto');
-  btnSelectorModelo.setAttribute('aria-expanded', 'false');
+  if (btnSelectorModelo) {
+    btnSelectorModelo.classList.remove('abierto');
+    btnSelectorModelo.setAttribute('aria-expanded', 'false');
+  }
+  const btnHeader = document.getElementById('btnSelectorModeloHeader');
+  if (btnHeader) btnHeader.classList.remove('abierto');
 }
 
 function toggleSelectorModelo() {
