@@ -212,7 +212,7 @@
     <p>Guía rápida para sacarle el jugo a la web, sin tocar código.</p>
     <ul>
       <li><strong>Chatear:</strong> escribí tu mensaje abajo y mandalo. Podés adjuntar hasta 5 imágenes con el clip.</li>
-      <li><strong>Elegir modelo:</strong> arriba del chat (o al lado del micrófono) está el selector de modelo. <strong>NewserLite</strong> es rápido y liviano para el día a día; <strong>NewserAdvanced</strong> es más potente, genera imágenes, busca en la web y consulta el clima; <strong>NewserAdvanced1.5</strong> (nuevo) suma un razonamiento interno aún más profundo y es el mejor para código, ejecutando código real y consultando APIs de prueba.</li>
+      <li><strong>Elegir modelo:</strong> arriba del chat (o al lado del micrófono) está el selector de modelo. <strong>NewserLite</strong> es rápido y liviano para el día a día; <strong>NewserAdvanced</strong> es más potente, genera imágenes, busca en la web y consulta el clima; <strong>NewserAdvanced1.5</strong> (nuevo) suma un razonamiento interno aún más profundo, es el mejor para código (ejecuta código real y consulta APIs de prueba) y también genera imágenes, con más detalle que NewserAdvanced (usa 2 modelos de IA), aunque limitadas a 2 por hora.</li>
       <li><strong>La Biblia completa:</strong> desde el menú lateral podés leer la Biblia capítulo por capítulo, marcar tu progreso y volver donde la dejaste.</li>
       <li><strong>Cuadernito:</strong> durante una conversación de estudio bíblico, Verbo AI puede ir armando notas en un panel lateral que podés abrir con el ícono del cuaderno.</li>
       <li><strong>Nuevas conversaciones:</strong> "Nueva conversación" en el menú lateral empieza un chat limpio. Todas tus conversaciones quedan guardadas y las podés buscar, renombrar o borrar desde la lista.</li>
@@ -230,7 +230,7 @@
       <select id="modelo">
         <option value="NewserLite">NewserLite (1 crédito, rápido)</option>
         <option value="NewserAdvanced">NewserAdvanced (5 créditos, potente + imágenes)</option>
-        <option value="NewserAdvanced1.5">NewserAdvanced1.5 (10 créditos, razonamiento + código)</option>
+        <option value="NewserAdvanced1.5">NewserAdvanced1.5 (10 créditos, razonamiento + código + imágenes detalladas)</option>
       </select>
     </div>
     <textarea id="mensaje" rows="2" placeholder="Escribí tu mensaje acá... (proba: 'Generame un leon descansando' con NewserAdvanced)">Hola, quien eres?</textarea>
@@ -332,16 +332,17 @@
       </div>
       <div class="item">
         <div class="num">NewserAdvanced1.5</div>
-        <div class="label">Nuevo · el más potente<br>Razonamiento profundo + código<br>10 créditos/pedido<br>3 req/min (API)<br>4 req/min (web)</div>
+        <div class="label">Nuevo · el más potente<br>Razonamiento profundo + código<br>Imágenes con más detalle (máx. 2/hora)<br>10 créditos/pedido<br>3 req/min (API)<br>4 req/min (web)</div>
       </div>
     </div>
-    <p><strong>NewserAdvanced1.5</strong> ya está disponible: agrega un paso de razonamiento interno antes de responder y es el mejor modelo para código, con ejecución de código real y consulta de APIs de prueba.</p>
+    <p><strong>NewserAdvanced1.5</strong> ya está disponible: agrega un paso de razonamiento interno antes de responder, es el mejor modelo para código (ejecución real + APIs de prueba) y también genera imágenes usando 2 modelos de IA para más detalle — por la carga extra, el límite ahí es de 2 imágenes por hora.</p>
     <p>Si mandás un <code>"modelo"</code> inválido o vacío, cae automáticamente a NewserLite (no rompe).</p>
   </section>
 
   <section>
     <h2>4. Generar imágenes con IA 🎨</h2>
-    <p>Si el mensaje empieza con <code>Generame</code>, <code>Genera</code>, <code>Dibujame</code>, etc., se genera una imagen con IA automáticamente (sin pasar por el modelo de texto). Solo funciona con <strong>NewserAdvanced</strong>.</p>
+    <p>Si el mensaje empieza con <code>Generame</code>, <code>Genera</code>, <code>Dibujame</code>, etc., se genera una imagen con IA automáticamente (sin pasar por el modelo de texto). Funciona con <strong>NewserAdvanced</strong> y <strong>NewserAdvanced1.5</strong>.</p>
+    <p>Con <strong>NewserAdvanced1.5</strong> la imagen sale con más detalle porque se usan 2 modelos de IA (uno mejora el prompt, el otro la renderiza en mayor resolución) — por eso el límite ahí es de <strong>2 imágenes por hora</strong>. Con NewserAdvanced no hay ese límite extra, pero el detalle es menor.</p>
     <ul>
       <li>Consume <strong>+1 crédito</strong> adicional (encima del costo del modelo)</li>
       <li>La imagen se devuelve como URL en el campo <code>imagen.url</code></li>

@@ -116,7 +116,7 @@ let modelosDisponibles = [
 
   { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20, rateLimitMaxWeb: 30 },
   { nombre: 'NewserAdvanced', descripcion: 'Mas potente. Genera imagenes, busca en la web y consulta el clima.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8, badge: 'beta', disponible: true },
-  { nombre: 'NewserAdvanced1.5', descripcion: 'El mas potente. Razonamiento aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba.', costoCreditos: 10, rateLimitMax: 3, rateLimitMaxWeb: 4, badge: 'pro', disponible: true },
+  { nombre: 'NewserAdvanced1.5', descripcion: 'El mas potente. Razonamiento aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Tambien genera imagenes con mas detalle (2 modelos de IA), maximo 2 por hora.', costoCreditos: 10, rateLimitMax: 3, rateLimitMaxWeb: 4, badge: 'pro', disponible: true },
   { nombre: 'NewserPro', descripcion: 'Pronto. Modelo profesional con capacidades premium.', costoCreditos: 0, rateLimitMax: 0, rateLimitMaxWeb: 0, badge: 'pronto', disponible: false },
 ];
 let hayCuaderno = false;
@@ -1943,7 +1943,7 @@ elForm.addEventListener('submit', async (ev) => {
   elIndicador.classList.remove('oculto');
 
   const _esGeneracionImagen = (() => {
-    if (modeloActual !== 'NewserAdvanced') return false;
+    if (modeloActual !== 'NewserAdvanced' && modeloActual !== 'NewserAdvanced1.5') return false;
     const re = /^\s*(generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé)\s+/i;
     return re.test(texto);
   })();

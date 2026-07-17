@@ -55,7 +55,7 @@ const MODELOS_DISPONIBLES = {
   },
   'NewserAdvanced1.5': {
     nombre: 'NewserAdvanced1.5',
-    descripcion: 'El mas potente. Un razonamiento interno previo aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Rate limits mas estrictos.',
+    descripcion: 'El mas potente. Un razonamiento interno previo aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Tambien genera imagenes con mas detalle (2 modelos de IA), maximo 2 por hora. Rate limits mas estrictos.',
     modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
     modeloTextoRazonamiento: process.env.GROQ_MODEL_QWEN || 'qwen/qwen3-32b',
     modeloVision: GROQ_MODEL_VISION,
@@ -99,6 +99,33 @@ function resolverModelo(valor) {
 
 const RATE_LIMIT_WEB = new Map();
 const RATE_LIMIT_WEB_VENTANA_MS = 60 * 1000;
+
+// Limite especial para imagenes en alta calidad de NewserAdvanced1.5: usa 2 modelos de IA
+// (uno mejora el prompt, el otro renderiza), asi que solo se permiten 2 imagenes por hora.
+const IMG_LIMIT_15 = new Map();
+const IMG_LIMIT_15_VENTANA_MS = 60 * 60 * 1000;
+const IMG_LIMIT_15_MAX = 2;
+
+function verificarLimiteImagen15(clave) {
+  if (!clave) return { ok: true };
+  const ahora = Date.now();
+  let usos = IMG_LIMIT_15.get(clave) || [];
+  usos = usos.filter((ts) => ahora - ts < IMG_LIMIT_15_VENTANA_MS);
+  if (usos.length >= IMG_LIMIT_15_MAX) {
+    const masViejo = Math.min(...usos);
+    const reintentarEnMs = IMG_LIMIT_15_VENTANA_MS - (ahora - masViejo);
+    const reintentarEnMin = Math.max(1, Math.ceil(reintentarEnMs / 60000));
+    return {
+      ok: false,
+      status: 429,
+      error: `Con NewserAdvanced1.5 solo podes generar ${IMG_LIMIT_15_MAX} imagenes en alta calidad por hora (usa 2 modelos de IA para mas detalle, asi que es mas lento). Esperá ${reintentarEnMin} min, o cambiá a NewserAdvanced para generar sin este limite.`,
+      reintentarEnMin,
+    };
+  }
+  usos.push(ahora);
+  IMG_LIMIT_15.set(clave, usos);
+  return { ok: true };
+}
 
 function verificarRateLimitWeb(usuario, configModelo) {
   if (!usuario) return { ok: true };
@@ -337,7 +364,7 @@ function obtenerUsuarioActual(req) {
   return verificarValorFirmado(leerCookie(req, 'verbo_auth'));
 }
 
-const RUTAS_PUBLICAS = new Set(['/login', '/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/api/v1/chats', '/api/v1/creditos', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/api/config']);
+const RUTAS_PUBLICAS = new Set(['/login', '/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/api/v1/chats', '/api/v1/creditos', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/ads.txt', '/api/config']);
 app.use((req, res, next) => {
 
   if (req.path === '/info') return res.redirect(301, '/info.html');
@@ -1295,14 +1322,23 @@ app.post('/api/v1/chat', async (req, res) => {
 
   const intencionImagenApi = detectarGeneracionImagen(mensaje);
   if (intencionImagenApi.esGeneracion) {
-    if (configModelo.nombre !== 'NewserAdvanced') {
+    if (configModelo.nombre !== 'NewserAdvanced' && configModelo.nombre !== 'NewserAdvanced1.5') {
       return res.status(400).json({
         ok: false,
-        error: 'La generacion de imagenes solo esta disponible con NewserAdvanced. Mandá "modelo":"NewserAdvanced" en el body para usarla.',
+        error: 'La generacion de imagenes solo esta disponible con NewserAdvanced o NewserAdvanced1.5. Mandá "modelo":"NewserAdvanced" o "NewserAdvanced1.5" en el body para usarla.',
       });
     }
 
     const tokenActual = buscarTokenPorValor(valorToken);
+    const esDetallada = configModelo.nombre === 'NewserAdvanced1.5';
+
+    if (esDetallada) {
+      const controlImg15 = verificarLimiteImagen15(tokenActual ? `token:${tokenActual.id}` : null);
+      if (!controlImg15.ok) {
+        return res.status(controlImg15.status).json({ ok: false, error: controlImg15.error });
+      }
+    }
+
     const costoTotalGen = configModelo.costoCreditos + 1;
     if (!tokenActual || tokenActual.creditos < 1) {
       return res.status(402).json({
@@ -1311,7 +1347,7 @@ app.post('/api/v1/chat', async (req, res) => {
       });
     }
 
-    const resultado = await generarImagenPollinations(intencionImagenApi.prompt);
+    const resultado = await generarImagenPollinations(intencionImagenApi.prompt, undefined, { detallada: esDetallada });
     if (!resultado || !resultado.img) {
       console.error('[api/v1/chat] generacion de imagen fallo:', resultado ? resultado.error : 'sin resultado');
       return res.status(502).json({
@@ -1341,11 +1377,14 @@ app.post('/api/v1/chat', async (req, res) => {
         prompt: img.prompt,
         url: img.url,
         tamanoKB: img.tamanoKB,
+        detallada: img.detallada || false,
       }],
       imagen: {
         url: img.url,
         prompt: img.prompt,
         tamanoKB: img.tamanoKB,
+        detallada: img.detallada || false,
+        imagenesRestantesHora: esDetallada ? Math.max(0, IMG_LIMIT_15_MAX - (IMG_LIMIT_15.get(`token:${tokenActual.id}`) || []).length) : undefined,
       },
       creditosRestantes: token.propietario.startsWith('local:') ? -1 : leerCreditosGlobales(token.propietario),
       rateLimitMax: configModelo.rateLimitMax,
@@ -1787,6 +1826,15 @@ HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserAdvanced1.5):
 Ademas de CUADERNO, BUSCAR, DESCARGAR, INVESTIGAR y WEB, en este modelo tenes 2 herramientas mas,
 pensadas para programacion y datos de prueba. Se activan igual que las demas: con una etiqueta al FINAL
 de tu respuesta, en su propia linea, sin explicarla ni mencionarla al usuario.
+
+NOTA IMPORTANTE SOBRE IMAGENES: si el usuario quiere generar/crear una imagen, NO tenes que hacer nada.
+El sistema detecta automaticamente cuando un mensaje empieza con "Genera", "Generame", "Generá", etc. y
+genera la imagen sin pasar por vos. Si te preguntan si podes generar imagenes, decis que si, y que para
+hacerlo tienen que escribir "Generame [descripcion]" como mensaje. En este modelo las imagenes salen con
+mas detalle porque se usan 2 modelos de IA (uno mejora el prompt, el otro la renderiza en mayor resolucion),
+pero por eso mismo el limite es de solo 2 imagenes por hora en este modelo — si el usuario ya uso las 2,
+avisale que espere o que cambie a NewserAdvanced para generar sin ese limite (con menos detalle). NO
+intentes escribir ninguna etiqueta de imagen tu mismo.
 
 NOTA: este modelo NO tiene la herramienta CLIMA (fue reemplazada por estas dos herramientas nuevas). Si
 te preguntan por el clima, respondeles que en este modelo no esta disponible y sugeriles cambiar a
@@ -2253,19 +2301,23 @@ async function buscarWebGoogleReal(query) {
   return { exito: false, error: ultimoError || 'Todos los CSE IDs fallaron.' };
 }
 
-async function generarImagenPollinations(prompt, seed) {
+async function generarImagenPollinations(prompt, seed, opciones = {}) {
   const promptLimpio = (prompt || '').trim().slice(0, 200);
   if (!promptLimpio) return { img: null, error: 'Prompt vacio' };
   const seedFinal = (typeof seed === 'number' && seed > 0) ? seed : Math.floor(Math.random() * 1000000);
-
-  const timeouts = [30000, 45000, 60000];
+  const detallada = !!opciones.detallada;
+  // Modo detallada (NewserAdvanced1.5): mas resolucion y "enhance=true" (un segundo modelo de IA
+  // que reescribe/mejora el prompt antes de renderizar la imagen final), por eso tarda un poco mas.
+  const dimension = detallada ? 1536 : 1024;
+  const timeouts = detallada ? [45000, 60000, 75000] : [30000, 45000, 60000];
   let ultimoError = null;
 
   for (let intento = 0; intento < timeouts.length; intento++) {
     try {
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?width=1024&height=1024&seed=${seedFinal}&nologo=true&model=flux`;
+      const paramsExtra = detallada ? '&enhance=true' : '';
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?width=${dimension}&height=${dimension}&seed=${seedFinal}&nologo=true&model=flux${paramsExtra}`;
 
-      console.log(`[pollinations] Intento ${intento + 1}/${timeouts.length} - prompt: "${promptLimpio.slice(0, 50)}..."`);
+      console.log(`[pollinations] Intento ${intento + 1}/${timeouts.length}${detallada ? ' [alta calidad]' : ''} - prompt: "${promptLimpio.slice(0, 50)}..."`);
       const resp = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         signal: AbortSignal.timeout(timeouts[intento]),
@@ -2303,6 +2355,7 @@ async function generarImagenPollinations(prompt, seed) {
           prompt: promptLimpio,
           seed: seedFinal,
           tamanoKB: Math.round(buffer.length / 1024),
+          detallada,
         },
         error: null,
       };
@@ -2685,7 +2738,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
   const intencionImagen = detectarGeneracionImagen(mensajeOriginal);
   if (intencionImagen.esGeneracion) {
-    if (configModelo.nombre !== 'NewserAdvanced') {
+    if (configModelo.nombre !== 'NewserAdvanced' && configModelo.nombre !== 'NewserAdvanced1.5') {
 
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
@@ -2702,7 +2755,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         });
         chatGen.mensajes.push({
           role: 'assistant',
-          contenidoTexto: 'La generacion de imagenes solo esta disponible con NewserAdvanced. Cambiá el modelo en el selector de abajo para usarla.',
+          contenidoTexto: 'La generacion de imagenes solo esta disponible con NewserAdvanced o NewserAdvanced1.5. Cambiá el modelo en el selector de abajo para usarla.',
           fecha: new Date().toISOString(),
         });
         if (chatGen.titulo === 'Nueva conversacion' && mensajeOriginal) {
@@ -2710,13 +2763,48 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         }
         chatGen.actualizadoEn = new Date().toISOString();
         guardarDB(dbGen);
-        res.write(JSON.stringify({ type: 'chunk', text: 'La generacion de imagenes solo esta disponible con **NewserAdvanced**. Cambiá el modelo en el selector de abajo (al lado del microfono) para usarla.' }) + '\n');
+        res.write(JSON.stringify({ type: 'chunk', text: 'La generacion de imagenes solo esta disponible con **NewserAdvanced** o **NewserAdvanced1.5**. Cambiá el modelo en el selector de abajo (al lado del microfono) para usarla.' }) + '\n');
         res.write(JSON.stringify({ type: 'done', chatId: chatGen.id }) + '\n');
         res.end();
       } catch (e) {
         if (!res.writableEnded) res.end();
       }
       return;
+    }
+
+    const esDetalladaWeb = configModelo.nombre === 'NewserAdvanced1.5';
+    if (esDetalladaWeb) {
+      const usuarioActualImg15 = obtenerUsuarioActual(req);
+      const controlImg15Web = verificarLimiteImagen15(usuarioActualImg15 ? `web:${usuarioActualImg15}` : null);
+      if (!controlImg15Web.ok) {
+        res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('X-Accel-Buffering', 'no');
+        try {
+          const usuarioActualGen = obtenerUsuarioActual(req);
+          const dbGen = leerDB();
+          let chatGen = chatId ? obtenerChat(dbGen, chatId, usuarioActualGen) : null;
+          if (!chatGen) chatGen = crearChat(dbGen, usuarioActualGen);
+          chatGen.mensajes.push({
+            role: 'user',
+            contenidoTexto: mensajeOriginal,
+            fecha: new Date().toISOString(),
+          });
+          chatGen.mensajes.push({
+            role: 'assistant',
+            contenidoTexto: controlImg15Web.error,
+            fecha: new Date().toISOString(),
+          });
+          chatGen.actualizadoEn = new Date().toISOString();
+          guardarDB(dbGen);
+          res.write(JSON.stringify({ type: 'chunk', text: controlImg15Web.error }) + '\n');
+          res.write(JSON.stringify({ type: 'done', chatId: chatGen.id }) + '\n');
+          res.end();
+        } catch (e) {
+          if (!res.writableEnded) res.end();
+        }
+        return;
+      }
     }
 
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
@@ -2744,7 +2832,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         chatGen.titulo = mensajeOriginal.length > 40 ? mensajeOriginal.slice(0, 40) + '…' : mensajeOriginal;
       }
 
-      enviarGen({ type: 'chunk', text: `Generando imagen: **${intencionImagen.prompt}**...` });
+      enviarGen({ type: 'chunk', text: esDetalladaWeb ? `Generando imagen en alta calidad (2 modelos de IA): **${intencionImagen.prompt}**...` : `Generando imagen: **${intencionImagen.prompt}**...` });
       enviarGen({ type: 'investigando', query: `Generando imagen: ${intencionImagen.prompt}` });
       enviarGen({ type: 'investigando_sitio', sitio: 'image.pollinations.ai' });
 
@@ -2754,7 +2842,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
       let resultadoImg = null;
       try {
-        resultadoImg = await generarImagenPollinations(intencionImagen.prompt);
+        resultadoImg = await generarImagenPollinations(intencionImagen.prompt, undefined, { detallada: esDetalladaWeb });
       } finally {
         clearInterval(heartbeat);
       }
@@ -2767,7 +2855,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
         chatGen.mensajes.push({
           role: 'assistant',
-          contenidoTexto: `Imagen generada: ${intencionImagen.prompt}`,
+          contenidoTexto: esDetalladaWeb ? `Imagen generada en alta calidad: ${intencionImagen.prompt}` : `Imagen generada: ${intencionImagen.prompt}`,
           fecha: new Date().toISOString(),
           descargas: [{ url: img.url, nombre: img.prompt, tamanoKB: img.tamanoKB }],
         });
