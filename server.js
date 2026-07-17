@@ -64,6 +64,33 @@ const GPT4FREE_ENABLED = (process.env.GPT4FREE_ENABLED_PRO || 'false').toLowerCa
 const GPT4FREE_TIMEOUT = parseInt(process.env.GPT4FREE_TIMEOUT || '60000', 10);
 const GPT4FREE_API_KEY = process.env.GPT4FREE_API_KEY || ''; // opcional segun el puente
 
+// ============================================================
+// CAPA POLLINATIONS TEXTO — directo, sin puente Python (PRINCIPAL)
+// ============================================================
+// Alternativa mas estable y rapida que el puente GPT4Free. Usa la misma API
+// de Pollinations que ya tenes configurada para imagenes, pero para texto.
+// Modelo: openai-fast (GPT-OSS-20B con razonamiento, el mas potente de Pollinations gratis).
+//
+// Si POLLINATIONS_TEXT_ENABLED_PRO=true (default), NewserPro intenta PRIMERO
+// Pollinations texto. Si responde, usa ese. Si falla, cae al puente GLM-4
+// (si esta configurado). Si ambos fallan, cae a GPT-OSS-120B (Groq).
+//
+// Orden de prioridad de capas en /api/v1/pro-hybrid y /api/v1/chat:
+//   1. Pollinations texto (openai-fast = GPT-OSS-20B con razonamiento) ← RAPIDO + GRATIS
+//   2. Puente GLM-4 (g4f con gpt-4o-mini / qwen3-235b) ← OPCIONAL
+//   3. GPT-OSS-120B (Groq) ← FALLBACK SIEMPRE DISPONIBLE
+//
+// Ventajas de Pollinations texto sobre el puente:
+//   - Un servicio menos que mantener (no necesita el bridge Python)
+//   - Mas rapido (sin intermediario)
+//   - Mas estable (Pollinations ya esta funcionando para imagenes)
+//   - Respeta la identidad de Verbo AI perfectamente
+const POLLINATIONS_TEXT_ENABLED = (process.env.POLLINATIONS_TEXT_ENABLED_PRO || 'true').toLowerCase() === 'true';
+const POLLINATIONS_TEXT_MODEL = process.env.POLLINATIONS_TEXT_MODEL || 'openai-fast';
+const POLLINATIONS_TEXT_URL = process.env.POLLINATIONS_TEXT_URL || 'https://text.pollinations.ai/openai';
+const POLLINATIONS_TEXT_TIMEOUT = parseInt(process.env.POLLINATIONS_TEXT_TIMEOUT || '60000', 10);
+const POLLINATIONS_TEXT_REFERER = process.env.POLLINATIONS_TEXT_REFERER || 'https://verboai.duckdns.org';
+
 const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 
 const MODELOS_DISPONIBLES = {
@@ -241,6 +268,62 @@ function mensajeErrorAmigableIA(status) {
   if (status === 401 || status === 403) return 'Hubo un problema de autenticacion con el servicio de IA. Avisale al administrador.';
   if (status >= 500) return 'El servicio de IA no esta disponible en este momento. Intenta de nuevo en unos minutos.';
   return 'Error al conectar con el modelo. Intenta de nuevo en unos minutos.';
+}
+
+// ============================================================
+// CAPA POLLINATIONS TEXTO — llamada directa (sin puente Python)
+// ============================================================
+// Llama a la API de texto de Pollinations (text.pollinations.ai/openai).
+// Modelo: openai-fast (GPT-OSS-20B con razonamiento).
+// Es la opcion MAS RAPIDA y ESTABLE para NewserPro porque:
+//   - Usa la misma infraestructura de Pollinations que ya tenes para imagenes
+//   - No requiere puente Python separado
+//   - No requiere API key
+//   - Respeta la identidad de Verbo AI perfectamente con un buen system prompt
+//
+// Devuelve: { ok: true, texto, modelo } | { ok: false, error }
+async function llamarPollinationsTexto(messages, systemPrompt, opciones = {}) {
+  if (!POLLINATIONS_TEXT_ENABLED) return { ok: false, error: 'Pollinations texto deshabilitado (POLLINATIONS_TEXT_ENABLED_PRO=false)' };
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (POLLINATIONS_TEXT_REFERER) headers['Referer'] = POLLINATIONS_TEXT_REFERER;
+
+  const body = {
+    model: POLLINATIONS_TEXT_MODEL,
+    messages: [{ role: 'system', content: systemPrompt }, ...messages],
+    temperature: 0.7,
+    max_tokens: 3072,
+    stream: false,
+    // seed aleatorio para evitar respuestas cacheadas
+    seed: Math.floor(Math.random() * 1000000),
+  };
+
+  try {
+    const resp = await axios.post(POLLINATIONS_TEXT_URL, body, {
+      timeout: POLLINATIONS_TEXT_TIMEOUT,
+      headers,
+      signal: opciones.signal,
+      validateStatus: () => true,
+    });
+    if (resp.status < 200 || resp.status >= 300) {
+      const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
+      console.error(`[pollinations-text] HTTP ${resp.status}: ${detalle}`);
+      return { ok: false, error: `HTTP ${resp.status}` };
+    }
+    // Pollinations devuelve formato OpenAI: choices[0].message.content
+    const texto = resp.data?.choices?.[0]?.message?.content || '';
+    const modeloReal = resp.data?.model || POLLINATIONS_TEXT_MODEL;
+    if (!texto || !texto.trim()) {
+      console.error('[pollinations-text] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+      return { ok: false, error: 'Respuesta vacia de Pollinations texto' };
+    }
+    console.log(`[pollinations-text] OK - ${texto.length} chars devueltos por ${modeloReal}`);
+    return { ok: true, texto: texto.trim(), modelo: modeloReal };
+  } catch (e) {
+    if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return { ok: false, error: 'cancelado' };
+    console.error('[pollinations-text] fallo la peticion:', e.message);
+    return { ok: false, error: e.message };
+  }
 }
 
 // ============================================================
@@ -2020,6 +2103,7 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
 
   let textoFinal = '';
   let modeloReal = configPro.modeloTexto;
+  let capaPollinations = false;
   let capaGlm = false;
   let capaGroq = false;
   let capaVision = false;
@@ -2057,20 +2141,39 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
     modeloReal = GROQ_MODEL_VISION;
     capaVision = true;
     capaGroq = true; // Llama 4 Scout es de Groq
-  } else if (forzarGlm && GPT4FREE_ENABLED) {
+  } else {
     // ============================================================
-    // MODO TEXTO PURO: GLM-4 primero, fallback a GPT-OSS-120B
+    // MODO TEXTO PURO: 3 capas en cascada
+    //   1. Pollinations texto (openai-fast) — rapido, gratis, sin puente
+    //   2. Puente GLM-4 (g4f) — opcional, si esta configurado
+    //   3. GPT-OSS-120B (Groq) — fallback siempre disponible
     // ============================================================
-    const resultadoGlm = await llamarGlm4Bridge(
-      [{ role: 'user', content: mensaje }],
-      systemPrompt,
-    );
-    if (resultadoGlm.ok) {
-      textoFinal = stripThinkTags(resultadoGlm.texto);
-      modeloReal = resultadoGlm.modelo;
-      capaGlm = true;
-    } else {
-      console.warn(`[pro-hybrid] GLM-4 fallo (${resultadoGlm.error}), fallback a ${configPro.modeloTexto}.`);
+    const mensajesParaCapaExterna = [{ role: 'user', content: mensaje }];
+
+    // CAPA 1: Pollinations texto (PRINCIPAL)
+    if (!textoFinal && POLLINATIONS_TEXT_ENABLED) {
+      const resultadoPoll = await llamarPollinationsTexto(mensajesParaCapaExterna, systemPrompt);
+      if (resultadoPoll.ok) {
+        textoFinal = stripThinkTags(resultadoPoll.texto);
+        modeloReal = resultadoPoll.modelo;
+        capaPollinations = true;
+        console.log('[pro-hybrid] Pollinations texto respondio OK');
+      } else {
+        console.warn(`[pro-hybrid] Pollinations texto fallo (${resultadoPoll.error}), intentando GLM-4...`);
+      }
+    }
+
+    // CAPA 2: Puente GLM-4 (FALLBACK 1)
+    if (!textoFinal && forzarGlm && GPT4FREE_ENABLED) {
+      const resultadoGlm = await llamarGlm4Bridge(mensajesParaCapaExterna, systemPrompt);
+      if (resultadoGlm.ok) {
+        textoFinal = stripThinkTags(resultadoGlm.texto);
+        modeloReal = resultadoGlm.modelo;
+        capaGlm = true;
+        console.log('[pro-hybrid] GLM-4 (puente) respondio OK');
+      } else {
+        console.warn(`[pro-hybrid] GLM-4 fallo (${resultadoGlm.error}), fallback final a ${configPro.modeloTexto}.`);
+      }
     }
   }
 
@@ -2108,10 +2211,13 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
     respuesta: textoFinal,
     razonamiento: razonamientoPrevio || null,
     modeloReal,
+    capaPollinations,
     capaGlm,
     capaGroq,
     capaVision,
     imagenesAdjuntas: imagenesGuardadasUrls.length,
+    pollinationsTextDisponible: POLLINATIONS_TEXT_ENABLED,
+    modeloPollinationsText: POLLINATIONS_TEXT_MODEL,
     glmDisponible: GPT4FREE_ENABLED && !!GPT4FREE_URL,
     modeloGlm: GPT4FREE_MODEL,
     modeloGroqTexto: configPro.modeloTexto,
