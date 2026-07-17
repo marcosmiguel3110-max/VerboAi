@@ -718,10 +718,20 @@ html.tema-night .clave-api-doc-cuerpo pre {
 }
 
 @media (max-width: 640px) {
-  .settings-tarjeta { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: min(560px, 92vh); }
-  .settings-sidebar { flex-direction: row; border-right: none; border-bottom: 1px solid var(--borde); padding: 12px; }
+  .settings-tarjeta { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: min(90vh, 600px); max-height: 90vh; }
+  .settings-sidebar { flex-direction: row; border-right: none; border-bottom: 1px solid var(--borde); padding: 8px; overflow-x: auto; gap: 4px; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
   .settings-sidebar h2 { display: none; }
-  .badge-prox { font-size: 9px; padding: 1px 5px; }
+  .settings-nav-item { white-space: nowrap; flex-shrink: 0; padding: 7px 8px; font-size: 12px; gap: 4px; }
+  .settings-nav-item svg { width: 14px; height: 14px; }
+  .badge-prox { font-size: 8px; padding: 1px 4px; }
+  .settings-contenido { padding: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .creditos-pantalla { height: 180px; }
+  .creditos-numero { font-size: 40px; }
+  .creditos-estadisticas { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .creditos-stat { padding: 10px 8px; }
+  .creditos-stat-num { font-size: 18px; }
+  .creditos-stat-label { font-size: 10px; }
+  .btn-recargar-creditos { position: sticky; bottom: 0; }
 }
 
 /* ---------- Buscador de chats ---------- */
