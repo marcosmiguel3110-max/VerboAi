@@ -40,12 +40,18 @@ app = Flask(__name__)
 CORS(app)
 
 # Modelo y provider por defecto.
-# USAMOS gpt-4o-mini porque es lo que ESTA DISPONIBLE en g4f hoy y respeta
-# la identidad de Verbo AI (los filtros regex funcionan perfecto con este).
-# Los modelos Qwen3-235B y Qwen3-25B ya no estan disponibles en Modelscope
-# (caen con 404), pero los dejamos como fallback por si vuelven.
-DEFAULT_MODEL = os.environ.get('G4F_MODEL_OVERRIDE', 'gpt-4o-mini')
-DEFAULT_PROVIDER = os.environ.get('G4F_PROVIDER', 'Modelscope')
+# USAMOS deepseek-r1 porque es el modelo MAS POTENTE que funciona gratis en g4f hoy:
+#   - Modelo de razonamiento profundo (estilo OpenAI o1)
+#   - Excelente para matematicas, logica, codigo y analisis
+#   - 100% gratis, sin API key, sin registro
+#   - Respeta la identidad de Verbo AI perfectamente
+#   - Tiene razonamiento <think> interno (el puente lo limpia automaticamente)
+#
+# Otros modelos que tambien funcionan: deepseek-v3, gpt-4o-mini
+# Modelos que NO funcionan gratis (todos los providers piden auth):
+#   - llama-3.1-405b, qwen3-235b, nemotron-3-ultra-550b, glm-5.2
+DEFAULT_MODEL = os.environ.get('G4F_MODEL_OVERRIDE', 'deepseek-r1')
+DEFAULT_PROVIDER = os.environ.get('G4F_PROVIDER', '')  # vacio = g4f elige automaticamente (deepseek-r1 anda con auto)
 
 # Inicializar cliente g4f
 g4f_client = None
@@ -199,13 +205,14 @@ def llamar_g4f(messages, model, temperature, max_tokens):
             modelo_a_usar = partes[1]
             log.info(f'Modelo con provider explicito: provider={provider_desde_modelo} | modelo={modelo_a_usar}')
 
-    # Lista de modelos a probar en orden
+    # Lista de modelos a probar en orden: el pedido primero, luego fallbacks
+    # que sabemos que funcionan gratis en g4f hoy.
     modelos_disponibles = [
         modelo_a_usar,
-        'gpt-4o-mini',                          # funciona, respeta identidad
+        'deepseek-r1',                         # MAS POTENTE, razonamiento profundo (estilo o1)
+        'deepseek-v3',                         # fallback rapido de deepseek
+        'gpt-4o-mini',                          # fallback clasico, rapido
         'gpt-4o',                                # fallback (a veces dice "Copilot")
-        'Qwen/Qwen3-235B-A22B-Thinking-2507',  # 235B (si Modelscope lo reactiva)
-        'Qwen/Qwen-3-25B-A22B-Thinking-2507',  # 25B (idem)
     ]
     vistos = set()
     modelos_a_probar = []
