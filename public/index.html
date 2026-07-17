@@ -89,17 +89,6 @@
       <button id="btnCuaderno" class="btn-cuaderno-toggle oculto" title="Ver cuadernito">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h13a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V4Z"/><path d="M4 17a3 3 0 0 1 3-3h13"/><path d="M8 8h8M8 11h6"/></svg>
       </button>
-      <div class="adsense-header">
-        <ins class="adsbygoogle"
-             style="display:inline-block;width:120px;height:40px;"
-             data-ad-client="ca-pub-2832971109540830"
-             data-ad-slot="ZZZZZZZZZZ"
-             data-ad-format="auto"
-             data-full-width-responsive="false"></ins>
-        <script>
-             (adsbygoogle = window.adsbygoogle || []).push({});
-        </script>
-      </div>
     </header>
 
     <div id="mensajes" class="mensajes"></div>
@@ -568,8 +557,34 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
             <p class="creditos-titulo-estadisticas">Consumo por modelo</p>
             <div id="creditosPorModeloLista"></div>
           </div>
+
+          <button id="btnRecargarCreditos" class="btn-recargar-creditos">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Recargar Creditos
+          </button>
         </section>
       </div>
+    </div>
+  </div>
+
+  <div id="overlayAnuncioCreditos" class="overlay-anuncio-creditos oculto">
+    <div class="anuncio-creditos-cuerpo">
+      <div class="anuncio-creditos-titulo">Mira el anuncio para recargar creditos</div>
+      <div class="anuncio-creditos-contenedor" id="anuncioCreditosContenedor">
+        <ins class="adsbygoogle"
+             style="display:block;width:336px;height:280px;"
+             data-ad-client="ca-pub-2832971109540830"
+             data-ad-slot="ZZZZZZZZZZ"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script>
+             (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+      </div>
+      <div class="anuncio-creditos-timer" id="anuncioCreditosTimer">Espera 5 segundos...</div>
+      <button id="btnCerrarAnuncioCreditos" class="btn-cerrar-anuncio oculto">
+        Recargar +50 creditos
+      </button>
     </div>
   </div>
 

@@ -417,6 +417,47 @@ function formatearFechaCorta(iso) {
 function iniciarPollingCreditos() { detenerPollingCreditos(); creditosPollingInterval = setInterval(cargarCreditos, 5000); }
 function detenerPollingCreditos() { if (creditosPollingInterval) { clearInterval(creditosPollingInterval); creditosPollingInterval = null; } }
 
+const btnRecargarCreditos = document.getElementById('btnRecargarCreditos');
+const overlayAnuncioCreditos = document.getElementById('overlayAnuncioCreditos');
+const anuncioCreditosTimer = document.getElementById('anuncioCreditosTimer');
+const btnCerrarAnuncioCreditos = document.getElementById('btnCerrarAnuncioCreditos');
+
+if (btnRecargarCreditos) {
+  btnRecargarCreditos.addEventListener('click', () => {
+    if (overlayAnuncioCreditos) overlayAnuncioCreditos.classList.remove('oculto');
+    if (btnCerrarAnuncioCreditos) btnCerrarAnuncioCreditos.classList.add('oculto');
+    if (anuncioCreditosTimer) anuncioCreditosTimer.textContent = 'Espera 5 segundos...';
+    var seg = 5;
+    var interval = setInterval(() => {
+      seg--;
+      if (seg > 0) {
+        if (anuncioCreditosTimer) anuncioCreditosTimer.textContent = 'Espera ' + seg + ' segundos...';
+      } else {
+        clearInterval(interval);
+        if (anuncioCreditosTimer) anuncioCreditosTimer.textContent = 'Listo!';
+        if (btnCerrarAnuncioCreditos) btnCerrarAnuncioCreditos.classList.remove('oculto');
+      }
+    }, 1000);
+  });
+}
+
+if (btnCerrarAnuncioCreditos) {
+  btnCerrarAnuncioCreditos.addEventListener('click', async () => {
+    try {
+      const r = await fetch('/api/creditos/recargar', { method: 'POST' });
+      const d = await r.json();
+      if (d.ok) {
+        if (overlayAnuncioCreditos) overlayAnuncioCreditos.classList.add('oculto');
+        cargarCreditos();
+      } else {
+        alert(d.error || 'No se pudieron recargar los creditos.');
+      }
+    } catch (e) {
+      alert('Error de conexion.');
+    }
+  });
+}
+
 btnAbrirSettings.addEventListener('click', () => {
   overlaySettings.classList.remove('oculto');
   if (!claveApiAccesoVerificado) verificarAccesoClaveApi();

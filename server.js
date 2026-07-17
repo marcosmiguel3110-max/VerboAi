@@ -2760,6 +2760,23 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   }
 });
 
+app.post('/api/creditos/recargar', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!usuario) return res.status(401).json({ ok: false, error: 'No autenticado.' });
+  if (usuario.startsWith('local:')) return res.json({ ok: true, creditos: -1, recargados: 0, mensaje: 'Admin tiene creditos infinitos.' });
+  const RECARGA = 50;
+  const usuarios = leerUsuarios();
+  const cuenta = usuarios[usuario];
+  if (!cuenta) return res.status(404).json({ ok: false, error: 'Cuenta no encontrada.' });
+  if (typeof cuenta.creditosGlobales !== 'number') cuenta.creditosGlobales = 1000;
+  if (!cuenta.estadisticas) cuenta.estadisticas = { totalGastado: 0, totalChats: 0, totalImagenes: 0, totalBusquedasWeb: 0, totalClima: 0, porModelo: {}, ultimaActividad: null };
+  cuenta.creditosGlobales += RECARGA;
+  if (!cuenta.recargas) cuenta.recargas = 0;
+  cuenta.recargas += 1;
+  guardarUsuarios(usuarios);
+  res.json({ ok: true, creditos: cuenta.creditosGlobales, recargados: RECARGA });
+});
+
 app.get('/api/creditos', (req, res) => {
   const usuario = obtenerUsuarioActual(req);
   if (!usuario) return res.status(401).json({ error: 'No autenticado.' });

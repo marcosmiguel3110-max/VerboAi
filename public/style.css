@@ -2542,3 +2542,97 @@ html.tema-night .token-descarga-link:hover {
   .adsense-header { display: none; }
 }
 
+
+.btn-recargar-creditos {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  margin-top: 16px;
+  background: var(--acento);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-recargar-creditos:hover { background: var(--acento-hover, #B0552E); }
+html.tema-night .btn-recargar-creditos { background: var(--boton-nuevo-noche); }
+
+.overlay-anuncio-creditos {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.8);
+  backdrop-filter: blur(3px);
+}
+.overlay-anuncio-creditos.oculto { display: none; }
+
+.anuncio-creditos-cuerpo {
+  background: var(--crema, #FAF6EF);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+html.tema-night .anuncio-creditos-cuerpo {
+  background: var(--fondo-noche, #1B1E29);
+}
+
+.anuncio-creditos-titulo {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--texto, #333);
+  margin-bottom: 16px;
+}
+html.tema-night .anuncio-creditos-titulo { color: var(--texto); }
+
+.anuncio-creditos-contenedor {
+  width: 336px;
+  height: 280px;
+  margin: 0 auto 16px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--crema-oscuro, #F0E6D8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+html.tema-night .anuncio-creditos-contenedor {
+  background: var(--hover-noche, #1B1E29);
+}
+
+.anuncio-creditos-timer {
+  font-size: 13px;
+  color: var(--texto-suave, #888);
+  margin-bottom: 12px;
+}
+
+.btn-cerrar-anuncio {
+  background: #2E8B57;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-cerrar-anuncio:hover { background: #267a4c; }
+.btn-cerrar-anuncio.oculto { display: none; }
+
+@media (max-width: 480px) {
+  .anuncio-creditos-contenedor { width: 100%; height: 200px; }
+}
