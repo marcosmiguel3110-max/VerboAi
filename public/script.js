@@ -760,7 +760,8 @@ function renderOpcionesModeloEn(contenedor) {
   }).join('');
   contenedor.querySelectorAll('.opcion-modelo').forEach(function(op) {
     if (op.disabled) return;
-    op.addEventListener('click', function() {
+    op.addEventListener('click', function(ev) {
+      ev.stopPropagation();
       modeloActual = op.dataset.modelo;
       localStorage.setItem('verboAiModelo', modeloActual);
       aplicarModeloUI();
