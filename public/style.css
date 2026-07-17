@@ -2535,8 +2535,8 @@ html.tema-night .token-descarga-link:hover {
   border-radius: 8px;
 }
 .adsense-header ins.adsbygoogle {
-  width: 200px !important;
-  height: 60px !important;
+  width: 120px !important;
+  height: 40px !important;
 }
 @media (max-width: 768px) {
   .adsense-header { display: none; }
