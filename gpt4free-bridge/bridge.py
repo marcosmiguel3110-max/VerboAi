@@ -40,9 +40,11 @@ app = Flask(__name__)
 CORS(app)
 
 # Modelo y provider por defecto.
-# FORZAMOS Modelscope porque es el unico provider de g4f que NO inyecta su
-# propia identidad (SurfSense, Puter, etc. te hacen decir "soy ChatGPT").
-DEFAULT_MODEL = os.environ.get('G4F_MODEL_OVERRIDE', 'Qwen/Qwen3-235B-A22B-Thinking-2507')
+# USAMOS gpt-4o-mini porque es lo que ESTA DISPONIBLE en g4f hoy y respeta
+# la identidad de Verbo AI (los filtros regex funcionan perfecto con este).
+# Los modelos Qwen3-235B y Qwen3-25B ya no estan disponibles en Modelscope
+# (caen con 404), pero los dejamos como fallback por si vuelven.
+DEFAULT_MODEL = os.environ.get('G4F_MODEL_OVERRIDE', 'gpt-4o-mini')
 DEFAULT_PROVIDER = os.environ.get('G4F_PROVIDER', 'Modelscope')
 
 # Inicializar cliente g4f
@@ -184,10 +186,14 @@ def llamar_g4f(messages, model, temperature, max_tokens):
     messages_reforzados = reforzar_identidad(messages)
 
     # Lista de modelos a probar en orden: el pedido primero, luego fallbacks
+    # que sabemos que funcionan gratis en g4f hoy (gpt-4o-mini responde bien,
+    # los Qwen3 estan cayendo en 404 en Modelscope ultimamente).
     modelos_disponibles = [
         model,
-        'Qwen/Qwen3-235B-A22B-Thinking-2507',  # 235B Thinking (mas potente)
-        'Qwen/Qwen-3-25B-A22B-Thinking-2507',  # 25B Thinking (fallback mas liviano)
+        'gpt-4o-mini',                          # funciona, respeta identidad
+        'gpt-4o',                                # fallback (a veces dice "Copilot")
+        'Qwen/Qwen3-235B-A22B-Thinking-2507',  # 235B (si Modelscope lo reactiva)
+        'Qwen/Qwen-3-25B-A22B-Thinking-2507',  # 25B (idem)
     ]
     vistos = set()
     modelos_a_probar = []
