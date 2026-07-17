@@ -315,6 +315,113 @@ def chat_completions():
         }), 502
 
 
+# ============================================================
+# GENERACION DE IMAGENES — endpoint compatible con OpenAI
+# ============================================================
+# Soporta TODOS los modelos de imagen disponibles en g4f:
+#   - flux, flux-pro, flux-dev, flux-schnell (Black Forest Labs)
+#   - sdxl-turbo (Stability AI)
+#   - sd-3.5-large (Stable Diffusion 3.5)
+#   - gpt-image (similar a DALL-E)
+#   - dalle-3 (OpenAI DALL-E 3)
+#
+# Si el modelo pedido falla, prueba automaticamente los demas en orden.
+@app.route('/v1/images/generations', methods=['POST'])
+def images_generations():
+    try:
+        data = request.get_json(force=True)
+        prompt = data.get('prompt', '')
+        model_pedido = data.get('model', 'flux')
+        n = data.get('n', 1)
+        size = data.get('size', '1024x1024')
+        response_format = data.get('response_format', 'url')
+
+        if not prompt:
+            return jsonify({'error': {'message': 'Falta prompt', 'type': 'invalid_request'}}), 400
+
+        log.info(f'POST /v1/images/generations | model={model_pedido} | prompt="{prompt[:50]}..." | size={size}')
+
+        if not g4f_client:
+            return jsonify({'error': {'message': 'g4f no disponible', 'type': 'bridge_error'}}), 502
+
+        # Lista de modelos de imagen a probar en orden: el pedido primero,
+        # luego fallbacks. Todos estos existen en g4f.models.ModelUtils.convert.
+        modelos_imagen = [
+            model_pedido,
+            'flux',            # siempre anda (es el mas estable)
+            'flux-pro',        # alta calidad
+            'flux-dev',        # equilibrio
+            'flux-schnell',    # rapido
+            'sdxl-turbo',      # Stability AI turbo
+            'sd-3.5-large',    # SD 3.5
+            'gpt-image',       # tipo DALL-E
+            'dalle-3',         # OpenAI DALL-E 3
+        ]
+        vistos = set()
+        modelos_a_probar = []
+        for m in modelos_imagen:
+            if m and m not in vistos:
+                modelos_a_probar.append(m)
+                vistos.add(m)
+
+        ultimo_error = None
+        for modelo_actual in modelos_a_probar:
+            try:
+                log.info(f'Intentando modelo imagen: {modelo_actual}')
+                response = g4f_client.images.generate(
+                    model=modelo_actual,
+                    prompt=prompt,
+                    n=n,
+                    size=size,
+                )
+                if response.data and len(response.data) > 0:
+                    item = response.data[0]
+                    # g4f devuelve b64_json o url segun el modelo
+                    if hasattr(item, 'b64_json') and item.b64_json:
+                        log.info(f'OK imagen | modelo: {modelo_actual} | {len(item.b64_json)} chars b64')
+                        return jsonify({
+                            'created': int(__import__('time').time()),
+                            'model': modelo_actual,
+                            'data': [{
+                                'b64_json': item.b64_json,
+                                'revised_prompt': getattr(item, 'revised_prompt', prompt),
+                            }]
+                        })
+                    elif hasattr(item, 'url') and item.url:
+                        log.info(f'OK imagen | modelo: {modelo_actual} | URL: {item.url[:80]}')
+                        return jsonify({
+                            'created': int(__import__('time').time()),
+                            'model': modelo_actual,
+                            'data': [{
+                                'url': item.url,
+                                'revised_prompt': getattr(item, 'revised_prompt', prompt),
+                            }]
+                        })
+                    else:
+                        ultimo_error = f'{modelo_actual}: respuesta sin imagen clara'
+                        log.warning(ultimo_error)
+                else:
+                    ultimo_error = f'{modelo_actual}: respuesta vacia'
+                    log.warning(ultimo_error)
+            except Exception as e:
+                ultimo_error = f'{modelo_actual}: {str(e)[:150]}'
+                log.warning(f'Fallo modelo imagen {modelo_actual}: {str(e)[:200]}')
+                continue
+
+        return jsonify({
+            'error': {
+                'message': f'Todos los modelos de imagen fallaron. Ultimo: {ultimo_error}',
+                'type': 'bridge_error'
+            }
+        }), 502
+
+    except Exception as e:
+        log.error(f'Error en images_generations: {e}', exc_info=True)
+        return jsonify({
+            'error': {'message': str(e), 'type': 'bridge_error'}
+        }), 500
+
+
 @app.route('/', methods=['GET'])
 @app.route('/health', methods=['GET'])
 def health():
@@ -323,17 +430,21 @@ def health():
         'service': 'glm-bridge',
         'mode': 'g4f-free',
         'model_default': DEFAULT_MODEL,
-        'provider': DEFAULT_PROVIDER,
+        'provider': DEFAULT_PROVIDER or 'auto',
         'api_key_required': False,
         'g4f_available': g4f_client is not None,
         'identity_reinforcement': True,
         'think_tag_stripping': True,
         'identity_filters': ['ChatGPT', 'OpenAI', 'Qwen', 'Alibaba', 'SurfSense', 'Claude', 'Gemini', 'Llama'],
-        'note': 'Provider forzado a Modelscope (no inyecta identidad). Filtros anti-identity activos.',
+        'text_models': ['deepseek-r1', 'o3-mini', 'gpt-4o', 'deepseek-v3', 'gpt-4o-mini', 'r1-1776'],
+        'image_models': ['flux', 'flux-pro', 'flux-dev', 'flux-schnell', 'sdxl-turbo', 'sd-3.5-large', 'gpt-image', 'dalle-3'],
+        'image_endpoint': '/v1/images/generations',
+        'text_endpoint': '/v1/chat/completions',
+        'note': 'Modelo texto principal: deepseek-r1 (razonamiento). Modelos imagen: flux, dall-e-3, sdxl-turbo, sd-3.5-large, gpt-image.',
     })
 
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    log.info(f'Puente g4f iniciando en puerto {port} | modelo: {DEFAULT_MODEL} | provider: {DEFAULT_PROVIDER}')
+    log.info(f'Puente g4f iniciando en puerto {port} | modelo: {DEFAULT_MODEL} | provider: {DEFAULT_PROVIDER or "auto"}')
     app.run(host='0.0.0.0', port=port, debug=False)
