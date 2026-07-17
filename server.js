@@ -55,7 +55,7 @@ const MODELOS_DISPONIBLES = {
   },
   'NewserAdvanced1.5': {
     nombre: 'NewserAdvanced1.5',
-    descripcion: 'El mas potente. Combina GPT-OSS-120B y Qwen3-32B para un razonamiento aun mas profundo. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Rate limits mas estrictos.',
+    descripcion: 'El mas potente. Un razonamiento interno previo aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Rate limits mas estrictos.',
     modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
     modeloTextoRazonamiento: process.env.GROQ_MODEL_QWEN || 'qwen/qwen3-32b',
     modeloVision: GROQ_MODEL_VISION,
