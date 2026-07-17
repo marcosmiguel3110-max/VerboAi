@@ -255,7 +255,14 @@ async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
   if (!GPT4FREE_ENABLED) return { ok: false, error: 'GLM-4 deshabilitado (GPT4FREE_ENABLED_PRO=false)' };
   if (!GPT4FREE_URL) return { ok: false, error: 'GPT4FREE_URL no configurada' };
 
-  const url = GPT4FREE_URL.replace(/\/+$/, '') + '/v1/chat/completions';
+  // Construir URL: si GPT4FREE_URL ya incluye "/chat/completions", se usa tal cual.
+  // Sino, se le appendea /v1/chat/completions.
+  // Esto permite usar tanto puentes propios (https://bridge.onrender.com)
+  // como APIs oficiales (https://open.bigmodel.cn/api/paas/v4/chat/completions).
+  const url = GPT4FREE_URL.includes('/chat/completions')
+    ? GPT4FREE_URL
+    : GPT4FREE_URL.replace(/\/+$/, '') + '/v1/chat/completions';
+
   const headers = { 'Content-Type': 'application/json' };
   if (GPT4FREE_API_KEY) headers.Authorization = `Bearer ${GPT4FREE_API_KEY}`;
 
@@ -272,7 +279,7 @@ async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
       timeout: GPT4FREE_TIMEOUT,
       headers,
       signal: opciones.signal,
-      validateStatus: () => true, // no lanzar en 4xx/5xx, manejarlo a mano
+      validateStatus: () => true,
     });
     if (resp.status < 200 || resp.status >= 300) {
       const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
@@ -284,7 +291,7 @@ async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
       console.error('[glm-4] puente devolvio respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
       return { ok: false, error: 'Respuesta vacia del puente GLM-4' };
     }
-    console.log(`[glm-4] OK - ${texto.length} chars devueltos por ${GPT4FREE_MODEL}`);
+    console.log(`[glm-4] OK - ${texto.length} chars devueltos por ${GPT4FREE_MODEL} desde ${url.slice(0, 60)}...`);
     return { ok: true, texto: texto.trim(), modelo: GPT4FREE_MODEL };
   } catch (e) {
     if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return { ok: false, error: 'cancelado' };
