@@ -38,10 +38,11 @@ const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL_PRO_TEXTO = process.env.GROQ_MODEL_PRO || process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b';
 const GROQ_MODEL_PRO_RAZONAMIENTO = process.env.GROQ_MODEL_QWEN_PRO || process.env.GROQ_MODEL_QWEN || 'qwen/qwen3-32b';
 
-// Config de Pollinations para NewserPro: flux-realism + enhance + 1024x576 (16:9).
+// Config de Pollinations para NewserPro: flux-realism + enhance + 1536x1536
+// (mismo tamaño que NewserAdvanced1.5).
 const POLLINATIONS_PRO_MODEL = process.env.POLLINATIONS_MODEL_PRO || 'flux-realism';
-const POLLINATIONS_PRO_WIDTH = parseInt(process.env.POLLINATIONS_WIDTH_PRO || '1024', 10);
-const POLLINATIONS_PRO_HEIGHT = parseInt(process.env.POLLINATIONS_HEIGHT_PRO || '576', 10);
+const POLLINATIONS_PRO_WIDTH = parseInt(process.env.POLLINATIONS_WIDTH_PRO || '1536', 10);
+const POLLINATIONS_PRO_HEIGHT = parseInt(process.env.POLLINATIONS_HEIGHT_PRO || '1536', 10);
 
 const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 
@@ -85,7 +86,7 @@ const MODELOS_DISPONIBLES = {
   },
   NewserPro: {
     nombre: 'NewserPro',
-    descripcion: 'Exclusivo admin. Razonamiento profundo (Qwen3 + GPT-OSS-120B), ejecuta codigo real, busca en la web, y genera imagenes en alta calidad con flux-realism (16:9, 1024x576). Mismo feature set que NewserAdvanced1.5.',
+    descripcion: 'Exclusivo admin. Razonamiento profundo, ejecuta codigo real, busca en la web y genera imagenes en alta calidad. Mismo feature set que NewserAdvanced1.5.',
     modeloTexto: GROQ_MODEL_PRO_TEXTO,
     modeloTextoRazonamiento: GROQ_MODEL_PRO_RAZONAMIENTO,
     modeloVision: GROQ_MODEL_VISION,
@@ -2022,20 +2023,20 @@ en la misma respuesta (WEB, CODE, APIDATA), cada una en su propia linea al final
 
 const SYSTEM_PROMPT_PRO_EXTRA = `
 
-TENES RAZONAMIENTO EXTRA: antes de esta respuesta, otro modelo (Qwen3-32B) ya penso un borrador interno
-del plan de respuesta; si ves una seccion "[RAZONAMIENTO INTERNO PREVIO...]" en tu contexto, usala solo
-como guia para pensar mejor, nunca la repitas literalmente ni la menciones al usuario.
+TENES RAZONAMIENTO EXTRA: antes de esta respuesta, otro modelo de razonamiento interno ya penso un
+borrador del plan de respuesta; si ves una seccion "[RAZONAMIENTO INTERNO PREVIO...]" en tu contexto,
+usala solo como guia para pensar mejor, nunca la repitas literalmente ni la menciones al usuario.
 
 HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserPro):
 Sos el modelo premium exclusivo para cuentas administrador. Tenes exactamente el mismo feature set que
-NewserAdvanced1.5 (CUADERNO, BUSCAR, DESCARGAR, INVESTIGAR, WEB, CODE, APIDATA) pero con generacion de
-imagenes en alta calidad usando flux-realism en formato 16:9 (1024x576).
+NewserAdvanced1.5 (CUADERNO, BUSCAR, DESCARGAR, INVESTIGAR, WEB, CODE, APIDATA) y generacion de imagenes
+en alta calidad con el mismo tamaño y resolucion que NewserAdvanced1.5.
 
 NOTA IMPORTANTE SOBRE IMAGENES: si el usuario quiere generar/crear una imagen, NO tenes que hacer nada.
 El sistema detecta automaticamente cuando un mensaje empieza con "Genera", "Generame", "Genera", etc. y
 genera la imagen sin pasar por vos. Si te preguntan si podes generar imagenes, decis que si, y que para
 hacerlo tienen que escribir "Generame [descripcion]" como mensaje. En este modelo las imagenes se generan
-con flux-realism en 16:9 (1024x576), alta calidad con enhance. NO intentes escribir ninguna etiqueta de
+en alta calidad con enhance, igual que en NewserAdvanced1.5. NO intentes escribir ninguna etiqueta de
 imagen tu mismo.
 
 NOTA: este modelo NO tiene la herramienta CLIMA (al igual que NewserAdvanced1.5). Si te preguntan por el
@@ -3086,7 +3087,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         chatGen.titulo = mensajeOriginal.length > 40 ? mensajeOriginal.slice(0, 40) + '…' : mensajeOriginal;
       }
 
-      enviarGen({ type: 'chunk', text: (esDetalladaWeb || esProWeb) ? `Generando imagen en alta calidad${esProWeb ? ' (flux-realism 16:9)' : ' (2 modelos de IA)'}: **${intencionImagen.prompt}**...` : `Generando imagen: **${intencionImagen.prompt}**...` });
+      enviarGen({ type: 'chunk', text: (esDetalladaWeb || esProWeb) ? `Generando imagen en alta calidad (2 modelos de IA): **${intencionImagen.prompt}**...` : `Generando imagen: **${intencionImagen.prompt}**...` });
       enviarGen({ type: 'investigando', query: `Generando imagen: ${intencionImagen.prompt}` });
       enviarGen({ type: 'investigando_sitio', sitio: 'image.pollinations.ai' });
 
@@ -3115,7 +3116,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
         chatGen.mensajes.push({
           role: 'assistant',
-          contenidoTexto: (esDetalladaWeb || esProWeb) ? `Imagen generada en alta calidad${esProWeb ? ' (flux-realism)' : ''}: ${intencionImagen.prompt}` : `Imagen generada: ${intencionImagen.prompt}`,
+          contenidoTexto: (esDetalladaWeb || esProWeb) ? `Imagen generada en alta calidad: ${intencionImagen.prompt}` : `Imagen generada: ${intencionImagen.prompt}`,
           fecha: new Date().toISOString(),
           descargas: [{ url: img.url, nombre: img.prompt, tamanoKB: img.tamanoKB }],
         });

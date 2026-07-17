@@ -117,7 +117,7 @@ let modelosDisponibles = [
   { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20, rateLimitMaxWeb: 30 },
   { nombre: 'NewserAdvanced', descripcion: 'Mas potente. Genera imagenes, busca en la web y consulta el clima.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8, badge: 'beta', disponible: true },
   { nombre: 'NewserAdvanced1.5', descripcion: 'El mas potente. Razonamiento aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Tambien genera imagenes con mas detalle (2 modelos de IA), maximo 2 por hora.', costoCreditos: 10, rateLimitMax: 3, rateLimitMaxWeb: 4, badge: 'pro', disponible: true },
-  { nombre: 'NewserPro', descripcion: 'Exclusivo admin. Razonamiento profundo (Qwen3 + GPT-OSS-120B), ejecuta codigo real, busca en la web, y genera imagenes en alta calidad con flux-realism (16:9, 1024x576).', costoCreditos: 0, rateLimitMax: 5, rateLimitMaxWeb: 6, badge: 'admin', disponible: true, soloAdmin: true },
+  { nombre: 'NewserPro', descripcion: 'Exclusivo admin. Razonamiento profundo, ejecuta codigo real, busca en la web y genera imagenes en alta calidad. Mismo feature set que NewserAdvanced1.5.', costoCreditos: 0, rateLimitMax: 5, rateLimitMaxWeb: 6, badge: 'admin', disponible: true, soloAdmin: true },
 ];
 let hayCuaderno = false;
 let chatIdActual = localStorage.getItem('verboAiChatId') || null;
