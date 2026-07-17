@@ -471,7 +471,7 @@ document.addEventListener('keydown', (ev) => {
 // ---------- Actualizaciones (novedades) ----------
 // Agrega o edita entradas acá. Las mas nuevas van primero.
 const listaDeActualizaciones = [
-  // { fecha: '17 jul 2026', titulo: 'Titulo de la novedad', texto: 'Descripcion breve de que cambio.' },
+  { fecha: '17 jul 2026', titulo: 'Creditos Y fixes y adds', texto: 'Agregadas funcionalidades para gestionar creditos y correcciones de bugs ademas agregamos nuevas caracteristicas.' },
 ];
 
 const btnAbrirActualizaciones = document.getElementById('btnAbrirActualizaciones');
