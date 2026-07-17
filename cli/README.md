@@ -50,7 +50,7 @@ python verboai.py run
 
 Esto:
 1. Levanta un **servidor proxy local** en `http://127.0.0.1:7788` (no sale a internet, solo tu máquina)
-2. Te pide **elegir modelo** (NewserLite o NewserAvanced)
+2. Te pide **elegir modelo** (NewserLite o NewserAdvanced)
 3. Entra en modo **REPL interactivo**
 
 ### 4. Escribir mensajes
@@ -68,7 +68,7 @@ NewserLite> Generame un león descansando al atardecer
 
 | Comando     | Acción                                                |
 |-------------|-------------------------------------------------------|
-| `/modelo`   | Cambiar de modelo en vivo (NewserLite ↔ NewserAvanced)|
+| `/modelo`   | Cambiar de modelo en vivo (NewserLite ↔ NewserAdvanced)|
 | `/creditos` | Ver cuántos créditos te quedan                        |
 | `/info`     | Info completa del token + lista de modelos            |
 | `/help`     | Mostrar ayuda                                         |
@@ -78,7 +78,7 @@ NewserLite> Generame un león descansando al atardecer
 
 Si tu mensaje empieza con **"Generame"**, **"Genera"**, **"Dibujame"**, etc., se genera una imagen con IA (pollinations.ai) y se abre automáticamente en el visor de imágenes de tu sistema.
 
-Solo funciona con **NewserAvanced** seleccionado.
+Solo funciona con **NewserAdvanced** seleccionado.
 
 Ejemplos:
 - `Generame un león descansando`

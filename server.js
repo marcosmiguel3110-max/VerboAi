@@ -317,7 +317,7 @@ function obtenerUsuarioActual(req) {
   return verificarValorFirmado(leerCookie(req, 'verbo_auth'));
 }
 
-const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/api/config']);
+const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/api/config']);
 app.use((req, res, next) => {
 
   if (req.path === '/info') return res.redirect(301, '/info.html');
@@ -333,6 +333,20 @@ const EMAILS_AUTORIZADOS_API = new Set(
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
 );
+
+// Emails con permiso para crear codigos canjeables desde la web (ver seccion
+// "Codes"). Por defecto usa los mismos emails que EMAILS_AUTORIZADOS_API;
+// para separarlos agrega la variable de entorno ADMIN_EMAILS en Render.
+const ADMIN_EMAILS = new Set(
+  (process.env.ADMIN_EMAILS || process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+);
+function esAdmin(usuario) {
+  if (!usuario || usuario.startsWith('local:')) return false;
+  return ADMIN_EMAILS.has(usuario.toLowerCase());
+}
 
 const API_TOKENS_FILE = path.join(MEMORY_DIR, 'api-tokens.json');
 if (!fs.existsSync(API_TOKENS_FILE)) fs.writeFileSync(API_TOKENS_FILE, JSON.stringify({ tokens: [] }, null, 2));
@@ -438,6 +452,9 @@ function tokenPublico(t) {
 const USUARIOS_FILE = path.join(MEMORY_DIR, 'usuarios.json');
 if (!fs.existsSync(USUARIOS_FILE)) fs.writeFileSync(USUARIOS_FILE, JSON.stringify({ usuarios: {} }, null, 2));
 
+const CODIGOS_FILE = path.join(MEMORY_DIR, 'codigos.json');
+if (!fs.existsSync(CODIGOS_FILE)) fs.writeFileSync(CODIGOS_FILE, JSON.stringify({ codigos: {} }, null, 2));
+
 const mongoDb = require('./db');
 
 async function cargarDesdeMongoAlArrancar() {
@@ -471,6 +488,12 @@ async function cargarDesdeMongoAlArrancar() {
       fs.writeFileSync(BIBLIA_PROGRESO_FILE, JSON.stringify(progreso, null, 2));
       console.log('[mongo-sync] biblia-progreso.json cargado desde Mongo.');
     }
+
+    const codigos = await mongoDb.leerDocumento('codigos');
+    if (codigos && typeof codigos === 'object') {
+      fs.writeFileSync(CODIGOS_FILE, JSON.stringify(codigos, null, 2));
+      console.log('[mongo-sync] codigos.json cargado desde Mongo.');
+    }
   } catch (e) {
     console.error('[mongo-sync] Error cargando desde Mongo:', e.message);
   }
@@ -501,6 +524,24 @@ function guardarUsuarios(usuarios) {
   fs.writeFileSync(USUARIOS_FILE, JSON.stringify(valor, null, 2));
 
   guardarEnMongoBackground('usuarios', valor);
+}
+
+function leerCodigos() {
+  try {
+    const d = JSON.parse(fs.readFileSync(CODIGOS_FILE, 'utf-8'));
+    return d.codigos || {};
+  } catch (e) {
+    return {};
+  }
+}
+function guardarCodigos(codigos) {
+  const valor = { codigos };
+  fs.writeFileSync(CODIGOS_FILE, JSON.stringify(valor, null, 2));
+
+  guardarEnMongoBackground('codigos', valor);
+}
+function normalizarCodigo(codigo) {
+  return String(codigo || '').trim().toUpperCase().replace(/\s+/g, '');
 }
 
 const CREDITOS_GLOBALES_INICIALES = 1000;
@@ -754,10 +795,97 @@ app.get('/api/whoami', (req, res) => {
   const usuario = obtenerUsuarioActual(req);
   if (!usuario) return res.json({ usuario: null });
   if (usuario.startsWith('local:')) {
-    return res.json({ usuario: usuario.slice(6), nombre: usuario.slice(6) });
+    return res.json({ usuario: usuario.slice(6), nombre: usuario.slice(6), esAdmin: false });
   }
   const cuenta = leerUsuarios()[usuario];
-  res.json({ usuario, nombre: (cuenta && cuenta.nombre) || usuario });
+  res.json({ usuario, nombre: (cuenta && cuenta.nombre) || usuario, esAdmin: esAdmin(usuario) });
+});
+
+app.post('/api/codigos/canjear', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!usuario) return res.status(401).json({ error: 'No autenticado.' });
+  if (usuario.startsWith('local:')) return res.status(400).json({ error: 'Tu cuenta local ya tiene creditos ilimitados.' });
+
+  const codigo = normalizarCodigo((req.body || {}).codigo);
+  if (!codigo) return res.status(400).json({ error: 'Escribi un codigo.' });
+
+  const codigos = leerCodigos();
+  const entrada = codigos[codigo];
+  if (!entrada) return res.status(404).json({ error: 'Ese codigo no existe.' });
+  if (entrada.usadoPor && entrada.usadoPor.includes(usuario)) {
+    return res.status(400).json({ error: 'Ya canjeaste este codigo.' });
+  }
+  const usosMax = typeof entrada.usosMax === 'number' ? entrada.usosMax : 1;
+  const usados = (entrada.usadoPor || []).length;
+  if (usosMax !== -1 && usados >= usosMax) {
+    return res.status(400).json({ error: 'Este codigo ya no tiene usos disponibles.' });
+  }
+
+  const usuarios = leerUsuarios();
+  const cuenta = usuarios[usuario];
+  if (!cuenta) return res.status(404).json({ error: 'Cuenta no encontrada.' });
+  if (typeof cuenta.creditosGlobales !== 'number') cuenta.creditosGlobales = CREDITOS_GLOBALES_INICIALES;
+  cuenta.creditosGlobales += entrada.creditos || 0;
+  guardarUsuarios(usuarios);
+
+  entrada.usadoPor = [...(entrada.usadoPor || []), usuario];
+  codigos[codigo] = entrada;
+  guardarCodigos(codigos);
+
+  res.json({ ok: true, creditos: entrada.creditos || 0, restantes: cuenta.creditosGlobales });
+});
+
+app.post('/api/codigos/crear', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tenes permiso para crear codigos.' });
+
+  const { creditos, usosMax } = req.body || {};
+  const codigo = normalizarCodigo((req.body || {}).codigo);
+  const creditosNum = parseInt(creditos, 10);
+  const usosMaxNum = usosMax === -1 || usosMax === '-1' ? -1 : (parseInt(usosMax, 10) || 1);
+
+  if (!codigo) return res.status(400).json({ error: 'Falta el codigo.' });
+  if (!Number.isFinite(creditosNum) || creditosNum <= 0) return res.status(400).json({ error: 'Los creditos deben ser un numero mayor a 0.' });
+
+  const codigos = leerCodigos();
+  if (codigos[codigo]) return res.status(400).json({ error: 'Ese codigo ya existe.' });
+
+  codigos[codigo] = { creditos: creditosNum, usosMax: usosMaxNum, usadoPor: [], creadoPor: usuario, creadoEn: new Date().toISOString() };
+  guardarCodigos(codigos);
+
+  res.json({ ok: true, codigo });
+});
+
+app.get('/api/codigos', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tenes permiso para ver los codigos.' });
+
+  const codigos = leerCodigos();
+  const lista = Object.keys(codigos).map((codigo) => {
+    const c = codigos[codigo];
+    return {
+      codigo,
+      creditos: c.creditos || 0,
+      usosMax: typeof c.usosMax === 'number' ? c.usosMax : 1,
+      usados: (c.usadoPor || []).length,
+      creadoEn: c.creadoEn || null,
+    };
+  }).sort((a, b) => (b.creadoEn || '').localeCompare(a.creadoEn || ''));
+
+  res.json({ codigos: lista });
+});
+
+app.delete('/api/codigos/:codigo', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tenes permiso para borrar codigos.' });
+
+  const codigo = normalizarCodigo(req.params.codigo);
+  const codigos = leerCodigos();
+  if (!codigos[codigo]) return res.status(404).json({ error: 'Ese codigo no existe.' });
+  delete codigos[codigo];
+  guardarCodigos(codigos);
+
+  res.json({ ok: true });
 });
 
 app.post('/api/perfil/nombre', (req, res) => {

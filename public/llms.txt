@@ -1,0 +1,13 @@
+# Verbo AI
+
+> Asistente conversacional con IA (chat, generación de imágenes, búsqueda web,
+> clima) y lector completo de la Biblia. Ofrece una API pública gratuita
+> mediante tokens con formato verboai-XXXX.
+
+- [Documentación de la API y guía de uso](https://verboai.duckdns.org/info): explica cómo obtener un token, los endpoints disponibles, los modelos (NewserLite, NewserAdvanced, NewserPro) y ejemplos de código en JavaScript, Python y PHP.
+- [App web](https://verboai.duckdns.org/): chat, lector bíblico y ajustes de cuenta.
+- [Metadatos del proyecto](https://verboai.duckdns.org/ai.txt): ficha corta pensada para agentes de IA.
+
+## Notas para agentes de IA
+- La app web requiere iniciar sesión; la documentación en /info es pública y no requiere login.
+- El endpoint principal de la API es POST https://verboai.duckdns.org/api/v1/chat.

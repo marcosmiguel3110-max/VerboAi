@@ -2593,6 +2593,100 @@ html.tema-night .token-descarga-link:hover {
 .btn-recargar-creditos:hover { background: var(--acento-hover, #B0552E); }
 html.tema-night .btn-recargar-creditos { background: var(--boton-nuevo-noche); }
 
+/* ---------- Actualizaciones (novedades) ---------- */
+.overlay-actualizaciones {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0,0,0,0.35);
+}
+.overlay-actualizaciones.oculto { display: none; }
+
+.actualizaciones-tarjeta {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--crema);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+  padding: 28px;
+}
+.actualizaciones-tarjeta h2 { margin: 0 0 6px; }
+
+.lista-actualizaciones { margin-top: 18px; display: flex; flex-direction: column; gap: 16px; }
+.actualizacion-item {
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--crema-oscuro);
+}
+.actualizacion-item-fecha { font-size: 12px; color: var(--texto-suave); margin-bottom: 4px; }
+.actualizacion-item-titulo { font-weight: 600; margin-bottom: 4px; }
+.actualizacion-item-texto { font-size: 13.5px; color: var(--texto); line-height: 1.5; }
+.lista-actualizaciones-vacio { color: var(--texto-suave); font-size: 13.5px; }
+
+html.tema-night .actualizacion-item { background: var(--hover-noche); }
+
+.codes-canjear { display: flex; gap: 8px; margin-top: 14px; }
+.codes-canjear input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--borde);
+  background: var(--crema-oscuro);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: 14px;
+  text-transform: uppercase;
+}
+.codes-canjear button, #btnCrearCodigo {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: none;
+  background: var(--acento);
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.codes-canjear button:hover, #btnCrearCodigo:hover { filter: brightness(1.08); }
+.codes-mensaje { margin-top: 10px; font-size: 13.5px; min-height: 18px; }
+.codes-mensaje.ok { color: #2E8B57; }
+.codes-mensaje.error { color: #C0392B; }
+
+.codes-separador { border: none; border-top: 1px solid var(--borde); margin: 20px 0 16px; }
+.codes-admin h3 { margin: 0 0 10px; font-size: 15px; }
+.codes-crear-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 10px; }
+.codes-crear-grid input {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--borde);
+  background: var(--crema-oscuro);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: 13.5px;
+}
+.lista-codigos-admin { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.codigo-admin-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--borde);
+  background: var(--crema-oscuro);
+  font-size: 13px;
+}
+.codigo-admin-item-borrar { border: none; background: none; color: #C0392B; cursor: pointer; font-size: 12px; }
+.codigo-admin-item-borrar:hover { text-decoration: underline; }
+
 .overlay-anuncio-creditos {
   position: fixed;
   inset: 0;

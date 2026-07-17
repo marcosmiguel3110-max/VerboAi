@@ -4,6 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Verbo AI - Documentación API</title>
+<meta name="description" content="Verbo AI: chat con inteligencia artificial, lectura de la Biblia y API pública gratuita con tokens verboai-XXXX. Guía de uso y documentación completa de la API." />
+<meta property="og:title" content="Verbo AI — Documentación y guía de uso" />
+<meta property="og:description" content="Chateá con IA, leé la Biblia y conectá tu propia app a la API pública de Verbo AI." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://verboai.duckdns.org/info" />
+<meta property="og:image" content="https://verboai.duckdns.org/logo.png" />
+<link rel="canonical" href="https://verboai.duckdns.org/info" />
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2832971109540830" crossorigin="anonymous"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -200,18 +207,32 @@
     <p>Conectá tu app, bot o script a Verbo AI usando un token <code style="background:rgba(255,255,255,0.2);color:white">verboai-XXXX</code></p>
   </header>
 
+  <section>
+    <h2>📖 Cómo usar Verbo AI (la web)</h2>
+    <p>Guía rápida para sacarle el jugo a la web, sin tocar código.</p>
+    <ul>
+      <li><strong>Chatear:</strong> escribí tu mensaje abajo y mandalo. Podés adjuntar hasta 5 imágenes con el clip.</li>
+      <li><strong>Elegir modelo:</strong> arriba del chat (o al lado del micrófono) está el selector de modelo. <strong>NewserLite</strong> es rápido y liviano para el día a día; <strong>NewserAdvanced</strong> es más potente, genera imágenes, busca en la web y consulta el clima.</li>
+      <li><strong>La Biblia completa:</strong> desde el menú lateral podés leer la Biblia capítulo por capítulo, marcar tu progreso y volver donde la dejaste.</li>
+      <li><strong>Cuadernito:</strong> durante una conversación de estudio bíblico, Verbo AI puede ir armando notas en un panel lateral que podés abrir con el ícono del cuaderno.</li>
+      <li><strong>Nuevas conversaciones:</strong> "Nueva conversación" en el menú lateral empieza un chat limpio. Todas tus conversaciones quedan guardadas y las podés buscar, renombrar o borrar desde la lista.</li>
+      <li><strong>Settings:</strong> ahí cambiás el modo de respuesta, el fondo/tema, generás tus tokens de API y ves tus créditos.</li>
+      <li><strong>Créditos:</strong> cada modelo gasta una cantidad distinta por mensaje (ver "3. Modelos disponibles" más abajo). Se comparten entre la web y tus tokens de API.</li>
+    </ul>
+  </section>
+
   <div class="tester">
     <h2 style="margin-top:0">🧪 Probar la API en vivo</h2>
-    <p>Pegá tu token y un mensaje. Podés probar generar imágenes escribiendo "Generame [algo]" con NewserAvanced.</p>
+    <p>Pegá tu token y un mensaje. Podés probar generar imágenes escribiendo "Generame [algo]" con NewserAdvanced.</p>
 
     <div class="grid-2">
       <input type="text" id="token" placeholder="verboai-XXXXXXXXXXXX" />
       <select id="modelo">
         <option value="NewserLite">NewserLite (1 crédito, rápido)</option>
-        <option value="NewserAvanced">NewserAvanced (5 créditos, potente + imágenes)</option>
+        <option value="NewserAdvanced">NewserAdvanced (5 créditos, potente + imágenes)</option>
       </select>
     </div>
-    <textarea id="mensaje" rows="2" placeholder="Escribí tu mensaje acá... (proba: 'Generame un leon descansando' con NewserAvanced)">Hola, quien eres?</textarea>
+    <textarea id="mensaje" rows="2" placeholder="Escribí tu mensaje acá... (proba: 'Generame un leon descansando' con NewserAdvanced)">Hola, quien eres?</textarea>
     <button id="btnProbar">Probar petición</button>
     <button id="btnLimpiar" style="background:#454F6B">Limpiar</button>
 
@@ -280,7 +301,7 @@
         <div class="label">Rápido y liviano<br>1 crédito/pedido<br>20 req/min (API)<br>30 req/min (web)</div>
       </div>
       <div class="item">
-        <div class="num">NewserAvanced</div>
+        <div class="num">NewserAdvanced</div>
         <div class="label">Potente + imágenes<br>5 créditos/pedido<br>5 req/min (API)<br>8 req/min (web)</div>
       </div>
     </div>
@@ -289,7 +310,7 @@
 
   <section>
     <h2>4. Generar imágenes con IA 🎨</h2>
-    <p>Si el mensaje empieza con <code>Generame</code>, <code>Genera</code>, <code>Dibujame</code>, etc., se genera una imagen con IA automáticamente (sin pasar por el modelo de texto). Solo funciona con <strong>NewserAvanced</strong>.</p>
+    <p>Si el mensaje empieza con <code>Generame</code>, <code>Genera</code>, <code>Dibujame</code>, etc., se genera una imagen con IA automáticamente (sin pasar por el modelo de texto). Solo funciona con <strong>NewserAdvanced</strong>.</p>
     <ul>
       <li>Consume <strong>+1 crédito</strong> adicional (encima del costo del modelo)</li>
       <li>La imagen se devuelve como URL en el campo <code>imagen.url</code></li>
@@ -300,13 +321,13 @@
   -H "Content-Type: application/json" \
   -d '{
     "mensaje": "Generame un leon descansando al atardecer",
-    "modelo": "NewserAvanced"
+    "modelo": "NewserAdvanced"
   }'</code></pre>
     <p><strong>Respuesta:</strong></p>
     <pre><code>{
   "ok": true,
   "respuesta": "Imagen generada: un leon descansando al atardecer",
-  "modelo": "NewserAvanced",
+  "modelo": "NewserAdvanced",
   "costoCreditos": 6,
   "costoBase": 5,
   "costoExtraHerramientas": 1,
@@ -348,7 +369,7 @@ const r = await preguntar("Hola, quien eres?", "NewserLite");
 console.log(r.respuesta, "créditos:", r.creditosRestantes);
 
 // Ejemplo: generar imagen
-const r2 = await preguntar("Generame un leon", "NewserAvanced");
+const r2 = await preguntar("Generame un leon", "NewserAdvanced");
 if (r2.imagen) {
   const url = "https://verboai.duckdns.org" + r2.imagen.url;
   console.log("Imagen:", url);
@@ -379,7 +400,7 @@ r = preguntar("Hola, quien eres?", "NewserLite")
 print(r["respuesta"], "creditos:", r["creditosRestantes"])
 
 # Ejemplo: generar imagen
-r = preguntar("Generame un leon", "NewserAvanced")
+r = preguntar("Generame un leon", "NewserAdvanced")
 if r.get("imagen"):
     print("Imagen:", "https://verboai.duckdns.org" + r["imagen"]["url"])</code></pre>
     </details>
@@ -421,17 +442,17 @@ curl -X POST https://verboai.duckdns.org/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"mensaje":"Hola, quien eres?"}'
 
-# Con NewserAvanced
+# Con NewserAdvanced
 curl -X POST https://verboai.duckdns.org/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
-  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAvanced"}'
+  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAdvanced"}'
 
 # Generar imagen
 curl -X POST https://verboai.duckdns.org/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
-  -d '{"mensaje":"Generame un leon","modelo":"NewserAvanced"}'
+  -d '{"mensaje":"Generame un leon","modelo":"NewserAdvanced"}'
 
 # Info del token (no gasta créditos)
 curl -H "Authorization: Bearer verboai-XXXX" \
@@ -443,7 +464,7 @@ curl -H "Authorization: Bearer verboai-XXXX" \
     <h2>6. Códigos de error</h2>
     <ul>
       <li><code>401</code> — Token inválido, revocado, o falta el header <code>Authorization</code></li>
-      <li><code>402</code> — No tenés créditos suficientes (ej: NewserAvanced necesita 5)</li>
+      <li><code>402</code> — No tenés créditos suficientes (ej: NewserAdvanced necesita 5)</li>
       <li><code>429</code> — Rate limit alcanzado (demasiados pedidos por minuto)</li>
       <li><code>400</code> — Body mal formado o falta <code>"mensaje"</code></li>
       <li><code>502</code> — El proveedor de IA no responde (probá de nuevo en unos minutos)</li>
@@ -470,7 +491,6 @@ python verboai.py info</code></pre>
 </div>
 
 <script>
-  // Tester en vivo
   const btnProbar = document.getElementById('btnProbar');
   const btnLimpiar = document.getElementById('btnLimpiar');
   const resultado = document.getElementById('resultado');
@@ -524,7 +544,6 @@ python verboai.py info</code></pre>
       resultado.className = 'tester-result ok';
       resultado.textContent = JSON.stringify(data, null, 2);
 
-      // Info card
       infoCard.style.display = 'grid';
       document.getElementById('rModelo').textContent = data.modeloUsado || '-';
       document.getElementById('rCosto').textContent = data.costoCreditos || '-';
@@ -532,7 +551,6 @@ python verboai.py info</code></pre>
       document.getElementById('rRestantes').textContent = restantes == -1 ? '∞' : (restantes != null ? restantes : '-');
       document.getElementById('rTiempo').textContent = tiempo;
 
-      // Si trajo imagen, mostrarla
       if (data.imagen && data.imagen.url) {
         const url = data.imagen.url.startsWith('http') ? data.imagen.url : data.imagen.url;
         const img = document.createElement('img');
@@ -556,7 +574,6 @@ python verboai.py info</code></pre>
     infoCard.style.display = 'none';
   });
 
-  // Copiar código
   function copiar(btn) {
     const code = btn.parentElement.querySelector('code').textContent;
     navigator.clipboard.writeText(code).then(() => {

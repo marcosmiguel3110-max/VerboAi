@@ -468,6 +468,169 @@ document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && !overlaySettings.classList.contains('oculto')) overlaySettings.classList.add('oculto');
 });
 
+// ---------- Actualizaciones (novedades) ----------
+// Agrega o edita entradas acá. Las mas nuevas van primero.
+const listaDeActualizaciones = [
+  // { fecha: '17 jul 2026', titulo: 'Titulo de la novedad', texto: 'Descripcion breve de que cambio.' },
+];
+
+const btnAbrirActualizaciones = document.getElementById('btnAbrirActualizaciones');
+const btnCerrarActualizaciones = document.getElementById('btnCerrarActualizaciones');
+const overlayActualizaciones = document.getElementById('overlayActualizaciones');
+const listaActualizacionesEl = document.getElementById('listaActualizaciones');
+
+function renderActualizaciones() {
+  if (!listaActualizacionesEl) return;
+  if (!listaDeActualizaciones.length) {
+    listaActualizacionesEl.innerHTML = '<p class="lista-actualizaciones-vacio">Todavia no hay novedades publicadas.</p>';
+    return;
+  }
+  listaActualizacionesEl.innerHTML = listaDeActualizaciones.map((a) => (
+    '<div class="actualizacion-item">' +
+      '<div class="actualizacion-item-fecha">' + escapeHtml(a.fecha || '') + '</div>' +
+      '<div class="actualizacion-item-titulo">' + escapeHtml(a.titulo || '') + '</div>' +
+      '<div class="actualizacion-item-texto">' + escapeHtml(a.texto || '') + '</div>' +
+    '</div>'
+  )).join('');
+}
+
+if (btnAbrirActualizaciones && overlayActualizaciones) {
+  btnAbrirActualizaciones.addEventListener('click', () => {
+    renderActualizaciones();
+    overlayActualizaciones.classList.remove('oculto');
+  });
+}
+if (btnCerrarActualizaciones && overlayActualizaciones) {
+  btnCerrarActualizaciones.addEventListener('click', () => overlayActualizaciones.classList.add('oculto'));
+}
+if (overlayActualizaciones) {
+  overlayActualizaciones.addEventListener('click', (ev) => {
+    if (ev.target === overlayActualizaciones) overlayActualizaciones.classList.add('oculto');
+  });
+}
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && overlayActualizaciones && !overlayActualizaciones.classList.contains('oculto')) {
+    overlayActualizaciones.classList.add('oculto');
+  }
+});
+
+// ---------- Codes (canjear codigos por creditos) ----------
+let esUsuarioAdmin = false;
+
+const btnAbrirCodes = document.getElementById('btnAbrirCodes');
+const btnCerrarCodes = document.getElementById('btnCerrarCodes');
+const overlayCodes = document.getElementById('overlayCodes');
+const inputCodigo = document.getElementById('inputCodigo');
+const btnCanjearCodigo = document.getElementById('btnCanjearCodigo');
+const codesMensaje = document.getElementById('codesMensaje');
+
+function mostrarMensajeCodes(el, texto, tipo) {
+  if (!el) return;
+  el.textContent = texto;
+  el.className = 'codes-mensaje' + (tipo ? ' ' + tipo : '');
+}
+
+if (btnAbrirCodes && overlayCodes) {
+  btnAbrirCodes.addEventListener('click', () => {
+    overlayCodes.classList.remove('oculto');
+    mostrarMensajeCodes(codesMensaje, '', '');
+    if (esUsuarioAdmin) cargarListaCodigosAdmin();
+  });
+}
+if (btnCerrarCodes && overlayCodes) {
+  btnCerrarCodes.addEventListener('click', () => overlayCodes.classList.add('oculto'));
+}
+if (overlayCodes) {
+  overlayCodes.addEventListener('click', (ev) => {
+    if (ev.target === overlayCodes) overlayCodes.classList.add('oculto');
+  });
+}
+
+if (btnCanjearCodigo) {
+  btnCanjearCodigo.addEventListener('click', async () => {
+    const codigo = (inputCodigo.value || '').trim();
+    if (!codigo) { mostrarMensajeCodes(codesMensaje, 'Escribi un codigo.', 'error'); return; }
+    btnCanjearCodigo.disabled = true;
+    try {
+      const r = await fetch('/api/codigos/canjear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        mostrarMensajeCodes(codesMensaje, d.error || 'No se pudo canjear el codigo.', 'error');
+      } else {
+        mostrarMensajeCodes(codesMensaje, `Listo! Sumaste ${d.creditos} creditos.`, 'ok');
+        inputCodigo.value = '';
+        cargarCreditos();
+      }
+    } catch (e) {
+      mostrarMensajeCodes(codesMensaje, 'Error de conexion.', 'error');
+    }
+    btnCanjearCodigo.disabled = false;
+  });
+}
+
+// ---------- Codes: panel de admin para crear codigos sin redeploy ----------
+const codigoNuevoTexto = document.getElementById('codigoNuevoTexto');
+const codigoNuevoCreditos = document.getElementById('codigoNuevoCreditos');
+const codigoNuevoUsos = document.getElementById('codigoNuevoUsos');
+const btnCrearCodigo = document.getElementById('btnCrearCodigo');
+const codesAdminMensaje = document.getElementById('codesAdminMensaje');
+const listaCodigosAdmin = document.getElementById('listaCodigosAdmin');
+
+async function cargarListaCodigosAdmin() {
+  if (!listaCodigosAdmin) return;
+  try {
+    const r = await fetch('/api/codigos');
+    const d = await r.json();
+    if (!r.ok || !Array.isArray(d.codigos)) { listaCodigosAdmin.innerHTML = ''; return; }
+    listaCodigosAdmin.innerHTML = d.codigos.map((c) => (
+      '<div class="codigo-admin-item">' +
+        '<span>' + escapeHtml(c.codigo) + ' — ' + c.creditos + ' cr — ' + c.usados + '/' + (c.usosMax === -1 ? '∞' : c.usosMax) + ' usos</span>' +
+        '<button class="codigo-admin-item-borrar" data-codigo="' + escapeHtml(c.codigo) + '">Borrar</button>' +
+      '</div>'
+    )).join('');
+    listaCodigosAdmin.querySelectorAll('.codigo-admin-item-borrar').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await fetch('/api/codigos/' + encodeURIComponent(btn.dataset.codigo), { method: 'DELETE' });
+        cargarListaCodigosAdmin();
+      });
+    });
+  } catch (e) { /* si falla, dejamos la lista como estaba */ }
+}
+
+if (btnCrearCodigo) {
+  btnCrearCodigo.addEventListener('click', async () => {
+    const codigo = (codigoNuevoTexto.value || '').trim();
+    const creditos = parseInt(codigoNuevoCreditos.value, 10);
+    const usosMax = codigoNuevoUsos.value.trim() === '' ? 1 : parseInt(codigoNuevoUsos.value, 10);
+    if (!codigo || !creditos) { mostrarMensajeCodes(codesAdminMensaje, 'Completa codigo y creditos.', 'error'); return; }
+    btnCrearCodigo.disabled = true;
+    try {
+      const r = await fetch('/api/codigos/crear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo, creditos, usosMax }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        mostrarMensajeCodes(codesAdminMensaje, d.error || 'No se pudo crear el codigo.', 'error');
+      } else {
+        mostrarMensajeCodes(codesAdminMensaje, `Codigo "${d.codigo}" creado.`, 'ok');
+        codigoNuevoTexto.value = '';
+        codigoNuevoCreditos.value = '';
+        codigoNuevoUsos.value = '';
+        cargarListaCodigosAdmin();
+      }
+    } catch (e) {
+      mostrarMensajeCodes(codesAdminMensaje, 'Error de conexion.', 'error');
+    }
+    btnCrearCodigo.disabled = false;
+  });
+}
+
 let claveApiAccesoVerificado = false;
 let claveApiTieneAcceso = false;
 let claveApiCargandoTokens = false;
@@ -1880,6 +2043,9 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
       const elAvatar = document.getElementById('perfilAvatar');
       if (elNombre) elNombre.textContent = nombre;
       if (elAvatar) elAvatar.textContent = nombre.trim().charAt(0) || '?';
+      esUsuarioAdmin = !!d.esAdmin;
+      const codesAdmin = document.getElementById('codesAdmin');
+      if (codesAdmin) codesAdmin.classList.toggle('oculto', !esUsuarioAdmin);
     })
     .catch(() => {});
 
