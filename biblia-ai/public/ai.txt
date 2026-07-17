@@ -1,0 +1,6 @@
+name: Verbo AI
+developer: VerboAITeams
+description: Asistente conversacional con IA. Genera imagenes, busca en la web, consulta el clima. API publica con tokens verboai-XXXX.
+url: https://verboai.duckdns.org
+documentation: https://verboai.duckdns.org/info
+api_endpoint: https://verboai.duckdns.org/api/v1/chat

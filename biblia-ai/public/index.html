@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+<title>Verbo AI</title>
+<meta name="description" content="Verbo AI: asistente de chat con inteligencia artificial, lectura de la Biblia y API pública. Documentación y guía de uso en /info." />
+<link rel="icon" type="image/png" href="/logo.png" />
+<link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" />
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2832971109540830" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="style.css?v=10" />
+<script>
+  try { if (localStorage.getItem('verboAiTema') === 'df-night') document.documentElement.classList.add('tema-night'); } catch (e) {}
+</script>
+</head>
+<body>
+
+<div class="app">
+
+  <div id="fondoSidebar" class="fondo-sidebar oculto"></div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="marca">
+      <img src="logo.png" alt="Verbo AI" class="marca-logo" />
+      <span class="marca-texto">Verbo AI</span>
+    </div>
+
+    <nav class="nav-principal">
+      <button id="btnNuevoChat" class="nav-item nav-item-nuevo">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M5 12h14" stroke-linecap="round"/>
+        </svg>
+        Nueva conversacion
+      </button>
+
+      <button id="btnAbrirBibliaNav" class="nav-item">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+        La Biblia completa
+      </button>
+
+      <button id="btnAbrirSettings" class="nav-item">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+        Settings
+      </button>
+
+      <button id="btnAbrirActualizaciones" class="nav-item">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 0-7 7c0 3.5-1.5 5.5-2 6.5-.3.6.1 1.5 1 1.5h16c.9 0 1.3-.9 1-1.5-.5-1-2-3-2-6.5a7 7 0 0 0-7-7Z"/><path d="M9 20a3 3 0 0 0 6 0"/></svg>
+        Actualizaciones
+      </button>
+
+      <button id="btnAbrirCodes" class="nav-item">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10v4M17 10v4M11 9v6M14 9v6" stroke-linecap="round"/></svg>
+        Codes
+      </button>
+
+      <div class="nav-mas-wrap">
+        <button id="btnMasCodes" class="nav-item nav-item-mas" title="Mas opciones">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </nav>
+
+    <div class="sidebar-buscador">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
+      <input type="text" id="buscarChats" placeholder="Buscar en tus chats..." />
+    </div>
+
+    <p class="sidebar-etiqueta">Chats</p>
+    <div id="listaChats" class="lista-chats"></div>
+
+    <button id="btnBorrarMemoria" class="btn-borrar">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Borrar esta conversacion
+    </button>
+
+    <div class="perfil-usuario" id="perfilUsuario">
+      <div class="perfil-menu oculto" id="perfilMenu">
+        <button id="btnCerrarSesion">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Cerrar sesion
+        </button>
+      </div>
+      <div class="perfil-avatar" id="perfilAvatar">?</div>
+      <div class="perfil-info">
+        <span class="perfil-nombre" id="perfilNombreTexto">Cargando...</span>
+        <span class="perfil-beta">Beta</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="chat">
+    <svg class="chat-fondo" viewBox="0 0 1440 400" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <path class="chat-fondo-cresta chat-fondo-cresta-1" d="M0,220 C160,180 260,240 420,200 C580,160 640,120 800,150 C940,172 1020,130 1160,145 C1300,160 1360,190 1440,170 L1440,400 L0,400 Z" />
+      <path class="chat-fondo-cresta chat-fondo-cresta-2" d="M0,280 C200,255 340,290 520,270 C700,250 820,285 1000,270 C1140,258 1280,285 1440,272 L1440,400 L0,400 Z" />
+    </svg>
+    <header class="chat-header">
+      <button id="btnAbrirSidebarMovil" class="btn-menu-movil" title="Menu">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg>
+      </button>
+      <img src="logo.png" alt="Verbo AI" class="perfil-icono" />
+      <div>
+        <p class="chat-header-titulo">Verbo AI</p>
+        <p class="chat-header-sub" id="chatHeaderSub">Modelo: NewserLite</p>
+      </div>
+      <button id="btnCuaderno" class="btn-cuaderno-toggle oculto" title="Ver cuadernito">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h13a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V4Z"/><path d="M4 17a3 3 0 0 1 3-3h13"/><path d="M8 8h8M8 11h6"/></svg>
+      </button>
+      <div class="selector-modelo-header" id="selectorModeloHeader">
+        <button type="button" class="btn-selector-modelo" id="btnSelectorModeloHeader">
+          <span class="selector-modelo-nombre" id="selectorModeloHeaderNombre">NewserLite</span>
+          <svg class="selector-modelo-flecha" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="selector-modelo-menu oculto" id="selectorModeloMenuHeader" role="listbox"></div>
+      </div>
+    </header>
+
+    <div id="mensajes" class="mensajes"></div>
+
+    <div id="indicadorCarga" class="indicador-carga oculto">
+      <svg class="carga-icono" viewBox="0 0 50 50">
+        <path d="M25 5 C13 5, 5 13, 5 25 C5 37, 13 45, 25 45" stroke="var(--acento)" stroke-width="4" fill="none" stroke-linecap="round"/>
+      </svg>
+      <span>Meditando la respuesta...</span>
+    </div>
+
+    <div id="previewNombreImagen" class="preview-imagen"></div>
+
+    <form id="formChat" class="entrada">
+      <label for="inputImagen" class="btn-icono" title="Adjuntar hasta 5 imagenes">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="5" width="18" height="14" rx="2"/>
+          <circle cx="8.5" cy="10.5" r="1.5"/>
+          <path d="M21 15l-5-5-4 4-3-3-6 6"/>
+        </svg>
+      </label>
+      <input type="file" id="inputImagen" accept="image/*" multiple hidden />
+
+      <input type="text" id="inputTexto" placeholder="Escribe tu mensaje..." autocomplete="off" />
+
+      <button type="button" id="btnMicrofono" class="btn-icono btn-microfono" title="Hablar">
+        <svg class="icono-mic" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="2" width="6" height="12" rx="3"/>
+          <path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4M9 22h6" stroke-linecap="round"/>
+        </svg>
+        <svg class="icono-pausa oculto" viewBox="0 0 24 24" width="19" height="19" fill="currentColor">
+          <rect x="6" y="5" width="4" height="14" rx="1"/>
+          <rect x="14" y="5" width="4" height="14" rx="1"/>
+        </svg>
+      </button>
+
+      <div class="selector-modelo" id="selectorModelo">
+        <button type="button" id="btnSelectorModelo" class="btn-selector-modelo" title="Cambiar modelo" aria-haspopup="listbox" aria-expanded="false">
+          <span class="selector-modelo-nombre" id="selectorModeloNombre">NewserLite</span>
+          <svg class="selector-modelo-flecha" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="selector-modelo-menu oculto" id="selectorModeloMenu" role="listbox">
+          
+        </div>
+      </div>
+
+      <button type="submit" id="btnEnviar" class="btn-icono btn-enviar" title="Enviar">
+        <svg class="icono-enviar" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 2 11 13" stroke-linecap="round"/>
+          <path d="M22 2 15 22 11 13 2 9Z" stroke-linejoin="round"/>
+        </svg>
+        <svg class="icono-detener oculto" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <rect x="6" y="6" width="12" height="12" rx="2"/>
+        </svg>
+      </button>
+    </form>
+  </main>
+
+  <aside id="frameCuaderno" class="frame-cuaderno oculto">
+    <div class="cuaderno-header">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h13a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V4Z"/><path d="M4 17a3 3 0 0 1 3-3h13"/></svg>
+      <span>Cuadernito biblico</span>
+      <button id="btnAbrirBiblia" title="Abrir la Biblia completa">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+      </button>
+      <button id="btnCerrarCuaderno" title="Cerrar">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="cuadernoLista" class="cuaderno-cuerpo cuaderno-lista"></div>
+  </aside>
+
+  <div id="modalBiblia" class="modal-biblia oculto">
+    <div class="biblia-header">
+      <button id="btnCerrarBiblia" class="biblia-btn-icono" title="Cerrar">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18" stroke-linecap="round"/></svg>
+      </button>
+
+      <button id="btnAbrirSelectorLibro" class="biblia-titulo-actual">
+        <span id="tituloLibroCapitulo">Cargando...</span>
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+
+      <div class="biblia-nav-capitulo">
+        <button id="btnCapAnterior" class="biblia-btn-icono" title="Capitulo anterior">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button id="btnCapSiguiente" class="biblia-btn-icono" title="Capitulo siguiente">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <div class="biblia-zoom">
+        <button id="btnZoomMenos" class="biblia-btn-icono" title="Reducir texto">A-</button>
+        <button id="btnZoomMas" class="biblia-btn-icono" title="Agrandar texto">A+</button>
+      </div>
+      <button id="btnMarcarAqui" class="biblia-btn-marcar" title="Guardar este capitulo como donde te quedaste">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4V3Z" stroke-linejoin="round"/></svg>
+        <span>Marcar aqui</span>
+      </button>
+    </div>
+    <div id="biblaAvisoMarcador" class="biblia-aviso-marcador oculto"></div>
+    <div id="biblaCuerpo" class="biblia-cuerpo"></div>
+
+    <div id="selectorLibro" class="selector-libro oculto">
+      <div class="selector-libro-header">
+        <button id="btnCerrarSelectorLibro" class="biblia-btn-icono" title="Volver">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18" stroke-linecap="round"/></svg>
+        </button>
+        <div class="selector-libro-tabs">
+          <button class="tab-testamento activa" data-testamento="Antiguo Testamento">Antiguo Testamento</button>
+          <button class="tab-testamento" data-testamento="Nuevo Testamento">Nuevo Testamento</button>
+        </div>
+      </div>
+      <div id="listaLibros" class="lista-libros"></div>
+      <div id="listaCapitulos" class="lista-capitulos oculto"></div>
+    </div>
+  </div>
+
+  <div id="overlaySettings" class="overlay-settings oculto">
+    <div class="settings-cielo">
+      <div class="settings-resplandor"></div>
+      <svg class="settings-montanas" viewBox="0 0 1440 700" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <path class="settings-cordillera settings-cordillera-1" d="M0,420 C160,360 260,470 420,400 C580,330 640,250 800,300 C940,345 1020,260 1160,290 C1300,320 1360,380 1440,340 L1440,700 L0,700 Z" />
+        <path class="settings-cordillera settings-cordillera-2" d="M0,500 C180,440 300,530 460,470 C620,410 700,470 880,430 C1020,400 1120,470 1260,440 C1340,422 1400,450 1440,430 L1440,700 L0,700 Z" />
+        <path class="settings-cordillera settings-cordillera-3" d="M0,580 C200,540 340,600 520,560 C700,520 820,580 1000,555 C1140,536 1280,580 1440,560 L1440,700 L0,700 Z" />
+      </svg>
+    </div>
+
+    <div class="settings-tarjeta">
+      <button id="btnCerrarSettings" class="settings-cerrar" title="Cerrar">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18" stroke-linecap="round"/></svg>
+      </button>
+
+      <nav class="settings-sidebar">
+        <h2>Settings</h2>
+        <button class="settings-nav-item activa" data-seccion="modos">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+          Modos
+        </button>
+        <button class="settings-nav-item" data-seccion="fondo">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke-linecap="round"/></svg>
+          Fondo
+        </button>
+        <button class="settings-nav-item" data-seccion="clave-api">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13.5l1.5 1.5L15 10.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Clave API
+          <span class="badge-prox" id="badgeProxClaveApi">Prox</span>
+        </button>
+        <button class="settings-nav-item" data-seccion="creditos">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h4.5a2.5 2.5 0 010 5H9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Créditos
+        </button>
+      </nav>
+
+      <div class="settings-contenido">
+        <section class="settings-seccion" data-seccion-panel="modos">
+          <h3>Modos</h3>
+          <p class="settings-descripcion">Elegi el enfoque con el que Verbo AI te responde.</p>
+          <button class="opcion-modo activa" data-modo="general">
+            <span class="opcion-modo-punto"></span>
+            <span>
+              <strong>General</strong>
+              <small>Respuestas biblicas sin enfocar una tradicion particular</small>
+            </span>
+          </button>
+          <button class="opcion-modo" data-modo="catolico">
+            <span class="opcion-modo-punto"></span>
+            <span>
+              <strong>Catolicismo</strong>
+              <small>Santos, Magisterio, Catecismo. El lector sigue usando texto no catolico por ahora.</small>
+            </span>
+          </button>
+        </section>
+
+        <section class="settings-seccion oculto" data-seccion-panel="fondo">
+          <h3>Fondo</h3>
+          <p class="settings-descripcion">Elegi la apariencia de Verbo AI. Se guarda para tus proximas visitas.</p>
+          <button class="opcion-tema activa" data-tema="default">
+            <span class="opcion-tema-swatch opcion-tema-swatch-default"></span>
+            <span>
+              <strong>Default</strong>
+              <small>Los colores originales, calidos, de la app</small>
+            </span>
+            <span class="opcion-modo-punto"></span>
+          </button>
+          <button class="opcion-tema" data-tema="df-night">
+            <span class="opcion-tema-swatch opcion-tema-swatch-night"></span>
+            <span>
+              <strong>df-night</strong>
+              <small>Tema oscuro: fondo y botones en tonos noche</small>
+            </span>
+            <span class="opcion-modo-punto"></span>
+          </button>
+        </section>
+
+        <section class="settings-seccion oculto" data-seccion-panel="clave-api">
+          
+          <div id="claveApiProx" class="clave-api-prox">
+            <h3>Clave API</h3>
+            <div class="clave-api-prox-cuerpo">
+              <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <p class="clave-api-prox-titulo">Proximamente</p>
+              <p class="clave-api-prox-texto">Esta seccion esta disponible por ahora solo para <strong>Owner Betatesters</strong>. En las proximas semanas se ira abriendo al resto de las cuentas.</p>
+            </div>
+          </div>
+
+          <div id="claveApiPanel" class="clave-api-panel oculto">
+            <h3>Clave API</h3>
+            <p class="settings-descripcion">Genera tokens tipo <code>verboai-XXXX</code> para usar Verbo AI desde otros proyectos. Los tokens comparten los creditos globales de tu cuenta (ver seccion "Creditos").</p>
+
+            <div class="clave-api-acciones">
+              <input type="text" id="claveApiNombreNuevo" maxlength="40" placeholder="Nombre (opcional) ej: Bot de Discord" class="clave-api-input-nombre" />
+              <button id="btnGenerarToken" class="btn-generar-token">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+                Generar API token
+              </button>
+            </div>
+
+            <div id="claveApiTokenRecien" class="clave-api-token-recien oculto">
+              <p class="token-recien-titulo">Token creado. Copialo ahora, no se vuelve a mostrar:</p>
+              <div class="token-recien-cuerpo">
+                <code id="claveApiTokenRecienValor"></code>
+                <button id="btnCopiarTokenRecien" class="btn-copiar-token">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+                  Copiar
+                </button>
+              </div>
+            </div>
+
+            <p class="clave-api-subtitulo">Tus tokens</p>
+            <div id="claveApiListaTokens" class="clave-api-lista-tokens">
+              <p class="clave-api-vacio">Todavia no generaste ningun token.</p>
+            </div>
+
+            <details class="clave-api-doc">
+              <summary>Como usar el token</summary>
+              <div class="clave-api-doc-cuerpo">
+                <p>Usa el token en el header <code>Authorization</code> como Bearer. Ejemplo basico (usa NewserLite, 1 credito):</p>
+<pre><code>curl -X POST https://TU-DOMINIO/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXXXXXXXXXXXXXXXXXXXXXX" \
+  -H "Content-Type: application/json" \
+  -d '{"mensaje":"Hola, quien eres?"}'</code></pre>
+                <p>Para usar <strong>NewserAdvanced</strong> (modelo mas potente, consume 5 creditos y rate limit 5/min), agrega <code>"modelo"</code> al body:</p>
+<pre><code>curl -X POST https://TU-DOMINIO/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXXXXXXXXXXXXXXXXXXXXXX" \
+  -H "Content-Type: application/json" \
+  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAdvanced"}'</code></pre>
+                <p>Respuesta (JSON):</p>
+<pre><code>{
+  "ok": true,
+  "respuesta": "Hola, soy NewserLite...",
+  "modelo": "NewserLite",
+  "modeloUsado": "NewserLite",
+  "costoCreditos": 1,
+  "creditosRestantes": 999,
+  "rateLimitMax": 20,
+  "rateLimitVentanaMs": 60000
+}</code></pre>
+                <p>Tambien podes consultar el estado del token y la lista de modelos disponibles con <code>GET /api/v1/info</code> (no gasta creditos):</p>
+<pre><code>curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</code></pre>
+
+                <p style="margin-top: 16px;"><strong>Nuevo: mas acceso con tu clave.</strong> Ademas de chatear, tu token ahora tambien puede:</p>
+<pre><code># Ver tus conversaciones guardadas (mismas que ves en la web)
+curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/chats
+
+# Consultar creditos restantes al instante
+curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/creditos</code></pre>
+                <ul>
+                  <li><code>GET /api/v1/chats</code> <span class="badge-prox" style="position: static;">Nuevo</span>: devuelve el listado de tus conversaciones (id, titulo y fechas). No gasta creditos.</li>
+                  <li><code>GET /api/v1/creditos</code> <span class="badge-prox" style="position: static;">Nuevo</span>: devuelve solo tus creditos restantes, mas liviano que <code>/api/v1/info</code>. No gasta creditos.</li>
+                </ul>
+
+                <ul>
+                  <li>Cada token arranca con <strong>1000 creditos</strong>. NewserLite consume <strong>1</strong> por pedido, NewserAdvanced consume <strong>5</strong>.</li>
+                  <li>Rate limit (API): <strong>20/min</strong> para NewserLite, <strong>5/min</strong> para NewserAdvanced (ventana deslizante por token).</li>
+                  <li>Rate limit (web, no consume creditos): <strong>30/min</strong> para NewserLite, <strong>8/min</strong> para NewserAdvanced.</li>
+                  <li>NewserAdvanced consume mas creditos y tiene rate limit mas estricto (mas potente, mas lento).</li>
+                  <li><strong>NewserAdvanced</strong> tiene herramientas exclusivas:</li>
+                  <li style="list-style: circle; margin-left: 20px;"><strong>Generar imagen</strong>: escribi <code>Generame [descripcion]</code> como mensaje (en web o API). Consume <strong>+1 credito</strong> adicional. Se abre en el visor en terminal.</li>
+                  <li style="list-style: circle; margin-left: 20px;"><code>[[WEB::consulta]]</code> busca en Google Custom Search — consume <strong>+1 credito</strong> adicional.</li>
+                  <li style="list-style: circle; margin-left: 20px;"><code>[[CLIMA::lugar]]</code> consulta open-meteo — <strong>gratis</strong>, no consume creditos extra.</li>
+                  <li>Si mandas un <code>"modelo"</code> invalido o vacio, cae automaticamente a NewserLite (no rompe).</li>
+                  <li>Cuando se acaban los creditos, el token devuelve <code>402</code>. Si queres mas, avisale al admin.</li>
+                  <li>Borrar un token lo revoca de inmediato: cualquier peticion posterior con ese token devuelve <code>401</code>.</li>
+                </ul>
+                <p style="margin-top: 16px;"><strong>Usar desde la terminal:</strong> descarga el archivo <code>cli/verboai.py</code> y ejecutá:</p>
+<pre><code># 1. Guardar el token (una sola vez)
+python verboai.py login verboai-TU_TOKEN
+
+# 2. Iniciar chat interactivo
+python verboai.py run</code></pre>
+                <p>El CLI levanta un servidor proxy local en <code>http://127.0.0.1:7788</code> (alta seguridad, el token nunca se expone).</p>
+
+                <p style="margin-top: 20px;"><strong>Codigo completo para conectar desde tu app (sin CLI):</strong></p>
+                <p style="font-size: 12px; color: var(--texto-suave);">Copiá el que corresponda a tu lenguaje. Reemplaza <code>verboai-XXXX</code> por tu token y <code>TU-DOMINIO</code> por la URL de la app.</p>
+
+                <details class="clave-api-doc" style="margin-top: 8px;">
+                  <summary>JavaScript (Node.js o navegador)</summary>
+                  <div class="clave-api-doc-cuerpo">
+<pre><code>// JavaScript - funciona en Node.js 18+ y en navegadores
+const TOKEN = "verboai-XXXX";
+const URL = "https://TU-DOMINIO/api/v1/chat";
+
+async function preguntar(mensaje, modelo = "NewserLite") {
+  const resp = await fetch(URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ mensaje, modelo }),
+  });
+  const data = await resp.json();
+  if (!data.ok) throw new Error(data.error);
+  return data;
+}
+
+// Uso:
+preguntar("Hola, quien eres?", "NewserLite")
+  .then(r => console.log(r.respuesta, r.creditosRestantes))
+  .catch(e => console.error(e));
+
+// Generar imagen:
+preguntar("Generame un leon descansando", "NewserAdvanced")
+  .then(r => {
+    console.log(r.respuesta);
+    if (r.imagen) console.log("Imagen:", "https://TU-DOMINIO" + r.imagen.url);
+  });</code></pre>
+                  </div>
+                </details>
+
+                <details class="clave-api-doc" style="margin-top: 8px;">
+                  <summary>Python (sin instalar nada)</summary>
+                  <div class="clave-api-doc-cuerpo">
+<pre><code># Python 3.7+ - sin dependencias externas (solo stdlib)
+import json
+import urllib.request
+
+TOKEN = "verboai-XXXX"
+URL = "https://TU-DOMINIO/api/v1/chat"
+
+def preguntar(mensaje, modelo="NewserLite"):
+    body = json.dumps({"mensaje": mensaje, "modelo": modelo}).encode()
+    req = urllib.request.Request(URL, data=body, method="POST")
+    req.add_header("Authorization", f"Bearer {TOKEN}")
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        data = json.loads(resp.read().decode())
+    if not data.get("ok"):
+        raise Exception(data.get("error"))
+    return data
+
+# Uso:
+r = preguntar("Hola, quien eres?", "NewserLite")
+print(r["respuesta"], "creditos:", r["creditosRestantes"])
+
+# Generar imagen:
+r = preguntar("Generame un leon descansando", "NewserAdvanced")
+print(r["respuesta"])
+if r.get("imagen"):
+    print("Imagen:", "https://TU-DOMINIO" + r["imagen"]["url"])</code></pre>
+                  </div>
+                </details>
+
+                <details class="clave-api-doc" style="margin-top: 8px;">
+                  <summary>PHP</summary>
+                  <div class="clave-api-doc-cuerpo">
+<pre><code>&lt;?php
+// PHP 5.6+ con cURL
+$TOKEN = "verboai-XXXX";
+$URL = "https://TU-DOMINIO/api/v1/chat";
+
+function preguntar($mensaje, $modelo = "NewserLite") {
+    global $TOKEN, $URL;
+    $body = json_encode(["mensaje" => $mensaje, "modelo" => $modelo]);
+    $ch = curl_init($URL);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        "Authorization: Bearer $TOKEN",
+        "Content-Type: application/json",
+    ]);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+    $resp = curl_exec($ch);
+    curl_close($ch);
+    return json_decode($resp, true);
+}
+
+// Uso:
+$r = preguntar("Hola, quien eres?", "NewserLite");
+echo $r["respuesta"] . "\n";
+echo "Creditos: " . $r["creditosRestantes"] . "\n";
+
+// Generar imagen:
+$r = preguntar("Generame un leon descansando", "NewserAdvanced");
+if (isset($r["imagen"])) {
+    echo "Imagen: https://TU-DOMINIO" . $r["imagen"]["url"] . "\n";
+}
+?&gt;</code></pre>
+                  </div>
+                </details>
+
+                <details class="clave-api-doc" style="margin-top: 8px;">
+                  <summary>cURL (bash / terminal)</summary>
+                  <div class="clave-api-doc-cuerpo">
+<pre><code># Chat basico (NewserLite, 1 credito)
+curl -X POST https://TU-DOMINIO/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXX" \
+  -H "Content-Type: application/json" \
+  -d '{"mensaje":"Hola, quien eres?"}'
+
+# Con NewserAdvanced (5 creditos, modelo mas potente)
+curl -X POST https://TU-DOMINIO/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXX" \
+  -H "Content-Type: application/json" \
+  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAdvanced"}'
+
+# Generar imagen (NewserAdvanced + 1 credito extra = 6 total)
+curl -X POST https://TU-DOMINIO/api/v1/chat \
+  -H "Authorization: Bearer verboai-XXXX" \
+  -H "Content-Type: application/json" \
+  -d '{"mensaje":"Generame un leon descansando","modelo":"NewserAdvanced"}'
+
+# Ver info del token (no gasta creditos)
+curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</code></pre>
+                  </div>
+                </details>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="settings-seccion oculto" data-seccion-panel="creditos">
+          <h3>Créditos</h3>
+          <p class="settings-descripcion">Tus créditos se comparten entre todos tus tokens de API. Se actualizan en vivo cada vez que usás la app.</p>
+
+          <div class="creditos-pantalla" id="creditosPantalla">
+            <div class="creditos-fondo"></div>
+            <div class="creditos-overlay"></div>
+            <div class="creditos-contenido">
+              <div class="creditos-label">Créditos disponibles</div>
+              <div class="creditos-numero" id="creditosNumero">...</div>
+              <div class="creditos-sub" id="creditosSub">Cargando...</div>
+            </div>
+          </div>
+
+          <p class="creditos-titulo-estadisticas">Estadísticas de uso</p>
+          <div class="creditos-estadisticas" id="creditosEstadisticas">
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statTotalGastado">-</div>
+              <div class="creditos-stat-label">Créditos gastados</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statChats">-</div>
+              <div class="creditos-stat-label">Mensajes de chat</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statImagenes">-</div>
+              <div class="creditos-stat-label">Imágenes generadas</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statWeb">-</div>
+              <div class="creditos-stat-label">Búsquedas web</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statClima">-</div>
+              <div class="creditos-stat-label">Consultas de clima</div>
+            </div>
+            <div class="creditos-stat">
+              <div class="creditos-stat-num" id="statActividad">-</div>
+              <div class="creditos-stat-label">Última actividad</div>
+            </div>
+          </div>
+
+          <div class="creditos-por-modelo" id="creditosPorModelo" style="display:none">
+            <p class="creditos-titulo-estadisticas">Consumo por modelo</p>
+            <div id="creditosPorModeloLista"></div>
+          </div>
+
+          <button id="btnRecargarCreditos" class="btn-recargar-creditos">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Recargar Creditos
+          </button>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="overlayActualizaciones" class="overlay-actualizaciones oculto">
+    <div class="actualizaciones-tarjeta">
+      <button id="btnCerrarActualizaciones" class="settings-cerrar" title="Cerrar">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12" stroke-linecap="round"/></svg>
+      </button>
+      <h2>Novedades</h2>
+      <p class="settings-descripcion">Lo último que agregamos a Verbo AI.</p>
+      <div id="listaActualizaciones" class="lista-actualizaciones"></div>
+    </div>
+  </div>
+
+  <div id="overlayCodes" class="overlay-actualizaciones oculto">
+    <div class="actualizaciones-tarjeta">
+      <button id="btnCerrarCodes" class="settings-cerrar" title="Cerrar">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12" stroke-linecap="round"/></svg>
+      </button>
+      <h2>Codes</h2>
+      <p class="settings-descripcion">Canjeá un código y sumá créditos a tu cuenta.</p>
+
+      <div class="codes-canjear">
+        <input type="text" id="inputCodigo" placeholder="TU-CODIGO-ACA" autocomplete="off" />
+        <button id="btnCanjearCodigo">Canjear</button>
+      </div>
+      <p id="codesMensaje" class="codes-mensaje"></p>
+
+      <div id="codesAdmin" class="codes-admin oculto">
+        <hr class="codes-separador" />
+        <h3>Crear código (admin)</h3>
+        <div class="codes-crear-grid">
+          <input type="text" id="codigoNuevoTexto" placeholder="Código (ej: NAVIDAD2026)" autocomplete="off" />
+          <input type="number" id="codigoNuevoCreditos" placeholder="Créditos" min="1" />
+          <input type="number" id="codigoNuevoUsos" placeholder="Usos (vacío = 1, -1 = ilimitado)" />
+        </div>
+        <button id="btnCrearCodigo">Crear código</button>
+        <p id="codesAdminMensaje" class="codes-mensaje"></p>
+        <div id="listaCodigosAdmin" class="lista-codigos-admin"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="overlayAnuncioCreditos" class="overlay-anuncio-creditos oculto">
+    <div class="anuncio-creditos-cuerpo">
+      <div class="anuncio-creditos-titulo">Mira el anuncio para recargar creditos</div>
+      <div class="anuncio-creditos-contenedor" id="anuncioCreditosContenedor" data-ad-client="ca-pub-2832971109540830" data-ad-slot="3651699880">
+        <!-- El anuncio se inyecta dinamicamente desde script.js cada vez que se abre este overlay -->
+      </div>
+      <div class="anuncio-creditos-timer" id="anuncioCreditosTimer">Espera 5 segundos...</div>
+      <button id="btnCerrarAnuncioCreditos" class="btn-cerrar-anuncio oculto">
+        Recargar +50 creditos
+      </button>
+    </div>
+  </div>
+
+  <div id="lightbox" class="lightbox oculto">
+    <button id="btnCerrarLightbox" class="lightbox-cerrar" title="Cerrar">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18" stroke-linecap="round"/></svg>
+    </button>
+    <img id="lightboxImg" src="" alt="" />
+    <p id="lightboxCaption" class="lightbox-caption"></p>
+  </div>
+
+  <div id="overlayGenerandoImagen" class="overlay-generando-imagen oculto">
+    <div class="overlay-generando-imagen-cuerpo">
+      <div class="overlay-generando-imagen-spinner"></div>
+      <div class="overlay-generando-imagen-porcentaje" id="overlayGenerandoImagenPorcentaje">0%</div>
+      <div class="overlay-generando-imagen-barra"><div id="overlayGenerandoImagenBarra"></div></div>
+      <div class="overlay-generando-imagen-texto">Generando imagen...</div>
+      <div class="overlay-generando-imagen-prompt" id="overlayGenerandoImagenPrompt"></div>
+    </div>
+  </div>
+</div>
+
+<script src="script.js?v=10"></script>
+</body>
+</html>
