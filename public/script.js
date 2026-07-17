@@ -760,14 +760,14 @@ function renderOpcionesModeloEn(contenedor) {
   }).join('');
   contenedor.querySelectorAll('.opcion-modelo').forEach(function(op) {
     if (op.disabled) return;
-    op.addEventListener('click', function(ev) {
-      var modeloElegido = op.dataset.modelo;
-      modeloActual = modeloElegido;
+    op.onclick = function(ev) {
+      if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+      modeloActual = op.dataset.modelo;
       localStorage.setItem('verboAiModelo', modeloActual);
       aplicarModeloUI();
       cerrarSelectorModelo();
-      ev.stopPropagation();
-    }, true);
+      return false;
+    };
   });
 }
 
@@ -781,19 +781,21 @@ function toggleSelectorModelo() {
 }
 
 if (btnSelectorModelo) {
-  btnSelectorModelo.addEventListener('click', (ev) => {
-    ev.stopPropagation();
+  btnSelectorModelo.onclick = function(ev) {
+    if (ev) { ev.stopPropagation(); ev.preventDefault(); }
     toggleSelectorModelo();
-  });
+    return false;
+  };
 }
 
 const btnSelectorModeloHeader = document.getElementById('btnSelectorModeloHeader');
 const selectorModeloHeaderNombre = document.getElementById('selectorModeloHeaderNombre');
 if (btnSelectorModeloHeader) {
-  btnSelectorModeloHeader.addEventListener('click', (ev) => {
-    ev.stopPropagation();
+  btnSelectorModeloHeader.onclick = function(ev) {
+    if (ev) { ev.stopPropagation(); ev.preventDefault(); }
     toggleSelectorModelo();
-  });
+    return false;
+  };
 }
 
 document.addEventListener('click', (ev) => {
