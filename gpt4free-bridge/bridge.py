@@ -1,11 +1,13 @@
 """
-Puente GPT4Free — Modelo: Qwen3-25B-Thinking via Modelscope (SIN API KEY)
-=========================================================================
+Puente GPT4Free — Modelo: Qwen3-235B-Thinking via Modelscope (SIN API KEY)
+==========================================================================
 Mini-servicio Python/Flask que expone POST /v1/chat/completions (formato OpenAI)
 y usa la libreria g4f para llamar a modelos GRATIS, sin token ni registro.
 
-Modelo por defecto: Qwen/Qwen-3-25B-A22B-Thinking-2507 (vía Modelscope AI)
-Modelo alternativo: glm-4 (si g4f lo reactiva) o cualquiera que g4f soporte.
+Modelo por defecto: Qwen/Qwen3-235B-A22B-Thinking-2507 (vía Modelscope AI)
+  - 235 billones de parametros, con razonamiento Thinking
+  - El mas potente disponible gratis en g4f hoy
+  - Provider: Modelscope (sin API key)
 
 Deploy en Render:
   1. Crear nuevo Web Service en Render.
@@ -18,9 +20,9 @@ Deploy en Render:
   8. En tu .env de VerboAI poner:
        GPT4FREE_ENABLED_PRO=true
        GPT4FREE_URL=https://tu-bridge.onrender.com
-       GPT4FREE_MODEL=Qwen/Qwen-3-25B-A22B-Thinking-2507
+       GPT4FREE_MODEL=Qwen/Qwen3-235B-A22B-Thinking-2507
 
-Variables opcionales (todas en el servicio del PUENTE, no en VerboAI):
+Variables opcionales (en el servicio del PUENTE, no en VerboAI):
   G4F_MODEL_OVERRIDE  - cambia el modelo por defecto del puente
   G4F_PROVIDER        - fuerza un provider especifico (ej: Modelscope, Puter)
 """
@@ -36,8 +38,9 @@ log = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# Modelo por defecto: Qwen3-25B-Thinking via Modelscope (sí funciona gratis en g4f hoy)
-DEFAULT_MODEL = os.environ.get('G4F_MODEL_OVERRIDE', 'Qwen/Qwen-3-25B-A22B-Thinking-2507')
+# Modelo por defecto: Qwen3-235B-Thinking via Modelscope (sí funciona gratis en g4f hoy)
+# 235B parametros, el mas potente disponible gratis en g4f.
+DEFAULT_MODEL = os.environ.get('G4F_MODEL_OVERRIDE', 'Qwen/Qwen3-235B-A22B-Thinking-2507')
 DEFAULT_PROVIDER = os.environ.get('G4F_PROVIDER', '')  # vacío = g4f elige automáticamente
 
 # Inicializar cliente g4f
@@ -53,17 +56,17 @@ except Exception as e:
 
 
 def llamar_g4f(messages, model, temperature, max_tokens):
-    """Llama al modelo via g4f, probando varios providers automaticamente."""
+    """Llama al modelo via g4f, probando varios modelos automaticamente si el primero falla."""
     if not g4f_client:
         raise RuntimeError('g4f no esta disponible')
 
-    # Si el modelo pedido es 'glm-4' y g4f no lo tiene, caer a Qwen3-25B-Thinking
-    # que sí está disponible vía Modelscope sin API key.
+    # Lista de modelos a probar en orden: el pedido primero, luego fallbacks
+    # que sabemos que funcionan gratis en g4f via Modelscope.
     modelos_disponibles = [
         model,
-        'Qwen/Qwen-3-25B-A22B-Thinking-2507',
-        'gpt-4o-mini',
-        'llama-3.3-70b',
+        'Qwen/Qwen3-235B-A22B-Thinking-2507',  # 235B Thinking (mas potente)
+        'Qwen/Qwen-3-25B-A22B-Thinking-2507',  # 25B Thinking (fallback mas liviano)
+        'gpt-4o-mini',                          # fallback clasico
     ]
     # Sin duplicados, manteniendo el orden
     vistos = set()
@@ -149,7 +152,7 @@ def health():
         'provider': DEFAULT_PROVIDER or 'auto',
         'api_key_required': False,
         'g4f_available': g4f_client is not None,
-        'note': 'Modelo por defecto: Qwen3-25B-Thinking via Modelscope (gratis, sin token). En VerboAI poner GPT4FREE_MODEL=Qwen/Qwen-3-25B-A22B-Thinking-2507',
+        'note': 'Modelo por defecto: Qwen3-235B-Thinking (235B) via Modelscope. En VerboAI poner GPT4FREE_MODEL=Qwen/Qwen3-235B-A22B-Thinking-2507',
     })
 
 
@@ -157,3 +160,4 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     log.info(f'Puente g4f iniciando en puerto {port} | modelo: {DEFAULT_MODEL}')
     app.run(host='0.0.0.0', port=port, debug=False)
+

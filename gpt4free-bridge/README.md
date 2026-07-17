@@ -1,6 +1,12 @@
-# Puente GLM-4 (GPT4Free, SIN API KEY)
+# Puente GPT4Free — Qwen3-235B-Thinking (SIN API KEY)
 
-Puente Python/Flask que expone `POST /v1/chat/completions` (formato OpenAI) y llama a **GLM-4 gratis** usando la librería `g4f`. **No requiere token, no requiere registro, no requiere API key.**
+Puente Python/Flask que expone `POST /v1/chat/completions` (formato OpenAI) y llama a **Qwen3-235B-Thinking** gratis usando la librería `g4f` (https://github.com/xtekky/gpt4free). **No requiere token, no requiere registro, no requiere API key.**
+
+## Modelo por defecto
+- **Modelo**: `Qwen/Qwen3-235B-A22B-Thinking-2507`
+- **Provider**: Modelscope AI (gratis, sin auth)
+- **Parámetros**: 235B (235 billones) — el más potente disponible gratis en g4f
+- **Razonamiento**: Sí (variante "Thinking" con razonamiento interno)
 
 ## Deploy en Render (5 minutos)
 
@@ -31,7 +37,14 @@ Puente Python/Flask que expone `POST /v1/chat/completions` (formato OpenAI) y ll
    ```
    Debería devolver:
    ```json
-   {"status":"ok","service":"glm-bridge","mode":"g4f-free","api_key_required":false,"g4f_available":true}
+   {"status":"ok","service":"glm-bridge","mode":"g4f-free","model_default":"Qwen/Qwen3-235B-A22B-Thinking-2507","api_key_required":false,"g4f_available":true}
+   ```
+
+6. **Probá el chat directamente**:
+   ```bash
+   curl -X POST https://verboai-glm-bridge.onrender.com/v1/chat/completions \
+     -H "Content-Type: application/json" \
+     -d '{"model":"Qwen/Qwen3-235B-A22B-Thinking-2507","messages":[{"role":"user","content":"Hola, quien eres?"}]}'
    ```
 
 ## Conectar con tu VerboAI
@@ -40,7 +53,7 @@ En tu servicio de VerboAI en Render → **Environment** → agregá estas 3 vari
 ```
 GPT4FREE_ENABLED_PRO=true
 GPT4FREE_URL=https://verboai-glm-bridge.onrender.com
-GPT4FREE_MODEL=glm-4
+GPT4FREE_MODEL=Qwen/Qwen3-235B-A22B-Thinking-2507
 ```
 
 Reiniciá VerboAI y probá:
@@ -48,9 +61,22 @@ Reiniciá VerboAI y probá:
 $body = @{ mensaje = "Hola, ¿quién eres?" } | ConvertTo-Json
 Invoke-RestMethod -Uri "https://verboai.duckdns.org/api/v1/pro-hybrid" -Method Post -Headers $headers -Body $body
 ```
-Deberías ver `capaGlm: True` ✅
+Deberías ver `capaGlm: True` y `modeloReal: Qwen/Qwen3-235B-A22B-Thinking-2507` ✅
+
+## Fallback automático
+Si el modelo principal falla, el puente prueba automáticamente estos en orden:
+1. `Qwen/Qwen3-235B-A22B-Thinking-2507` (235B Thinking — el principal)
+2. `Qwen/Qwen-3-25B-A22B-Thinking-2507` (25B Thinking — más liviano)
+3. `gpt-4o-mini` (clásico de fallback)
+
+Así que aunque uno se caiga, siempre responde con algo.
+
+## Variables opcionales (en el puente, no en VerboAI)
+- `G4F_MODEL_OVERRIDE`: cambia el modelo por defecto (ej: `gpt-4o`)
+- `G4F_PROVIDER`: fuerza un provider específico (ej: `Modelscope`, `Puter`, `Airforce`)
 
 ## Notas
-- **100% gratis, sin token, sin registro** — usa la librería g4f que scrapea providers públicos de GLM-4.
-- g4f puede ser menos confiable que la API oficial (los providers se caen seguido). Si falla mucho, decime y te lo cambio a la API oficial de Zhipu (que también tiene tier gratis, pero requiere registro).
+- **100% gratis, sin token, sin registro** — usa g4f con Modelscope.
 - Render Free Tier duerme el servicio después de 15 min sin actividad. La primera petición después de dormir tarda ~30s extra.
+- Si algún modelo se cae, el puente prueba el siguiente automáticamente (no falla).
+- Para ver qué modelo respondió: el campo `model` en la respuesta JSON siempre muestra el modelo real que se usó.
