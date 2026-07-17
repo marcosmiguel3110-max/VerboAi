@@ -2526,16 +2526,18 @@ html.tema-night .token-descarga-link:hover {
   background: rgba(88, 166, 255, 0.2);
 }
 
+
 .perfil-fila {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: 6px;
   padding: 0 10px 10px;
 }
 
 .perfil-fila .perfil-usuario {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
 html.tema-night .perfil-fila .perfil-usuario {
@@ -2543,11 +2545,11 @@ html.tema-night .perfil-fila .perfil-usuario {
 }
 
 .adsense-cuadrito {
-  width: 120px;
-  height: 120px;
+  width: 80px;
+  height: 80px;
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--borde);
   background: var(--crema-oscuro);
   display: flex;
@@ -2561,8 +2563,8 @@ html.tema-night .adsense-cuadrito {
 }
 
 .adsense-cuadrito ins.adsbygoogle {
-  width: 120px !important;
-  height: 120px !important;
+  width: 80px !important;
+  height: 80px !important;
 }
 
 @media (max-width: 768px) {
@@ -2575,3 +2577,4 @@ html.tema-night .adsense-cuadrito {
     height: 100px !important;
   }
 }
+
