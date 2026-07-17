@@ -1947,7 +1947,7 @@ app.get('/api/v1/chats', (req, res) => {
 //
 // Respuesta:
 //   { ok, respuesta, razonamiento, modeloReal, capaGlm, capaGroq, ... }
-app.post('/api/v1/pro-hybrid', async (req, res) => {
+app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => {
   const valorToken = leerBearerToken(req);
   if (!valorToken) return res.status(401).json({ ok: false, error: 'Falta Authorization: Bearer verboai-XXXX' });
   const token = buscarTokenPorValor(valorToken);
@@ -1958,15 +1958,30 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
   }
 
   const mensaje = (typeof req.body?.mensaje === 'string' ? req.body.mensaje : '').trim();
-  if (!mensaje) return res.status(400).json({ ok: false, error: 'Falta "mensaje" en el body.' });
+  // Si hay imagenes, el mensaje puede ser vacio (analiza la imagen sola)
+  let imagenes = [];
+  if (req.files && req.files.length) {
+    imagenes = req.files.map((f) => ({ base64: f.buffer.toString('base64'), mime: f.mimetype, buffer: f.buffer }));
+  }
+  if (!mensaje && !imagenes.length) {
+    return res.status(400).json({ ok: false, error: 'Falta "mensaje" o al menos una imagen.' });
+  }
   if (mensaje.length > 8000) return res.status(400).json({ ok: false, error: 'El mensaje es demasiado largo (max 8000 caracteres).' });
 
   const forzarGlm = req.body?.forzarGlm !== false; // default true
   const configPro = MODELOS_DISPONIBLES.NewserPro;
 
-  // 1) Razonamiento previo con Qwen3-32B (Groq)
+  // ============================================================
+  // Si hay imagenes, NO usamos el puente GLM-4 (Modelscope no soporta
+  // vision via g4f). En su lugar usamos Llama 4 Scout de Groq (modelo
+  // de vision) directamente, con el razonamiento previo de Qwen3-32B.
+  // ============================================================
+  const hayImagenes = imagenes.length > 0;
+
+  // 1) Razonamiento previo con Qwen3-32B (Groq) — solo si no hay imagenes
+  //    (con imagenes, el razonamiento previo no aporta mucho y demora mas)
   let razonamientoPrevio = '';
-  if (configPro.modeloTextoRazonamiento) {
+  if (configPro.modeloTextoRazonamiento && !hayImagenes) {
     try {
       const respRaz = await llamarGroqConReintentos({
         method: 'POST',
@@ -1991,10 +2006,15 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
     }
   }
 
-  // 2) Redaccion final: GLM-4 primero (si forzarGlm), fallback a GPT-OSS-120B
+  // 2) Redaccion final:
+  //    - Si hay imagenes: Llama 4 Scout (Groq, vision)
+  //    - Si no hay imagenes: GLM-4 (puente g4f) con fallback a GPT-OSS-120B (Groq)
   let systemPrompt = SYSTEM_PROMPT + SYSTEM_PROMPT_PRO_EXTRA;
   if (razonamientoPrevio) {
     systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por ${configPro.modeloTextoRazonamiento}, no lo repitas ni menciones, usalo como guia]:\n${razonamientoPrevio}`;
+  }
+  if (hayImagenes) {
+    systemPrompt += `\n\nNOTA SOBRE IMAGENES ADJUNTAS: el usuario adjunto ${imagenes.length > 1 ? 'imagenes' : 'una imagen'} en este mensaje. Antes de responder, analizala con maxima atencion y en detalle: fijate bien en TODOS los elementos visibles (texto, numeros, colores, personas, objetos, disposicion, errores, codigo, capturas de pantalla, etc.), no te quedes con una descripcion superficial ni generica. Si el usuario pide una tarea concreta sobre la imagen (resolver algo, identificar un error, transcribir texto, explicar un codigo, comparar cosas, etc.), primero examina la imagen a fondo y recien despues cumplí exactamente lo que se te pide, basandote solo en lo que realmente se ve, sin inventar ni asumir detalles que no esten claramente visibles.`;
   }
   systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, 'NewserPro');
 
@@ -2002,8 +2022,45 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
   let modeloReal = configPro.modeloTexto;
   let capaGlm = false;
   let capaGroq = false;
+  let capaVision = false;
 
-  if (forzarGlm && GPT4FREE_ENABLED) {
+  if (hayImagenes) {
+    // ============================================================
+    // MODO VISION: usar Llama 4 Scout (Groq) con las imagenes
+    // ============================================================
+    const contenidoUsuario = [
+      { type: 'text', text: mensaje || 'Describe estas imagenes en detalle.' },
+      ...imagenes.map((img) => ({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.base64}` } })),
+    ];
+
+    const respuestaGroq = await llamarGroqConReintentos({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: GROQ_MODEL_VISION, // Llama 4 Scout 17B
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: contenidoUsuario },
+        ],
+        temperature: 0.7,
+        max_tokens: configPro.maxTokens,
+        stream: false,
+      }),
+    }, () => {});
+
+    if (!respuestaGroq || !respuestaGroq.ok) {
+      const status = respuestaGroq ? respuestaGroq.status : 0;
+      return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
+    }
+    const data = await respuestaGroq.json();
+    textoFinal = stripThinkTags((data.choices?.[0]?.message?.content) || '');
+    modeloReal = GROQ_MODEL_VISION;
+    capaVision = true;
+    capaGroq = true; // Llama 4 Scout es de Groq
+  } else if (forzarGlm && GPT4FREE_ENABLED) {
+    // ============================================================
+    // MODO TEXTO PURO: GLM-4 primero, fallback a GPT-OSS-120B
+    // ============================================================
     const resultadoGlm = await llamarGlm4Bridge(
       [{ role: 'user', content: mensaje }],
       systemPrompt,
@@ -2017,7 +2074,7 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
     }
   }
 
-  if (!textoFinal) {
+  if (!textoFinal && !hayImagenes) {
     const respuestaGroq = await llamarGroqConReintentos({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2043,6 +2100,9 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
     capaGroq = true;
   }
 
+  // Guardar imagenes al disco para referncia futura (opcional)
+  const imagenesGuardadasUrls = imagenes.map((img) => guardarImagenDisco(img.buffer, img.mime));
+
   return res.json({
     ok: true,
     respuesta: textoFinal,
@@ -2050,10 +2110,13 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
     modeloReal,
     capaGlm,
     capaGroq,
+    capaVision,
+    imagenesAdjuntas: imagenesGuardadasUrls.length,
     glmDisponible: GPT4FREE_ENABLED && !!GPT4FREE_URL,
     modeloGlm: GPT4FREE_MODEL,
     modeloGroqTexto: configPro.modeloTexto,
     modeloGroqRazonamiento: configPro.modeloTextoRazonamiento,
+    modeloGroqVision: GROQ_MODEL_VISION,
     creditosRestantes: token.propietario.startsWith('local:') ? -1 : leerCreditosGlobales(token.propietario),
   });
 });
