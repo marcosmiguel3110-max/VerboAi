@@ -1291,6 +1291,85 @@ html.tema-night .overlay-generando-imagen-barra > div {
   font-family: "SFMono-Regular", Consolas, monospace;
 }
 
+/* ---------- Bloques de codigo (```) dentro de las respuestas de la IA ---------- */
+/* Siempre llevan un frame gris. El fondo cambia segun el tema: en modo
+   normal es blanco con un cruzado gris; en df-night es morado/azul medio
+   con un cruzado morado y azul oscuro, y el texto usa una paleta parecida
+   a la de Visual Studio Code en modo oscuro. */
+.mensaje.ia pre.bloque-codigo {
+  margin: 10px 0 4px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #A9A9A9;
+  background:
+    repeating-linear-gradient(45deg, rgba(120, 120, 120, 0.09) 0 1px, transparent 1px 10px),
+    repeating-linear-gradient(-45deg, rgba(120, 120, 120, 0.09) 0 1px, transparent 1px 10px),
+    #FFFFFF;
+}
+
+.bloque-codigo-barra {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(120, 120, 120, 0.14);
+  border-bottom: 1px solid #A9A9A9;
+}
+
+.bloque-codigo-lenguaje {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: #6B6B6B;
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.bloque-codigo-contenido {
+  display: block;
+  padding: 12px 14px;
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 13px;
+  line-height: 1.55;
+  font-family: "SFMono-Regular", Consolas, "Courier New", monospace;
+  background: none;
+  color: #383A42;
+}
+
+/* Colores de sintaxis en modo normal: predominan rojo (identificadores/variables)
+   y verde (strings), con acentos para numeros, funciones y comentarios. */
+.tok-keyword { color: #C0392B; font-weight: 600; }
+.tok-variable { color: #C0392B; }
+.tok-string { color: #2E9E4F; }
+.tok-numero { color: #986801; }
+.tok-funcion { color: #3B7DD8; }
+.tok-comentario { color: #8A8F98; font-style: italic; }
+
+html.tema-night .mensaje.ia pre.bloque-codigo {
+  border: 1px solid #7A6BB0;
+  background:
+    repeating-linear-gradient(45deg, rgba(160, 120, 230, 0.18) 0 1px, transparent 1px 10px),
+    repeating-linear-gradient(-45deg, rgba(30, 45, 95, 0.4) 0 1px, transparent 1px 10px),
+    linear-gradient(135deg, #493A7A 0%, #202B54 100%);
+}
+
+html.tema-night .bloque-codigo-barra {
+  background: rgba(15, 12, 35, 0.35);
+  border-bottom: 1px solid #7A6BB0;
+}
+
+html.tema-night .bloque-codigo-lenguaje { color: #CBB8F5; }
+
+html.tema-night .bloque-codigo-contenido { color: #D4D4D4; }
+
+/* Colores de sintaxis en df-night: paleta estilo Visual Studio Code (Dark+). */
+html.tema-night .tok-keyword { color: #569CD6; font-weight: 600; }
+html.tema-night .tok-variable { color: #9CDCFE; }
+html.tema-night .tok-string { color: #CE9178; }
+html.tema-night .tok-numero { color: #B5CEA8; }
+html.tema-night .tok-funcion { color: #DCDCAA; }
+html.tema-night .tok-comentario { color: #6A9955; font-style: italic; }
+
 /* Animacion de texto escribiendose */
 .chunk-nuevo {
   animation: aparecer 0.28s ease;

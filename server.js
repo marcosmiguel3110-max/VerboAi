@@ -2940,6 +2940,10 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_ADVANCED_15_EXTRA;
     }
 
+    if (imagenes.length) {
+      systemPrompt += `\n\nNOTA SOBRE IMAGENES ADJUNTAS: el usuario adjunto ${imagenes.length > 1 ? 'imagenes' : 'una imagen'} en este mensaje. Antes de responder, analizala con maxima atencion y en detalle: fijate bien en TODOS los elementos visibles (texto, numeros, colores, personas, objetos, disposicion, errores, codigo, capturas de pantalla, etc.), no te quedes con una descripcion superficial ni generica. Si el usuario pide una tarea concreta sobre la imagen (resolver algo, identificar un error, transcribir texto, explicar un codigo, comparar cosas, etc.), primero examina la imagen a fondo y recien despues cumplí exactamente lo que se te pide, basandote solo en lo que realmente se ve, sin inventar ni asumir detalles que no esten claramente visibles.`;
+    }
+
     if (configModelo.nombre === 'NewserAdvanced1.5' && configModelo.modeloTextoRazonamiento && !imagenes.length) {
       enviar({ type: 'investigando', query: 'Razonando con Qwen3-32B...' });
       enviar({ type: 'investigando_sitio', sitio: 'Modulo de razonamiento (Qwen3-32B)' });

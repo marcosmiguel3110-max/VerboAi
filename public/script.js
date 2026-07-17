@@ -150,11 +150,57 @@ window.addEventListener('popstate', (ev) => {
   }
 });
 
+// Palabras reservadas reconocidas para el resaltado de bloques de codigo.
+// Cubre los lenguajes mas comunes que la IA suele devolver en las respuestas.
+const CODIGO_PALABRAS_CLAVE = new Set([
+  'function', 'const', 'let', 'var', 'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case',
+  'break', 'continue', 'class', 'extends', 'new', 'this', 'import', 'export', 'from', 'default',
+  'try', 'catch', 'finally', 'throw', 'async', 'await', 'typeof', 'instanceof', 'in', 'of', 'delete',
+  'def', 'elif', 'pass', 'lambda', 'yield', 'with', 'as', 'del', 'global', 'nonlocal', 'raise', 'except',
+  'public', 'private', 'protected', 'static', 'void', 'int', 'float', 'double', 'long', 'short', 'char',
+  'string', 'bool', 'boolean', 'struct', 'enum', 'interface', 'implements', 'package', 'namespace',
+  'using', 'include', 'fn', 'impl', 'trait', 'match', 'mod', 'pub', 'self', 'super', 'unsafe', 'go',
+  'defer', 'chan', 'select', 'range', 'true', 'false', 'null', 'none', 'nil', 'undefined', 'not', 'and',
+  'or', 'is', 'select', 'insert', 'update', 'delete', 'where', 'from', 'join', 'table', 'end', 'then',
+]);
+
+// Resalta un fragmento de codigo devolviendo HTML ya escapado, con spans
+// segun el tipo de token (comentario, string, numero, funcion, palabra clave, variable).
+function resaltarCodigo(codigo) {
+  const tokenRe = /(\/\/[^\n]*|#[^\n]*)|(\/\*[\s\S]*?\*\/)|('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`)|(\b\d+\.?\d*(?:[eE][+-]?\d+)?\b)|([A-Za-z_$][A-Za-z0-9_$]*)(\s*\()|([A-Za-z_$][A-Za-z0-9_$]*)/g;
+  let out = '';
+  let ultimoIndice = 0;
+  let m;
+  while ((m = tokenRe.exec(codigo)) !== null) {
+    out += escaparHtml(codigo.slice(ultimoIndice, m.index));
+    const [, comentarioLinea, comentarioBloque, cadena, numero, funcNombre, funcParen, identificador] = m;
+    if (comentarioLinea || comentarioBloque) {
+      out += `<span class="tok-comentario">${escaparHtml(comentarioLinea || comentarioBloque)}</span>`;
+    } else if (cadena) {
+      out += `<span class="tok-string">${escaparHtml(cadena)}</span>`;
+    } else if (numero) {
+      out += `<span class="tok-numero">${escaparHtml(numero)}</span>`;
+    } else if (funcNombre) {
+      out += `<span class="tok-funcion">${escaparHtml(funcNombre)}</span>${escaparHtml(funcParen)}`;
+    } else if (identificador) {
+      if (CODIGO_PALABRAS_CLAVE.has(identificador.toLowerCase())) {
+        out += `<span class="tok-keyword">${escaparHtml(identificador)}</span>`;
+      } else {
+        out += `<span class="tok-variable">${escaparHtml(identificador)}</span>`;
+      }
+    }
+    ultimoIndice = tokenRe.lastIndex;
+  }
+  out += escaparHtml(codigo.slice(ultimoIndice));
+  return out;
+}
+
 function renderizarTexto(textoPlano) {
   const lineas = textoPlano.replace(/\r\n/g, '\n').split('\n');
   const bloques = [];
   let listaActual = null;
   let citaActual = null;
+  let codigoActual = null;
 
   const cerrarLista = () => { if (listaActual) { bloques.push(listaActual); listaActual = null; } };
   const cerrarCita = () => { if (citaActual) { bloques.push(citaActual); citaActual = null; } };
@@ -176,6 +222,25 @@ function renderizarTexto(textoPlano) {
 
   for (const lineaOriginal of lineas) {
     const linea = lineaOriginal.trim();
+
+    // Bloques de codigo delimitados por ``` (con lenguaje opcional despues de las comillas).
+    const marcaCodigo = /^```\s*([A-Za-z0-9_+-]*)\s*$/.exec(linea);
+    if (codigoActual) {
+      if (marcaCodigo) {
+        bloques.push({ tipo: 'codigo', lenguaje: codigoActual.lenguaje, codigo: codigoActual.lineas.join('\n') });
+        codigoActual = null;
+      } else {
+        codigoActual.lineas.push(lineaOriginal);
+      }
+      continue;
+    }
+    if (marcaCodigo) {
+      cerrarLista();
+      cerrarCita();
+      codigoActual = { lenguaje: marcaCodigo[1] || '', lineas: [] };
+      continue;
+    }
+
     if (/^>\s?/.test(linea)) {
       cerrarLista();
       if (!citaActual) citaActual = { tipo: 'cita', lineas: [] };
@@ -197,6 +262,11 @@ function renderizarTexto(textoPlano) {
       bloques.push({ tipo: 'parrafo', html: inline(linea) });
     }
   }
+  // Si el bloque de codigo quedo abierto (ej. texto llegando en streaming), lo cerramos igual.
+  if (codigoActual) {
+    bloques.push({ tipo: 'codigo', lenguaje: codigoActual.lenguaje, codigo: codigoActual.lineas.join('\n') });
+    codigoActual = null;
+  }
   cerrarLista();
   cerrarCita();
 
@@ -208,6 +278,9 @@ function renderizarTexto(textoPlano) {
       out += `<ul>${b.items.map((it) => `<li>${it}</li>`).join('')}</ul>`;
     } else if (b.tipo === 'cita') {
       out += `<blockquote>${b.lineas.join('<br>')}</blockquote>`;
+    } else if (b.tipo === 'codigo') {
+      const etiquetaLenguaje = b.lenguaje ? escaparHtml(b.lenguaje) : 'texto';
+      out += `<pre class="bloque-codigo"><div class="bloque-codigo-barra"><span class="bloque-codigo-lenguaje">${etiquetaLenguaje}</span></div><code class="bloque-codigo-contenido">${resaltarCodigo(b.codigo)}</code></pre>`;
     } else if (b.tipo === 'espacio') {
       out += '<br><br>';
     }
@@ -487,6 +560,8 @@ function cargarAnuncioCreditos() {
 
 if (btnRecargarCreditos) {
   btnRecargarCreditos.addEventListener('click', () => {
+    if (btnRecargarCreditos.disabled) return; // evita doble click -> doble push() a AdSense
+    btnRecargarCreditos.disabled = true;
     if (overlayAnuncioCreditos) overlayAnuncioCreditos.classList.remove('oculto');
     if (btnCerrarAnuncioCreditos) btnCerrarAnuncioCreditos.classList.add('oculto');
     if (anuncioCreditosTimer) anuncioCreditosTimer.textContent = 'Espera 5 segundos...';
@@ -515,12 +590,15 @@ if (btnCerrarAnuncioCreditos) {
       if (d.ok) {
         if (overlayAnuncioCreditos) overlayAnuncioCreditos.classList.add('oculto');
         if (anuncioCreditosContenedor) anuncioCreditosContenedor.innerHTML = '';
+        if (btnRecargarCreditos) btnRecargarCreditos.disabled = false;
         cargarCreditos();
       } else {
         alert(d.error || 'No se pudieron recargar los creditos.');
+        if (btnRecargarCreditos) btnRecargarCreditos.disabled = false;
       }
     } catch (e) {
       alert('Error de conexion.');
+      if (btnRecargarCreditos) btnRecargarCreditos.disabled = false;
     }
   });
 }
