@@ -1417,6 +1417,7 @@ html.tema-night .btn-enviar { background: var(--boton-nuevo-noche); }
 html.tema-night .btn-enviar:hover { background: var(--boton-nuevo-noche-hover); filter: none; }
 
 /* ---------- Selector de modelo (boton "NewserLite + flecha" en el input) ---------- */
+.selector-modelo-header { display: none; }
 .selector-modelo {
   position: relative;
   flex-shrink: 0;
@@ -2344,6 +2345,13 @@ html.tema-night .btn-menu-movil:hover { background: var(--hover-noche); }
   .btn-selector-modelo { padding: 0 8px; font-size: 12px; height: 32px; }
   .selector-modelo-flecha { width: 10px; height: 10px; }
   .selector-modelo-nombre { font-size: 12px; }
+  .selector-modelo-header { display: block !important; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); }
+  .selector-modelo-header .btn-selector-modelo { background: var(--crema-oscuro); border: 1px solid var(--borde); font-size: 12px; height: 30px; padding: 0 8px; }
+  .selector-modelo { position: absolute; width: 0; height: 0; overflow: visible; opacity: 0; pointer-events: none; }
+  .selector-modelo .btn-selector-modelo { display: none; }
+  .selector-modelo-menu { position: fixed !important; top: 56px !important; right: 8px !important; left: auto !important; min-width: 240px; z-index: 500; }
+  .selector-modelo-menu.oculto { display: none !important; }
+  .btn-cuaderno-toggle { display: none; }
 }
 
 @media (max-width: 480px) {
@@ -2363,13 +2371,13 @@ html.tema-night .btn-menu-movil:hover { background: var(--hover-noche); }
   #inputTexto { font-size: 16px; padding: 6px; }
   .selector-modelo-menu { min-width: 220px; right: 0; }
   .preview-imagen { margin: 0 2% 6px; }
+  .selector-modelo-header { display: block !important; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); }
+  .selector-modelo-header .btn-selector-modelo { background: var(--crema-oscuro); border: 1px solid var(--borde); font-size: 11px; height: 28px; padding: 0 8px; }
   .selector-modelo { position: absolute; width: 0; height: 0; overflow: visible; opacity: 0; pointer-events: none; }
   .selector-modelo .btn-selector-modelo { display: none; }
   .selector-modelo-menu { position: fixed !important; top: 56px !important; right: 8px !important; left: auto !important; min-width: 240px; z-index: 500; opacity: 1; pointer-events: auto; }
   .selector-modelo-menu.oculto { display: none !important; }
   .btn-cuaderno-toggle { display: none; }
-  .selector-modelo-header { display: block !important; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); }
-  .selector-modelo-header .btn-selector-modelo { background: var(--crema-oscuro); border: 1px solid var(--borde); font-size: 11px; height: 28px; padding: 0 8px; }
   .biblia-zoom { order: 3; }
   .biblia-btn-marcar { order: 4; width: 100%; justify-content: center; margin-left: 0; margin-top: 6px; }
   .biblia-aviso-marcador { font-size: 11.5px; }
