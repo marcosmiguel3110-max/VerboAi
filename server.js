@@ -255,7 +255,14 @@ async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
   if (!GPT4FREE_ENABLED) return { ok: false, error: 'GLM-4 deshabilitado (GPT4FREE_ENABLED_PRO=false)' };
   if (!GPT4FREE_URL) return { ok: false, error: 'GPT4FREE_URL no configurada' };
 
-  const url = GPT4FREE_URL.replace(/\/+$/, '') + '/v1/chat/completions';
+  // Construir URL: si GPT4FREE_URL ya incluye "/chat/completions", se usa tal cual.
+  // Sino, se le appendea /v1/chat/completions.
+  // Esto permite usar tanto puentes propios (https://bridge.onrender.com)
+  // como APIs oficiales (https://open.bigmodel.cn/api/paas/v4/chat/completions).
+  const url = GPT4FREE_URL.includes('/chat/completions')
+    ? GPT4FREE_URL
+    : GPT4FREE_URL.replace(/\/+$/, '') + '/v1/chat/completions';
+
   const headers = { 'Content-Type': 'application/json' };
   if (GPT4FREE_API_KEY) headers.Authorization = `Bearer ${GPT4FREE_API_KEY}`;
 
@@ -272,7 +279,7 @@ async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
       timeout: GPT4FREE_TIMEOUT,
       headers,
       signal: opciones.signal,
-      validateStatus: () => true, // no lanzar en 4xx/5xx, manejarlo a mano
+      validateStatus: () => true,
     });
     if (resp.status < 200 || resp.status >= 300) {
       const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
@@ -284,7 +291,7 @@ async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
       console.error('[glm-4] puente devolvio respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
       return { ok: false, error: 'Respuesta vacia del puente GLM-4' };
     }
-    console.log(`[glm-4] OK - ${texto.length} chars devueltos por ${GPT4FREE_MODEL}`);
+    console.log(`[glm-4] OK - ${texto.length} chars devueltos por ${GPT4FREE_MODEL} desde ${url.slice(0, 60)}...`);
     return { ok: true, texto: texto.trim(), modelo: GPT4FREE_MODEL };
   } catch (e) {
     if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return { ok: false, error: 'cancelado' };
@@ -305,6 +312,22 @@ async function emitirTextoComoStream(texto, enviar, signal) {
     await new Promise((r) => setTimeout(r, DELAY_MS));
   }
   return true;
+}
+
+// ============================================================
+// Limpieza de <think>...</think> de Qwen3
+// ============================================================
+// Qwen3 (qwen3-32b) emite bloques <think>...</think> con su razonamiento
+// interno antes de la respuesta real. Esos bloques NO deben llegar al
+// usuario ni quedar guardados en el historial. Esta funcion los elimina
+// tanto si estan cerrados (<think>...</think>) como si estan abiertos
+// (streaming parcial: <think>... sin cerrar todavia).
+function stripThinkTags(texto) {
+  if (!texto || typeof texto !== 'string') return texto || '';
+  return texto
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')   // bloques completos
+    .replace(/<think>[\s\S]*$/gi, '')             // bloque abierto (streaming parcial)
+    .replace(/^[\s\r\n]+/, '');                   // espacios/saltos al inicio despues de limpiar
 }
 
 const MEMORY_DIR = path.join(__dirname, 'memory');
@@ -1510,7 +1533,7 @@ app.post('/api/v1/chat', async (req, res) => {
       }, () => {});
       if (respRaz && respRaz.ok) {
         const dataRaz = await respRaz.json();
-        razonamientoPrevioApi = (dataRaz.choices && dataRaz.choices[0] && dataRaz.choices[0].message && dataRaz.choices[0].message.content) || '';
+        razonamientoPrevioApi = stripThinkTags((dataRaz.choices && dataRaz.choices[0] && dataRaz.choices[0].message && dataRaz.choices[0].message.content) || '');
       }
     } catch (e) { console.error('[api/v1/chat] fallo el paso de razonamiento con Qwen3-32B:', e.message); }
     if (razonamientoPrevioApi) {
@@ -1619,7 +1642,7 @@ app.post('/api/v1/chat', async (req, res) => {
       const mensajesParaGlm = mensajesParaModelo.filter((m) => m.role !== 'system');
       const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt);
       if (resultadoGlm.ok) {
-        texto = resultadoGlm.texto;
+        texto = stripThinkTags(resultadoGlm.texto);
         modeloUsadoReal = resultadoGlm.modelo;
         glmUsado = true;
       } else {
@@ -1650,7 +1673,7 @@ app.post('/api/v1/chat', async (req, res) => {
       }
 
       const data = await respuestaGroq.json();
-      texto = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+      texto = stripThinkTags((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '');
     }
 
     let webSearchQueryApi = null;
@@ -1924,7 +1947,7 @@ app.get('/api/v1/chats', (req, res) => {
 //
 // Respuesta:
 //   { ok, respuesta, razonamiento, modeloReal, capaGlm, capaGroq, ... }
-app.post('/api/v1/pro-hybrid', async (req, res) => {
+app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => {
   const valorToken = leerBearerToken(req);
   if (!valorToken) return res.status(401).json({ ok: false, error: 'Falta Authorization: Bearer verboai-XXXX' });
   const token = buscarTokenPorValor(valorToken);
@@ -1935,15 +1958,30 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
   }
 
   const mensaje = (typeof req.body?.mensaje === 'string' ? req.body.mensaje : '').trim();
-  if (!mensaje) return res.status(400).json({ ok: false, error: 'Falta "mensaje" en el body.' });
+  // Si hay imagenes, el mensaje puede ser vacio (analiza la imagen sola)
+  let imagenes = [];
+  if (req.files && req.files.length) {
+    imagenes = req.files.map((f) => ({ base64: f.buffer.toString('base64'), mime: f.mimetype, buffer: f.buffer }));
+  }
+  if (!mensaje && !imagenes.length) {
+    return res.status(400).json({ ok: false, error: 'Falta "mensaje" o al menos una imagen.' });
+  }
   if (mensaje.length > 8000) return res.status(400).json({ ok: false, error: 'El mensaje es demasiado largo (max 8000 caracteres).' });
 
   const forzarGlm = req.body?.forzarGlm !== false; // default true
   const configPro = MODELOS_DISPONIBLES.NewserPro;
 
-  // 1) Razonamiento previo con Qwen3-32B (Groq)
+  // ============================================================
+  // Si hay imagenes, NO usamos el puente GLM-4 (Modelscope no soporta
+  // vision via g4f). En su lugar usamos Llama 4 Scout de Groq (modelo
+  // de vision) directamente, con el razonamiento previo de Qwen3-32B.
+  // ============================================================
+  const hayImagenes = imagenes.length > 0;
+
+  // 1) Razonamiento previo con Qwen3-32B (Groq) — solo si no hay imagenes
+  //    (con imagenes, el razonamiento previo no aporta mucho y demora mas)
   let razonamientoPrevio = '';
-  if (configPro.modeloTextoRazonamiento) {
+  if (configPro.modeloTextoRazonamiento && !hayImagenes) {
     try {
       const respRaz = await llamarGroqConReintentos({
         method: 'POST',
@@ -1961,17 +1999,22 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
       }, () => {});
       if (respRaz && respRaz.ok) {
         const dataRaz = await respRaz.json();
-        razonamientoPrevio = (dataRaz.choices?.[0]?.message?.content) || '';
+        razonamientoPrevio = stripThinkTags((dataRaz.choices?.[0]?.message?.content) || '');
       }
     } catch (e) {
       console.warn('[pro-hybrid] razonamiento previo fallo:', e.message);
     }
   }
 
-  // 2) Redaccion final: GLM-4 primero (si forzarGlm), fallback a GPT-OSS-120B
+  // 2) Redaccion final:
+  //    - Si hay imagenes: Llama 4 Scout (Groq, vision)
+  //    - Si no hay imagenes: GLM-4 (puente g4f) con fallback a GPT-OSS-120B (Groq)
   let systemPrompt = SYSTEM_PROMPT + SYSTEM_PROMPT_PRO_EXTRA;
   if (razonamientoPrevio) {
     systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por ${configPro.modeloTextoRazonamiento}, no lo repitas ni menciones, usalo como guia]:\n${razonamientoPrevio}`;
+  }
+  if (hayImagenes) {
+    systemPrompt += `\n\nNOTA SOBRE IMAGENES ADJUNTAS: el usuario adjunto ${imagenes.length > 1 ? 'imagenes' : 'una imagen'} en este mensaje. Antes de responder, analizala con maxima atencion y en detalle: fijate bien en TODOS los elementos visibles (texto, numeros, colores, personas, objetos, disposicion, errores, codigo, capturas de pantalla, etc.), no te quedes con una descripcion superficial ni generica. Si el usuario pide una tarea concreta sobre la imagen (resolver algo, identificar un error, transcribir texto, explicar un codigo, comparar cosas, etc.), primero examina la imagen a fondo y recien despues cumplí exactamente lo que se te pide, basandote solo en lo que realmente se ve, sin inventar ni asumir detalles que no esten claramente visibles.`;
   }
   systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, 'NewserPro');
 
@@ -1979,14 +2022,51 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
   let modeloReal = configPro.modeloTexto;
   let capaGlm = false;
   let capaGroq = false;
+  let capaVision = false;
 
-  if (forzarGlm && GPT4FREE_ENABLED) {
+  if (hayImagenes) {
+    // ============================================================
+    // MODO VISION: usar Llama 4 Scout (Groq) con las imagenes
+    // ============================================================
+    const contenidoUsuario = [
+      { type: 'text', text: mensaje || 'Describe estas imagenes en detalle.' },
+      ...imagenes.map((img) => ({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.base64}` } })),
+    ];
+
+    const respuestaGroq = await llamarGroqConReintentos({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: GROQ_MODEL_VISION, // Llama 4 Scout 17B
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: contenidoUsuario },
+        ],
+        temperature: 0.7,
+        max_tokens: configPro.maxTokens,
+        stream: false,
+      }),
+    }, () => {});
+
+    if (!respuestaGroq || !respuestaGroq.ok) {
+      const status = respuestaGroq ? respuestaGroq.status : 0;
+      return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
+    }
+    const data = await respuestaGroq.json();
+    textoFinal = stripThinkTags((data.choices?.[0]?.message?.content) || '');
+    modeloReal = GROQ_MODEL_VISION;
+    capaVision = true;
+    capaGroq = true; // Llama 4 Scout es de Groq
+  } else if (forzarGlm && GPT4FREE_ENABLED) {
+    // ============================================================
+    // MODO TEXTO PURO: GLM-4 primero, fallback a GPT-OSS-120B
+    // ============================================================
     const resultadoGlm = await llamarGlm4Bridge(
       [{ role: 'user', content: mensaje }],
       systemPrompt,
     );
     if (resultadoGlm.ok) {
-      textoFinal = resultadoGlm.texto;
+      textoFinal = stripThinkTags(resultadoGlm.texto);
       modeloReal = resultadoGlm.modelo;
       capaGlm = true;
     } else {
@@ -1994,7 +2074,7 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
     }
   }
 
-  if (!textoFinal) {
+  if (!textoFinal && !hayImagenes) {
     const respuestaGroq = await llamarGroqConReintentos({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2015,10 +2095,13 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
       return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
     }
     const data = await respuestaGroq.json();
-    textoFinal = (data.choices?.[0]?.message?.content) || '';
+    textoFinal = stripThinkTags((data.choices?.[0]?.message?.content) || '');
     modeloReal = configPro.modeloTexto;
     capaGroq = true;
   }
+
+  // Guardar imagenes al disco para referncia futura (opcional)
+  const imagenesGuardadasUrls = imagenes.map((img) => guardarImagenDisco(img.buffer, img.mime));
 
   return res.json({
     ok: true,
@@ -2027,10 +2110,13 @@ app.post('/api/v1/pro-hybrid', async (req, res) => {
     modeloReal,
     capaGlm,
     capaGroq,
+    capaVision,
+    imagenesAdjuntas: imagenesGuardadasUrls.length,
     glmDisponible: GPT4FREE_ENABLED && !!GPT4FREE_URL,
     modeloGlm: GPT4FREE_MODEL,
     modeloGroqTexto: configPro.modeloTexto,
     modeloGroqRazonamiento: configPro.modeloTextoRazonamiento,
+    modeloGroqVision: GROQ_MODEL_VISION,
     creditosRestantes: token.propietario.startsWith('local:') ? -1 : leerCreditosGlobales(token.propietario),
   });
 });
@@ -3460,7 +3546,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         }, () => {});
         if (respRaz && respRaz.ok) {
           const dataRaz = await respRaz.json();
-          const razonamientoPrevio = (dataRaz.choices && dataRaz.choices[0] && dataRaz.choices[0].message && dataRaz.choices[0].message.content) || '';
+          const razonamientoPrevio = stripThinkTags((dataRaz.choices && dataRaz.choices[0] && dataRaz.choices[0].message && dataRaz.choices[0].message.content) || '');
           if (razonamientoPrevio) {
             systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por Qwen3-32B, no lo repitas literalmente ni lo menciones al usuario, usalo solo como guia para pensar mejor tu respuesta final]:\n${razonamientoPrevio}`;
           }
@@ -3500,7 +3586,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       enviar({ type: 'investigando_fin' });
 
       if (resultadoGlm.ok && !clienteDesconectado) {
-        glmTextoPreGenerado = resultadoGlm.texto;
+        glmTextoPreGenerado = stripThinkTags(resultadoGlm.texto);
       } else if (!resultadoGlm.ok && resultadoGlm.error !== 'cancelado') {
         console.warn(`[chat] GLM-4 fallo (${resultadoGlm.error}), fallback a GPT-OSS-120B streaming.`);
       }
@@ -3595,15 +3681,25 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
             const delta = (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) || '';
             if (delta) {
               textoCompleto += delta;
-              const corte = calcularCorte(textoCompleto);
+              // Limpiar <think>...</think> de Qwen3 en tiempo real.
+              // Si el bloque <think> esta abierto (sin cerrar), stripThinkTags
+              // elimina todo desde <think> hasta el final, asi que no se emite
+              // nada del razonamiento interno. Una vez que llega </think>,
+              // se emite solo la respuesta real.
+              const textoLimpio = stripThinkTags(textoCompleto);
+              const corte = calcularCorte(textoLimpio);
               if (corte > emitido) {
-                enviar({ type: 'chunk', text: textoCompleto.slice(emitido, corte) });
+                enviar({ type: 'chunk', text: textoLimpio.slice(emitido, corte) });
                 emitido = corte;
               }
             }
           } catch (e) {  }
         }
       }
+      // Al finalizar el stream, nos aseguramos de que textoCompleto este limpio
+      // para que el resto del parseo de etiquetas [[WEB::]], [[CODE::]], etc.
+      // y el guardado en historial no contengan <think>.
+      textoCompleto = stripThinkTags(textoCompleto);
     } else if (glmTextoPreGenerado) {
       // GLM-4 ya emitio el stream simulado; aseguramos que emitido cubra
       // todo el texto para que el resto del parseo de etiquetas funcione.
