@@ -720,20 +720,21 @@ function abrirSelectorModelo() {
 }
 
 function cerrarSelectorModelo() {
-  if (selectorModeloMenu) selectorModeloMenu.classList.add('oculto');
+  if (selectorModeloMenu) {
+    selectorModeloMenu.classList.add('oculto');
+    selectorModeloMenu.innerHTML = '';
+  }
   if (btnSelectorModelo) {
     btnSelectorModelo.classList.remove('abierto');
     btnSelectorModelo.setAttribute('aria-expanded', 'false');
   }
   var menuHeader = document.getElementById('selectorModeloMenuHeader');
-  if (menuHeader) menuHeader.classList.add('oculto');
+  if (menuHeader) {
+    menuHeader.classList.add('oculto');
+    menuHeader.innerHTML = '';
+  }
   var btnHeader = document.getElementById('btnSelectorModeloHeader');
   if (btnHeader) btnHeader.classList.remove('abierto');
-  setTimeout(function() {
-    if (selectorModeloMenu) selectorModeloMenu.innerHTML = '';
-    var mh = document.getElementById('selectorModeloMenuHeader');
-    if (mh) mh.innerHTML = '';
-  }, 100);
 }
 
 function renderOpcionesModeloEn(contenedor) {
@@ -760,16 +761,13 @@ function renderOpcionesModeloEn(contenedor) {
   contenedor.querySelectorAll('.opcion-modelo').forEach(function(op) {
     if (op.disabled) return;
     op.addEventListener('click', function(ev) {
-      ev.stopPropagation();
-      ev.preventDefault();
       var modeloElegido = op.dataset.modelo;
-      setTimeout(function() {
-        modeloActual = modeloElegido;
-        localStorage.setItem('verboAiModelo', modeloActual);
-        aplicarModeloUI();
-        cerrarSelectorModelo();
-      }, 0);
-    });
+      modeloActual = modeloElegido;
+      localStorage.setItem('verboAiModelo', modeloActual);
+      aplicarModeloUI();
+      cerrarSelectorModelo();
+      ev.stopPropagation();
+    }, true);
   });
 }
 
@@ -806,7 +804,8 @@ document.addEventListener('click', (ev) => {
   if (menuOculto) return;
   var contInput = document.getElementById('selectorModelo');
   var contHeader = document.getElementById('selectorModeloHeader');
-  if ((contInput && contInput.contains(ev.target)) || (contHeader && contHeader.contains(ev.target))) return;
+  if (contInput && contInput.contains(ev.target)) return;
+  if (contHeader && contHeader.contains(ev.target)) return;
   cerrarSelectorModelo();
 });
 
