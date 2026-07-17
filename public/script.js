@@ -716,7 +716,6 @@ function abrirSelectorModelo() {
       btnSelectorModelo.setAttribute('aria-expanded', 'true');
     }
   }
-  crearOverlaySelectorModelo();
   aplicarModeloUI();
 }
 
@@ -736,7 +735,6 @@ function cerrarSelectorModelo() {
   }
   var btnHeader = document.getElementById('btnSelectorModeloHeader');
   if (btnHeader) btnHeader.classList.remove('abierto');
-  quitarOverlaySelectorModelo();
 }
 
 function renderOpcionesModeloEn(contenedor) {
@@ -744,34 +742,35 @@ function renderOpcionesModeloEn(contenedor) {
   contenedor.innerHTML = modelosDisponibles.map(function(m) {
     var activa = m.nombre === modeloActual;
     var disponible = m.disponible !== false;
-    var badges = [];
+    var badges = '';
     if (disponible && m.costoCreditos && m.costoCreditos > 1) {
-      badges.push('<span class="opcion-modelo-badge">' + m.costoCreditos + ' creditos</span>');
+      badges += '<span class="opcion-modelo-badge">' + m.costoCreditos + ' creditos</span>';
     }
     if (m.badge === 'beta' || m.nombre === 'NewserAdvanced') {
-      badges.push('<span class="opcion-modelo-badge opcion-modelo-badge-beta">Beta</span>');
+      badges += '<span class="opcion-modelo-badge opcion-modelo-badge-beta">Beta</span>';
     }
     if (m.badge === 'pronto' || !disponible) {
-      badges.push('<span class="opcion-modelo-badge opcion-modelo-badge-pronto">Pronto</span>');
+      badges += '<span class="opcion-modelo-badge opcion-modelo-badge-pronto">Pronto</span>';
     }
     var claseNoDisponible = disponible ? '' : 'no-disponible';
     var checkSvg = disponible ? '<svg class="opcion-modelo-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
-    return '<button type="button" class="opcion-modelo ' + (activa ? 'activa' : '') + ' ' + claseNoDisponible + '" data-modelo="' + escapeHtml(m.nombre) + '" role="option" aria-selected="' + activa + '" ' + (disponible ? '' : 'disabled') + '>' +
-      '<div class="opcion-modelo-fila"><span class="opcion-modelo-nombre">' + escapeHtml(m.nombre) + '</span><span class="opcion-modelo-badges">' + badges.join('') + checkSvg + '</span></div>' +
+    var onclickAttr = disponible ? ' onclick="window.seleccionarModelo(\'' + m.nombre.replace(/'/g, "\\'") + '\')"' : ' disabled';
+    return '<button type="button" class="opcion-modelo ' + (activa ? 'activa' : '') + ' ' + claseNoDisponible + '" data-modelo="' + escapeHtml(m.nombre) + '" role="option" aria-selected="' + activa + '"' + onclickAttr + '>' +
+      '<div class="opcion-modelo-fila"><span class="opcion-modelo-nombre">' + escapeHtml(m.nombre) + '</span><span class="opcion-modelo-badges">' + badges + checkSvg + '</span></div>' +
       '<span class="opcion-modelo-desc">' + escapeHtml(m.descripcion || '') + '</span></button>';
   }).join('');
-  contenedor.querySelectorAll('.opcion-modelo').forEach(function(op) {
-    if (op.disabled) return;
-    op.onclick = function(ev) {
-      if (ev) { ev.stopPropagation(); ev.preventDefault(); }
-      modeloActual = op.dataset.modelo;
-      localStorage.setItem('verboAiModelo', modeloActual);
-      aplicarModeloUI();
-      cerrarSelectorModelo();
-      return false;
-    };
-  });
 }
+
+window.seleccionarModelo = function(nombre) {
+  modeloActual = nombre;
+  localStorage.setItem('verboAiModelo', modeloActual);
+  aplicarModeloUI();
+  cerrarSelectorModelo();
+};
+
+window.toggleSelectorModeloGlobal = function() {
+  toggleSelectorModelo();
+};
 
 function toggleSelectorModelo() {
   var menuHeader = document.getElementById('selectorModeloMenuHeader');
@@ -793,24 +792,25 @@ if (btnSelectorModelo) {
 const btnSelectorModeloHeader = document.getElementById('btnSelectorModeloHeader');
 const selectorModeloHeaderNombre = document.getElementById('selectorModeloHeaderNombre');
 if (btnSelectorModeloHeader) {
-  btnSelectorModeloHeader.onclick = function(ev) {
-    if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  btnSelectorModeloHeader.addEventListener('click', function(ev) {
+    ev.stopPropagation();
     toggleSelectorModelo();
-    return false;
-  };
+  });
 }
 
-var overlaySelectorModelo = null;
-function crearOverlaySelectorModelo() {
-  if (overlaySelectorModelo) return;
-  overlaySelectorModelo = document.createElement('div');
-  overlaySelectorModelo.style.cssText = 'position:fixed;inset:0;z-index:550;background:transparent;';
-  overlaySelectorModelo.onclick = function() { cerrarSelectorModelo(); };
-  document.body.appendChild(overlaySelectorModelo);
-}
-function quitarOverlaySelectorModelo() {
-  if (overlaySelectorModelo) { overlaySelectorModelo.remove(); overlaySelectorModelo = null; }
-}
+document.addEventListener('click', (ev) => {
+  if (ev.target.closest && ev.target.closest('.opcion-modelo')) return;
+  var menuHeader = document.getElementById('selectorModeloMenuHeader');
+  var menuOculto = true;
+  if (selectorModeloMenu && !selectorModeloMenu.classList.contains('oculto')) menuOculto = false;
+  if (menuHeader && !menuHeader.classList.contains('oculto')) menuOculto = false;
+  if (menuOculto) return;
+  var contInput = document.getElementById('selectorModelo');
+  var contHeader = document.getElementById('selectorModeloHeader');
+  if (contInput && contInput.contains(ev.target)) return;
+  if (contHeader && contHeader.contains(ev.target)) return;
+  cerrarSelectorModelo();
+});
 
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape') {
