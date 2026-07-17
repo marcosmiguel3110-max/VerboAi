@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const axios = require('axios');
 
 const app = express();
 
@@ -43,6 +44,25 @@ const GROQ_MODEL_PRO_RAZONAMIENTO = process.env.GROQ_MODEL_QWEN_PRO || process.e
 const POLLINATIONS_PRO_MODEL = process.env.POLLINATIONS_MODEL_PRO || 'flux-realism';
 const POLLINATIONS_PRO_WIDTH = parseInt(process.env.POLLINATIONS_WIDTH_PRO || '1536', 10);
 const POLLINATIONS_PRO_HEIGHT = parseInt(process.env.POLLINATIONS_HEIGHT_PRO || '1536', 10);
+
+// ============================================================
+// CAPA GLM-4 (GPT4Free) — opcional, solo para NewserPro
+// ============================================================
+// NewserPro puede usar un puente GPT4Free (ej: gpt4free渲染 en Render)
+// para delegar la redaccion final a "glm-4" en lugar de GPT-OSS-120B.
+// Si GPT4FREE_URL esta vacio o GPT4FREE_ENABLED_PRO=false, se usa el flujo
+// normal (Qwen3 razona -> GPT-OSS-120B redacta). Si esta activado y GLM-4
+// responde bien, se usa su texto; si falla, se hace fallback automatico
+// a GPT-OSS-120B (streaming) para no dejar al usuario sin respuesta.
+//
+// Formato esperado del puente: compatible con OpenAI (POST /v1/chat/completions).
+// Ej: GPT4FREE_URL=https://tu-bridge.onrender.com  (NO usar https://onrender.com
+// que es la home de Render, no un puente real).
+const GPT4FREE_URL = (process.env.GPT4FREE_URL || '').trim();
+const GPT4FREE_MODEL = process.env.GPT4FREE_MODEL || 'glm-4';
+const GPT4FREE_ENABLED = (process.env.GPT4FREE_ENABLED_PRO || 'false').toLowerCase() === 'true';
+const GPT4FREE_TIMEOUT = parseInt(process.env.GPT4FREE_TIMEOUT || '60000', 10);
+const GPT4FREE_API_KEY = process.env.GPT4FREE_API_KEY || ''; // opcional segun el puente
 
 const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 
@@ -221,6 +241,70 @@ function mensajeErrorAmigableIA(status) {
   if (status === 401 || status === 403) return 'Hubo un problema de autenticacion con el servicio de IA. Avisale al administrador.';
   if (status >= 500) return 'El servicio de IA no esta disponible en este momento. Intenta de nuevo en unos minutos.';
   return 'Error al conectar con el modelo. Intenta de nuevo en unos minutos.';
+}
+
+// ============================================================
+// CAPA GLM-4 (GPT4Free) — llamada al puente
+// ============================================================
+// Llama al puente GPT4Free (compatible OpenAI /v1/chat/completions).
+// Recibe messages ya armados (sin system, se agrega aca) y devuelve:
+//   { ok: true, texto, modelo } | { ok: false, error }
+// Si GPT4FREE_URL no esta configurada o esta deshabilitada, devuelve ok:false
+// inmediatamente para que el caller haga fallback a GPT-OSS-120B.
+async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
+  if (!GPT4FREE_ENABLED) return { ok: false, error: 'GLM-4 deshabilitado (GPT4FREE_ENABLED_PRO=false)' };
+  if (!GPT4FREE_URL) return { ok: false, error: 'GPT4FREE_URL no configurada' };
+
+  const url = GPT4FREE_URL.replace(/\/+$/, '') + '/v1/chat/completions';
+  const headers = { 'Content-Type': 'application/json' };
+  if (GPT4FREE_API_KEY) headers.Authorization = `Bearer ${GPT4FREE_API_KEY}`;
+
+  const body = {
+    model: GPT4FREE_MODEL,
+    messages: [{ role: 'system', content: systemPrompt }, ...messages],
+    temperature: 0.7,
+    max_tokens: 3072,
+    stream: false,
+  };
+
+  try {
+    const resp = await axios.post(url, body, {
+      timeout: GPT4FREE_TIMEOUT,
+      headers,
+      signal: opciones.signal,
+      validateStatus: () => true, // no lanzar en 4xx/5xx, manejarlo a mano
+    });
+    if (resp.status < 200 || resp.status >= 300) {
+      const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
+      console.error(`[glm-4] puente devolvio HTTP ${resp.status}: ${detalle}`);
+      return { ok: false, error: `HTTP ${resp.status}` };
+    }
+    const texto = resp.data?.choices?.[0]?.message?.content || '';
+    if (!texto || !texto.trim()) {
+      console.error('[glm-4] puente devolvio respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+      return { ok: false, error: 'Respuesta vacia del puente GLM-4' };
+    }
+    console.log(`[glm-4] OK - ${texto.length} chars devueltos por ${GPT4FREE_MODEL}`);
+    return { ok: true, texto: texto.trim(), modelo: GPT4FREE_MODEL };
+  } catch (e) {
+    if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return { ok: false, error: 'cancelado' };
+    console.error('[glm-4] fallo la peticion al puente:', e.message);
+    return { ok: false, error: e.message };
+  }
+}
+
+// Simula streaming de un texto completo dividiendolo en chunks y emitiendolos
+// con un pequenio delay, para mantener la UX de "maquina de escribir" cuando
+// se usa GLM-4 (que responde de una sola vez, no streaming).
+async function emitirTextoComoStream(texto, enviar, signal) {
+  const TAMANO_CHUNK = 12; // ~12 chars por tick
+  const DELAY_MS = 25;
+  for (let i = 0; i < texto.length; i += TAMANO_CHUNK) {
+    if (signal?.aborted) return false;
+    enviar({ type: 'chunk', text: texto.slice(i, i + TAMANO_CHUNK) });
+    await new Promise((r) => setTimeout(r, DELAY_MS));
+  }
+  return true;
 }
 
 const MEMORY_DIR = path.join(__dirname, 'memory');
@@ -460,7 +544,7 @@ function obtenerUsuarioActual(req) {
   return verificarValorFirmado(leerCookie(req, 'verbo_auth'));
 }
 
-const RUTAS_PUBLICAS = new Set(['/login', '/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/api/v1/chats', '/api/v1/creditos', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/ads.txt', '/api/config']);
+const RUTAS_PUBLICAS = new Set(['/login', '/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/api/v1/chats', '/api/v1/creditos', '/api/v1/pro-hybrid', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/ads.txt', '/api/config']);
 app.use((req, res, next) => {
 
   if (req.path === '/info') return res.redirect(301, '/info.html');
@@ -1521,29 +1605,53 @@ app.post('/api/v1/chat', async (req, res) => {
   }
 
   try {
-    const respuestaGroq = await llamarGroqConReintentos({
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: configModelo.modeloTexto,
-        messages: mensajesParaModelo,
-        temperature: 0.7,
-        max_tokens: configModelo.maxTokens,
-        stream: false,
-      }),
-    }, () => {});
+    // ============================================================
+    // CAPA GLM-4 (GPT4Free) — opcional, solo NewserPro
+    // ============================================================
+    // Si el modelo es NewserPro y GLM-4 esta habilitado, intentamos primero
+    // la redaccion final con el puente GPT4Free. Si responde, usamos ese
+    // texto. Si falla, cae al flujo normal de Groq (GPT-OSS-120B).
+    let texto = '';
+    let modeloUsadoReal = configModelo.modeloTexto;
+    let glmUsado = false;
 
-    if (!respuestaGroq || !respuestaGroq.ok) {
-      const status = respuestaGroq ? respuestaGroq.status : 0;
-      try {
-        const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
-        console.error(`[api/v1/chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
-      } catch (e) {  }
-      return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
+    if (configModelo.nombre === 'NewserPro' && GPT4FREE_ENABLED) {
+      const mensajesParaGlm = mensajesParaModelo.filter((m) => m.role !== 'system');
+      const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt);
+      if (resultadoGlm.ok) {
+        texto = resultadoGlm.texto;
+        modeloUsadoReal = resultadoGlm.modelo;
+        glmUsado = true;
+      } else {
+        console.warn(`[api/v1/chat] GLM-4 fallo (${resultadoGlm.error}), fallback a ${configModelo.modeloTexto}.`);
+      }
     }
 
-    const data = await respuestaGroq.json();
-    const texto = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    if (!glmUsado) {
+      const respuestaGroq = await llamarGroqConReintentos({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: configModelo.modeloTexto,
+          messages: mensajesParaModelo,
+          temperature: 0.7,
+          max_tokens: configModelo.maxTokens,
+          stream: false,
+        }),
+      }, () => {});
+
+      if (!respuestaGroq || !respuestaGroq.ok) {
+        const status = respuestaGroq ? respuestaGroq.status : 0;
+        try {
+          const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
+          console.error(`[api/v1/chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
+        } catch (e) {  }
+        return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
+      }
+
+      const data = await respuestaGroq.json();
+      texto = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    }
 
     let webSearchQueryApi = null;
     let climaQueryApi = null;
@@ -1738,6 +1846,7 @@ app.post('/api/v1/chat', async (req, res) => {
       respuesta: textoLimpio,
       modelo: configModelo.nombre,
       modeloUsado: configModelo.nombre,
+      modeloReal: modeloUsadoReal, // groq-120b | glm-4 | etc (info util para saber que capa respondio)
       costoCreditos: costoTotal,
       costoBase: configModelo.costoCreditos,
       costoExtraHerramientas: costoRealHerramientas,
@@ -1801,6 +1910,129 @@ app.get('/api/v1/chats', (req, res) => {
   const db = leerDB();
   const chats = listarChatsMeta(db, token.propietario);
   res.json({ ok: true, total: chats.length, chats });
+});
+
+// ============================================================
+// /api/v1/pro-hybrid — endpoint dedicado al flujo hibrido NewserPro
+// ============================================================
+// Llama al razonamiento previo (Qwen3-32B via Groq) y despues redacta la
+// respuesta final con GLM-4 via puente GPT4Free. Si GLM-4 no responde,
+// cae a GPT-OSS-120B. Requiere token admin (NewserPro es solo admin).
+//
+// Body:
+//   { "mensaje": "tu pregunta", "forzarGlm": true|false (default: true) }
+//
+// Respuesta:
+//   { ok, respuesta, razonamiento, modeloReal, capaGlm, capaGroq, ... }
+app.post('/api/v1/pro-hybrid', async (req, res) => {
+  const valorToken = leerBearerToken(req);
+  if (!valorToken) return res.status(401).json({ ok: false, error: 'Falta Authorization: Bearer verboai-XXXX' });
+  const token = buscarTokenPorValor(valorToken);
+  if (!token) return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
+
+  if (!usuarioEsAdmin(token.propietario)) {
+    return res.status(403).json({ ok: false, error: 'NewserPro hibrido es exclusivo para cuentas administrador.' });
+  }
+
+  const mensaje = (typeof req.body?.mensaje === 'string' ? req.body.mensaje : '').trim();
+  if (!mensaje) return res.status(400).json({ ok: false, error: 'Falta "mensaje" en el body.' });
+  if (mensaje.length > 8000) return res.status(400).json({ ok: false, error: 'El mensaje es demasiado largo (max 8000 caracteres).' });
+
+  const forzarGlm = req.body?.forzarGlm !== false; // default true
+  const configPro = MODELOS_DISPONIBLES.NewserPro;
+
+  // 1) Razonamiento previo con Qwen3-32B (Groq)
+  let razonamientoPrevio = '';
+  if (configPro.modeloTextoRazonamiento) {
+    try {
+      const respRaz = await llamarGroqConReintentos({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: configPro.modeloTextoRazonamiento,
+          messages: [
+            { role: 'system', content: 'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso y da un plan breve de respuesta (maximo 120 palabras). No respondas al usuario, esto es un borrador interno.' },
+            { role: 'user', content: mensaje },
+          ],
+          temperature: 0.4,
+          max_tokens: 400,
+          stream: false,
+        }),
+      }, () => {});
+      if (respRaz && respRaz.ok) {
+        const dataRaz = await respRaz.json();
+        razonamientoPrevio = (dataRaz.choices?.[0]?.message?.content) || '';
+      }
+    } catch (e) {
+      console.warn('[pro-hybrid] razonamiento previo fallo:', e.message);
+    }
+  }
+
+  // 2) Redaccion final: GLM-4 primero (si forzarGlm), fallback a GPT-OSS-120B
+  let systemPrompt = SYSTEM_PROMPT + SYSTEM_PROMPT_PRO_EXTRA;
+  if (razonamientoPrevio) {
+    systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por ${configPro.modeloTextoRazonamiento}, no lo repitas ni menciones, usalo como guia]:\n${razonamientoPrevio}`;
+  }
+  systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, 'NewserPro');
+
+  let textoFinal = '';
+  let modeloReal = configPro.modeloTexto;
+  let capaGlm = false;
+  let capaGroq = false;
+
+  if (forzarGlm && GPT4FREE_ENABLED) {
+    const resultadoGlm = await llamarGlm4Bridge(
+      [{ role: 'user', content: mensaje }],
+      systemPrompt,
+    );
+    if (resultadoGlm.ok) {
+      textoFinal = resultadoGlm.texto;
+      modeloReal = resultadoGlm.modelo;
+      capaGlm = true;
+    } else {
+      console.warn(`[pro-hybrid] GLM-4 fallo (${resultadoGlm.error}), fallback a ${configPro.modeloTexto}.`);
+    }
+  }
+
+  if (!textoFinal) {
+    const respuestaGroq = await llamarGroqConReintentos({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: configPro.modeloTexto,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: mensaje },
+        ],
+        temperature: 0.7,
+        max_tokens: configPro.maxTokens,
+        stream: false,
+      }),
+    }, () => {});
+
+    if (!respuestaGroq || !respuestaGroq.ok) {
+      const status = respuestaGroq ? respuestaGroq.status : 0;
+      return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
+    }
+    const data = await respuestaGroq.json();
+    textoFinal = (data.choices?.[0]?.message?.content) || '';
+    modeloReal = configPro.modeloTexto;
+    capaGroq = true;
+  }
+
+  return res.json({
+    ok: true,
+    respuesta: textoFinal,
+    razonamiento: razonamientoPrevio || null,
+    modeloReal,
+    capaGlm,
+    capaGroq,
+    glmDisponible: GPT4FREE_ENABLED && !!GPT4FREE_URL,
+    modeloGlm: GPT4FREE_MODEL,
+    modeloGroqTexto: configPro.modeloTexto,
+    modeloGroqRazonamiento: configPro.modeloTextoRazonamiento,
+    creditosRestantes: token.propietario.startsWith('local:') ? -1 : leerCreditosGlobales(token.propietario),
+  });
 });
 
 // Nuevo: consulta rapida de creditos restantes sin traer la lista de modelos completa.
@@ -3247,37 +3479,77 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       { role: 'user', content: contenidoUsuario },
     ];
 
-    const respuestaGroq = await llamarGroqConReintentos({
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: modeloElegido,
-        messages: mensajesParaModelo,
-        temperature: 0.7,
-        max_tokens: configModelo.maxTokens,
-        stream: true,
-      }),
-      signal: controladorGroq.signal,
-    }, enviar);
+    // ============================================================
+    // CAPA GLM-4 (GPT4Free) — opcional, solo NewserPro
+    // ============================================================
+    // Si el modelo es NewserPro, GLM-4 esta habilitado y NO hay imagenes
+    // adjuntas (GLM-4 no entiende imagenes), probamos primero la redaccion
+    // final con el puente GPT4Free. Si responde, emitimos el texto como
+    // stream simulado y saltamos el streaming de Groq. Si falla, cae al
+    // flujo normal (GPT-OSS-120B streaming) automaticamente.
+    let glmTextoPreGenerado = null;
+    if (configModelo.nombre === 'NewserPro' && GPT4FREE_ENABLED && !imagenes.length) {
+      enviar({ type: 'investigando', query: `Procesando con GLM-4 (${GPT4FREE_MODEL})...` });
+      enviar({ type: 'investigando_sitio', sitio: `puente GPT4Free (${GPT4FREE_MODEL})` });
 
-    if (!respuestaGroq || !respuestaGroq.ok || !respuestaGroq.body) {
-      const status = respuestaGroq ? respuestaGroq.status : 0;
+      const mensajesParaGlm = [
+        ...construirHistorialParaModelo(historial),
+        { role: 'user', content: contenidoUsuario },
+      ];
+      const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt, { signal: controladorGroq.signal });
+      enviar({ type: 'investigando_fin' });
 
-      try {
-        const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
-        console.error(`[chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
-      } catch (e) {  }
-      enviar({ type: 'error', message: mensajeErrorAmigableIA(status) });
-      return res.end();
+      if (resultadoGlm.ok && !clienteDesconectado) {
+        glmTextoPreGenerado = resultadoGlm.texto;
+      } else if (!resultadoGlm.ok && resultadoGlm.error !== 'cancelado') {
+        console.warn(`[chat] GLM-4 fallo (${resultadoGlm.error}), fallback a GPT-OSS-120B streaming.`);
+      }
     }
 
-    const reader = respuestaGroq.body.getReader();
-    const decoder = new TextDecoder();
+    let reader = null;
+    let decoder = null;
+    let textoCompleto = glmTextoPreGenerado || '';
     let bufferSSE = '';
-    let textoCompleto = '';
     let emitido = 0;
+
+    if (!glmTextoPreGenerado) {
+      // Flujo normal: streaming con Groq (GPT-OSS-120B o Llama 4 Scout si hay imagenes)
+      const respuestaGroq = await llamarGroqConReintentos({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: modeloElegido,
+          messages: mensajesParaModelo,
+          temperature: 0.7,
+          max_tokens: configModelo.maxTokens,
+          stream: true,
+        }),
+        signal: controladorGroq.signal,
+      }, enviar);
+
+      if (!respuestaGroq || !respuestaGroq.ok || !respuestaGroq.body) {
+        const status = respuestaGroq ? respuestaGroq.status : 0;
+
+        try {
+          const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
+          console.error(`[chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
+        } catch (e) {  }
+        enviar({ type: 'error', message: mensajeErrorAmigableIA(status) });
+        return res.end();
+      }
+
+      reader = respuestaGroq.body.getReader();
+      decoder = new TextDecoder();
+    } else {
+      // GLM-4 respondio: emitir el texto como stream simulado para mantener
+      // la UX de "maquina de escribir". El parseo de etiquetas [[WEB::]],
+      // [[CODE::]], etc. se hace igual que en el flujo de Groq porque esas
+      // etiquetas pueden estar presentes en la respuesta de GLM-4 tambien.
+      await emitirTextoComoStream(glmTextoPreGenerado, enviar, controladorGroq.signal);
+      if (clienteDesconectado) return res.end();
+    }
 
     const MARCADORES = ['[[CUADERNO::', '[[BUSCAR::', '[[INVESTIGAR::', '[[DESCARGAR::', '[[IMAGEN::', '[[WEB::', '[[CLIMA::', '[[CODE::', '[[APIDATA::'];
     function calcularCorte(buffer) {
@@ -3294,39 +3566,48 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       return Math.max(corte, emitido);
     }
 
-    let terminado = false;
-    while (!terminado) {
-      let leido;
-      try {
-        leido = await reader.read();
-      } catch (e) {
-
-        if (clienteDesconectado) break;
-        throw e;
-      }
-      const { value, done } = leido;
-      if (done) break;
-      bufferSSE += decoder.decode(value, { stream: true });
-      const lineas = bufferSSE.split('\n');
-      bufferSSE = lineas.pop();
-      for (const linea of lineas) {
-        const l = linea.trim();
-        if (!l.startsWith('data:')) continue;
-        const dataStr = l.slice(5).trim();
-        if (dataStr === '[DONE]') { terminado = true; break; }
+    // Solo leemos del reader si NO tenemos texto pre-generado de GLM-4.
+    // Si GLM-4 respondio, ya emitimos el stream simulado arriba y textoCompleto
+    // ya esta seteado, asi que saltamos este while entero.
+    if (!glmTextoPreGenerado && reader && decoder) {
+      let terminado = false;
+      while (!terminado) {
+        let leido;
         try {
-          const json = JSON.parse(dataStr);
-          const delta = (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) || '';
-          if (delta) {
-            textoCompleto += delta;
-            const corte = calcularCorte(textoCompleto);
-            if (corte > emitido) {
-              enviar({ type: 'chunk', text: textoCompleto.slice(emitido, corte) });
-              emitido = corte;
+          leido = await reader.read();
+        } catch (e) {
+
+          if (clienteDesconectado) break;
+          throw e;
+        }
+        const { value, done } = leido;
+        if (done) break;
+        bufferSSE += decoder.decode(value, { stream: true });
+        const lineas = bufferSSE.split('\n');
+        bufferSSE = lineas.pop();
+        for (const linea of lineas) {
+          const l = linea.trim();
+          if (!l.startsWith('data:')) continue;
+          const dataStr = l.slice(5).trim();
+          if (dataStr === '[DONE]') { terminado = true; break; }
+          try {
+            const json = JSON.parse(dataStr);
+            const delta = (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) || '';
+            if (delta) {
+              textoCompleto += delta;
+              const corte = calcularCorte(textoCompleto);
+              if (corte > emitido) {
+                enviar({ type: 'chunk', text: textoCompleto.slice(emitido, corte) });
+                emitido = corte;
+              }
             }
-          }
-        } catch (e) {  }
+          } catch (e) {  }
+        }
       }
+    } else if (glmTextoPreGenerado) {
+      // GLM-4 ya emitio el stream simulado; aseguramos que emitido cubra
+      // todo el texto para que el resto del parseo de etiquetas funcione.
+      emitido = glmTextoPreGenerado.length;
     }
 
     let textoVisible = textoCompleto;
