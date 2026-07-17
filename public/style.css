@@ -2363,6 +2363,10 @@ html.tema-night .btn-menu-movil:hover { background: var(--hover-noche); }
   #inputTexto { font-size: 16px; padding: 6px; }
   .selector-modelo-menu { min-width: 220px; right: 0; }
   .preview-imagen { margin: 0 2% 6px; }
+  .selector-modelo { display: none; }
+  .btn-cuaderno-toggle { display: none; }
+  .selector-modelo-header { display: block !important; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); }
+  .selector-modelo-header .btn-selector-modelo { background: var(--crema-oscuro); border: 1px solid var(--borde); font-size: 11px; height: 28px; padding: 0 8px; }
   .biblia-zoom { order: 3; }
   .biblia-btn-marcar { order: 4; width: 100%; justify-content: center; margin-left: 0; margin-top: 6px; }
   .biblia-aviso-marcador { font-size: 11.5px; }

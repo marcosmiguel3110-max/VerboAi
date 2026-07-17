@@ -712,6 +712,7 @@ function renderOpcionesModelo() {
 
 function aplicarModeloUI() {
   if (selectorModeloNombre) selectorModeloNombre.textContent = modeloActual;
+  if (selectorModeloHeaderNombre) selectorModeloHeaderNombre.textContent = modeloActual;
   const headerSub = document.getElementById('chatHeaderSub');
   if (headerSub) headerSub.textContent = 'Modelo: ' + modeloActual;
   if (selectorModeloMenu) {
@@ -746,6 +747,15 @@ function toggleSelectorModelo() {
 
 if (btnSelectorModelo) {
   btnSelectorModelo.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    toggleSelectorModelo();
+  });
+}
+
+const btnSelectorModeloHeader = document.getElementById('btnSelectorModeloHeader');
+const selectorModeloHeaderNombre = document.getElementById('selectorModeloHeaderNombre');
+if (btnSelectorModeloHeader) {
+  btnSelectorModeloHeader.addEventListener('click', (ev) => {
     ev.stopPropagation();
     toggleSelectorModelo();
   });
