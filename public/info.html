@@ -289,6 +289,31 @@
     <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
   https://verboai.duckdns.org/api/v1/info</code></pre>
 
+    <h3><code>GET /api/v1/chats</code> <span class="badge badge-green">gratis</span> <span class="badge badge-blue">nuevo</span></h3>
+    <p>Devuelve el listado de tus conversaciones guardadas (las mismas que ves en la app web): <code>id</code>, <code>titulo</code>, <code>creadoEn</code> y <code>actualizadoEn</code>. No consume créditos.</p>
+    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
+  https://verboai.duckdns.org/api/v1/chats</code></pre>
+    <p><strong>Respuesta:</strong></p>
+    <pre><code>{
+  "ok": true,
+  "total": 2,
+  "chats": [
+    { "id": "c3b1...", "titulo": "Nueva conversacion", "creadoEn": "2026-07-17T...", "actualizadoEn": "2026-07-17T..." }
+  ]
+}</code></pre>
+
+    <h3><code>GET /api/v1/creditos</code> <span class="badge badge-green">gratis</span> <span class="badge badge-blue">nuevo</span></h3>
+    <p>Devuelve solo tus créditos restantes, más liviano que <code>/api/v1/info</code> cuando no necesitás la lista de modelos. No consume créditos.</p>
+    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
+  https://verboai.duckdns.org/api/v1/creditos</code></pre>
+    <p><strong>Respuesta:</strong></p>
+    <pre><code>{
+  "ok": true,
+  "creditos": 999,
+  "creditosIniciales": 1000,
+  "esAdmin": false
+}</code></pre>
+
     <h3><code>GET /api/mongo-status</code> <span class="badge badge-orange">admin</span></h3>
     <p>Verifica el estado de MongoDB (requiere sesión iniciada).</p>
   </section>

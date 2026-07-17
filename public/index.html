@@ -52,6 +52,19 @@
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10v4M17 10v4M11 9v6M14 9v6" stroke-linecap="round"/></svg>
         Codes
       </button>
+
+      <div class="nav-mas-wrap">
+        <button id="btnMasCodes" class="nav-item nav-item-mas" title="Mas opciones">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+        </button>
+        <div id="panelMasCodes" class="nav-mas-panel oculto">
+          <button id="btnVerboCode" class="nav-item nav-item-verbocode" disabled>
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Verbo Code
+            <span class="badge-prox">Pronto</span>
+          </button>
+        </div>
+      </div>
     </nav>
 
     <div class="sidebar-buscador">
@@ -367,6 +380,18 @@
 }</code></pre>
                 <p>Tambien podes consultar el estado del token y la lista de modelos disponibles con <code>GET /api/v1/info</code> (no gasta creditos):</p>
 <pre><code>curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</code></pre>
+
+                <p style="margin-top: 16px;"><strong>Nuevo: mas acceso con tu clave.</strong> Ademas de chatear, tu token ahora tambien puede:</p>
+<pre><code># Ver tus conversaciones guardadas (mismas que ves en la web)
+curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/chats
+
+# Consultar creditos restantes al instante
+curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/creditos</code></pre>
+                <ul>
+                  <li><code>GET /api/v1/chats</code> <span class="badge-prox" style="position: static;">Nuevo</span>: devuelve el listado de tus conversaciones (id, titulo y fechas). No gasta creditos.</li>
+                  <li><code>GET /api/v1/creditos</code> <span class="badge-prox" style="position: static;">Nuevo</span>: devuelve solo tus creditos restantes, mas liviano que <code>/api/v1/info</code>. No gasta creditos.</li>
+                </ul>
+
                 <ul>
                   <li>Cada token arranca con <strong>1000 creditos</strong>. NewserLite consume <strong>1</strong> por pedido, NewserAdvanced consume <strong>5</strong>.</li>
                   <li>Rate limit (API): <strong>20/min</strong> para NewserLite, <strong>5/min</strong> para NewserAdvanced (ventana deslizante por token).</li>

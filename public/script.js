@@ -121,11 +121,33 @@ let modelosDisponibles = [
 let hayCuaderno = false;
 let chatIdActual = localStorage.getItem('verboAiChatId') || null;
 
-function fijarChatActual(id) {
+function fijarChatActual(id, opts = {}) {
   chatIdActual = id;
   if (id) localStorage.setItem('verboAiChatId', id);
   else localStorage.removeItem('verboAiChatId');
+
+  // Refleja el UUID del chat en la barra de direcciones (https://tu-dominio/c/<uuid>).
+  if (!opts.sinUrl) {
+    const rutaNueva = id ? `/c/${id}` : '/';
+    if (window.location.pathname !== rutaNueva) {
+      window.history.pushState({ chatId: id || null }, '', rutaNueva);
+    }
+  }
 }
+
+function idChatDesdeUrl() {
+  const m = window.location.pathname.match(/^\/c\/([a-zA-Z0-9-]+)$/);
+  return m ? m[1] : null;
+}
+
+window.addEventListener('popstate', (ev) => {
+  const id = (ev.state && ev.state.chatId) || idChatDesdeUrl();
+  if (id && id !== chatIdActual) {
+    cambiarDeChat(id);
+  } else if (!id && chatIdActual) {
+    iniciarNuevoChat(true);
+  }
+});
 
 function renderizarTexto(textoPlano) {
   const lineas = textoPlano.replace(/\r\n/g, '\n').split('\n');
@@ -298,10 +320,21 @@ function pintarListaChats(chats) {
     const item = document.createElement('div');
     item.className = 'item-chat' + (c.id === chatIdActual ? ' activo' : '');
 
+    const info = document.createElement('div');
+    info.className = 'item-chat-info';
+
     const titulo = document.createElement('span');
     titulo.className = 'item-chat-titulo';
     titulo.textContent = c.titulo || 'Conversacion';
-    item.appendChild(titulo);
+    info.appendChild(titulo);
+
+    const uuid = document.createElement('span');
+    uuid.className = 'item-chat-uuid';
+    uuid.textContent = c.id;
+    uuid.title = c.id;
+    info.appendChild(uuid);
+
+    item.appendChild(info);
 
     const btnMenu = document.createElement('button');
     btnMenu.className = 'item-chat-menu';
@@ -544,6 +577,17 @@ if (overlayCodes) {
   overlayCodes.addEventListener('click', (ev) => {
     if (ev.target === overlayCodes) overlayCodes.classList.add('oculto');
   });
+}
+
+const btnMasCodes = document.getElementById('btnMasCodes');
+const panelMasCodes = document.getElementById('panelMasCodes');
+if (btnMasCodes && panelMasCodes) {
+  btnMasCodes.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    panelMasCodes.classList.toggle('oculto');
+  });
+  panelMasCodes.addEventListener('click', (ev) => ev.stopPropagation());
+  document.addEventListener('click', () => panelMasCodes.classList.add('oculto'));
 }
 
 if (btnCanjearCodigo) {
@@ -2028,7 +2072,7 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
   try {
     await fetch('/api/logout', { method: 'POST' });
   } catch (e) { /* seguimos igual, la cookie puede haber quedado vencida */ }
-  window.location.href = '/login.html';
+  window.location.href = '/login';
 });
 
 (async function iniciar() {
@@ -2059,7 +2103,12 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
     chats = await res.json();
   } catch (e) { /* sin conexion aun */ }
 
-  if (chatIdActual && chats.some((c) => c.id === chatIdActual)) {
+  const idDesdeUrl = idChatDesdeUrl();
+  if (idDesdeUrl && chats.some((c) => c.id === idDesdeUrl)) {
+    fijarChatActual(idDesdeUrl, { sinUrl: true });
+    await cargarMemoria(idDesdeUrl);
+  } else if (chatIdActual && chats.some((c) => c.id === chatIdActual)) {
+    fijarChatActual(chatIdActual);
     await cargarMemoria(chatIdActual);
   } else if (chats.length) {
     fijarChatActual(chats[0].id);

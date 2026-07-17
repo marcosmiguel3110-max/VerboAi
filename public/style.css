@@ -803,11 +803,65 @@ html.tema-night .item-chat.activo {
 }
 html.tema-night .item-chat:hover { background: var(--chat-activo-noche-fondo); }
 
-.item-chat-titulo {
+.item-chat-info {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.item-chat-titulo {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.item-chat-uuid {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  color: var(--texto-suave);
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.item-chat.activo .item-chat-uuid { opacity: 0.8; }
+
+/* ---------- Boton "+" (Codes) y panel flotante "Verbo Code" ---------- */
+.nav-mas-wrap {
+  position: relative;
+}
+.nav-item-mas {
+  justify-content: center;
+  color: var(--texto-suave);
+}
+.nav-item-mas svg { color: inherit; }
+
+.nav-mas-panel {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 8px);
+  z-index: 40;
+  min-width: 168px;
+  background: var(--fondo-tarjeta, #fff);
+  border: 1px solid var(--borde, rgba(0,0,0,0.08));
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+  padding: 6px;
+}
+.nav-mas-panel.oculto { display: none; }
+
+.nav-item-verbocode {
+  position: relative;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+.nav-item-verbocode:hover { background: none; }
+
+html.tema-night .nav-mas-panel {
+  background: var(--fondo-tarjeta-noche, #1B1E29);
+  border-color: rgba(255,255,255,0.1);
 }
 
 .item-chat-menu {

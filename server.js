@@ -317,14 +317,27 @@ function obtenerUsuarioActual(req) {
   return verificarValorFirmado(leerCookie(req, 'verbo_auth'));
 }
 
-const RUTAS_PUBLICAS = new Set(['/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/api/config']);
+const RUTAS_PUBLICAS = new Set(['/login', '/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/api/v1/chats', '/api/v1/creditos', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/api/config']);
 app.use((req, res, next) => {
 
   if (req.path === '/info') return res.redirect(301, '/info.html');
+  // URL limpia: /login.html pasa a /login (sin extension) via redireccion permanente.
+  if (req.path === '/login.html') return res.redirect(301, '/login');
   if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/')) return next();
   if (estaAutenticado(req)) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
-  return res.redirect('/login.html');
+  return res.redirect('/login');
+});
+
+// Sirve login.html en la URL limpia /login (sin extension).
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// URL de chat con UUID: /c/<uuid> muestra el UUID del chat en la barra de direcciones.
+// La autenticacion ya quedo resuelta por el middleware de arriba (redirige a /login si hace falta).
+app.get('/c/:id', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const EMAILS_AUTORIZADOS_API = new Set(
@@ -950,13 +963,13 @@ app.get('/auth/google', (req, res) => {
 app.get('/auth/google/callback', async (req, res) => {
   try {
     const { code, state, error } = req.query;
-    if (error) return res.redirect('/login.html?error=google_denegado');
+    if (error) return res.redirect('/login?error=google_denegado');
 
     const estadoCookie = verificarValorFirmado(leerCookie(req, 'verbo_oauth_state'));
     if (!estadoCookie || estadoCookie !== state) {
-      return res.redirect('/login.html?error=google_estado_invalido');
+      return res.redirect('/login?error=google_estado_invalido');
     }
-    if (!code) return res.redirect('/login.html?error=google_sin_codigo');
+    if (!code) return res.redirect('/login?error=google_sin_codigo');
 
     const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -971,16 +984,16 @@ app.get('/auth/google/callback', async (req, res) => {
     });
     if (!tokenResp.ok) {
       console.error('[google-auth] Error intercambiando el codigo:', await tokenResp.text());
-      return res.redirect('/login.html?error=google_token');
+      return res.redirect('/login?error=google_token');
     }
     const tokenData = await tokenResp.json();
 
     const userResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
-    if (!userResp.ok) return res.redirect('/login.html?error=google_userinfo');
+    if (!userResp.ok) return res.redirect('/login?error=google_userinfo');
     const userData = await userResp.json();
-    if (!userData.email) return res.redirect('/login.html?error=google_sin_email');
+    if (!userData.email) return res.redirect('/login?error=google_sin_email');
 
     if (!transporterCorreo && !process.env.RESEND_API_KEY) {
       console.warn('[google-auth] No hay configuración de email: entrando sin pedir codigo extra.');
@@ -1014,16 +1027,16 @@ app.get('/auth/google/callback', async (req, res) => {
         console.error('[google-auth] Respuesta SMTP:', e.response);
       }
       codigosPendientes.delete(userData.email);
-      return res.redirect('/login.html?error=google_correo_codigo');
+      return res.redirect('/login?error=google_correo_codigo');
     }
 
     let cookiePendiente = `verbo_google_pendiente=${encodeURIComponent(firmarValor(userData.email))}; HttpOnly; Path=/; Max-Age=600; SameSite=Lax`;
     if (req.secure) cookiePendiente += '; Secure';
     res.setHeader('Set-Cookie', [cookiePendiente, 'verbo_oauth_state=; HttpOnly; Path=/; Max-Age=0']);
-    res.redirect(`/login.html?paso=google_codigo&correo=${encodeURIComponent(userData.email)}`);
+    res.redirect(`/login?paso=google_codigo&correo=${encodeURIComponent(userData.email)}`);
   } catch (e) {
     console.error('[google-auth] Error en el callback:', e.message);
-    res.redirect('/login.html?error=google_interno');
+    res.redirect('/login?error=google_interno');
   }
 });
 
@@ -1491,6 +1504,30 @@ app.get('/api/v1/info', (req, res) => {
   });
 });
 
+// Nuevo: acceso desde la API a las conversaciones guardadas de la cuenta dueña del token.
+app.get('/api/v1/chats', (req, res) => {
+  const valorToken = leerBearerToken(req);
+  if (!valorToken) return res.status(401).json({ ok: false, error: 'Falta Authorization: Bearer verboai-XXXX' });
+  const token = buscarTokenPorValor(valorToken);
+  if (!token) return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
+
+  const db = leerDB();
+  const chats = listarChatsMeta(db, token.propietario);
+  res.json({ ok: true, total: chats.length, chats });
+});
+
+// Nuevo: consulta rapida de creditos restantes sin traer la lista de modelos completa.
+app.get('/api/v1/creditos', (req, res) => {
+  const valorToken = leerBearerToken(req);
+  if (!valorToken) return res.status(401).json({ ok: false, error: 'Falta Authorization: Bearer verboai-XXXX' });
+  const token = buscarTokenPorValor(valorToken);
+  if (!token) return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
+
+  const esAdmin = token.propietario && token.propietario.startsWith('local:');
+  const creditos = esAdmin ? -1 : leerCreditosGlobales(token.propietario);
+  res.json({ ok: true, creditos, creditosIniciales: esAdmin ? -1 : 1000, esAdmin });
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: false,
   lastModified: false,
@@ -1650,7 +1687,7 @@ El usuario eligio el modo catolico. A partir de ahora:
 - No descalifiques ni menosprecies otras tradiciones cristianas; sos catolico en el tono, no antagonista.`;
 
 function generarId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  return crypto.randomUUID();
 }
 
 function leerDB() {
