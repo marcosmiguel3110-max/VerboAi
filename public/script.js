@@ -678,36 +678,7 @@ const selectorModeloMenu = document.getElementById('selectorModeloMenu');
 const selectorModeloNombre = document.getElementById('selectorModeloNombre');
 
 function renderOpcionesModelo() {
-  if (!selectorModeloMenu) return;
-  selectorModeloMenu.innerHTML = modelosDisponibles.map((m) => {
-    const activa = m.nombre === modeloActual;
-    const disponible = m.disponible !== false;
-    const badges = [];
-    if (disponible && m.costoCreditos && m.costoCreditos > 1) {
-      badges.push('<span class="opcion-modelo-badge">' + m.costoCreditos + ' creditos</span>');
-    }
-    if (m.badge === 'beta' || m.nombre === 'NewserAdvanced') {
-      badges.push('<span class="opcion-modelo-badge opcion-modelo-badge-beta">Beta</span>');
-    }
-    if (m.badge === 'pronto' || !disponible) {
-      badges.push('<span class="opcion-modelo-badge opcion-modelo-badge-pronto">Pronto</span>');
-    }
-    const claseNoDisponible = disponible ? '' : 'no-disponible';
-    const checkSvg = disponible ? '<svg class="opcion-modelo-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
-    return '<button type="button" class="opcion-modelo ' + (activa ? 'activa' : '') + ' ' + claseNoDisponible + '" data-modelo="' + escapeHtml(m.nombre) + '" role="option" aria-selected="' + activa + '" ' + (disponible ? '' : 'disabled') + '>' +
-      '<div class="opcion-modelo-fila"><span class="opcion-modelo-nombre">' + escapeHtml(m.nombre) + '</span><span class="opcion-modelo-badges">' + badges.join('') + checkSvg + '</span></div>' +
-      '<span class="opcion-modelo-desc">' + escapeHtml(m.descripcion || '') + '</span></button>';
-  }).join('');
-
-  selectorModeloMenu.querySelectorAll('.opcion-modelo').forEach((op) => {
-    if (op.disabled) return;
-    op.addEventListener('click', () => {
-      modeloActual = op.dataset.modelo;
-      localStorage.setItem('verboAiModelo', modeloActual);
-      aplicarModeloUI();
-      cerrarSelectorModelo();
-    });
-  });
+  if (selectorModeloMenu) renderOpcionesModeloEn(selectorModeloMenu);
 }
 
 function aplicarModeloUI() {
@@ -725,34 +696,45 @@ function aplicarModeloUI() {
 }
 
 function abrirSelectorModelo() {
-  if (!selectorModeloMenu && !document.getElementById('selectorModeloMenuHeader')) return;
-  if (btnSelectorModelo) {
-    btnSelectorModelo.classList.add('abierto');
-    btnSelectorModelo.setAttribute('aria-expanded', 'true');
-  }
-  const btnHeader = document.getElementById('btnSelectorModeloHeader');
-  if (btnHeader) btnHeader.classList.add('abierto');
-  const menuHeader = document.getElementById('selectorModeloMenuHeader');
-  if (menuHeader) {
-    renderOpcionesModeloEn(menuHeader);
-    menuHeader.classList.remove('oculto');
-  }
-  if (selectorModeloMenu && window.matchMedia('(min-width: 769px)').matches) {
-    selectorModeloMenu.classList.remove('oculto');
+  var esMovil = window.matchMedia('(max-width: 768px)').matches;
+  var menuHeader = document.getElementById('selectorModeloMenuHeader');
+  if (esMovil) {
+    if (menuHeader) {
+      renderOpcionesModeloEn(menuHeader);
+      menuHeader.classList.remove('oculto');
+    }
+    if (btnSelectorModelo) btnSelectorModelo.classList.add('abierto');
+    var btnHeader = document.getElementById('btnSelectorModeloHeader');
+    if (btnHeader) btnHeader.classList.add('abierto');
+  } else {
+    if (selectorModeloMenu) {
+      renderOpcionesModeloEn(selectorModeloMenu);
+      selectorModeloMenu.classList.remove('oculto');
+    }
+    if (btnSelectorModelo) {
+      btnSelectorModelo.classList.add('abierto');
+      btnSelectorModelo.setAttribute('aria-expanded', 'true');
+    }
   }
   aplicarModeloUI();
 }
 
 function cerrarSelectorModelo() {
+  if (selectorModeloMenu) {
+    selectorModeloMenu.classList.add('oculto');
+    selectorModeloMenu.innerHTML = '';
+  }
   if (btnSelectorModelo) {
     btnSelectorModelo.classList.remove('abierto');
     btnSelectorModelo.setAttribute('aria-expanded', 'false');
   }
-  const btnHeader = document.getElementById('btnSelectorModeloHeader');
+  var menuHeader = document.getElementById('selectorModeloMenuHeader');
+  if (menuHeader) {
+    menuHeader.classList.add('oculto');
+    menuHeader.innerHTML = '';
+  }
+  var btnHeader = document.getElementById('btnSelectorModeloHeader');
   if (btnHeader) btnHeader.classList.remove('abierto');
-  const menuHeader = document.getElementById('selectorModeloMenuHeader');
-  if (menuHeader) menuHeader.classList.add('oculto');
-  if (selectorModeloMenu) selectorModeloMenu.classList.add('oculto');
 }
 
 function renderOpcionesModeloEn(contenedor) {
@@ -857,7 +839,6 @@ async function cargarModelosDisponibles() {
   }
 }
 
-renderOpcionesModelo();
 aplicarModeloUI();
 
 let temaActual = localStorage.getItem('verboAiTema') || 'default';
