@@ -2527,54 +2527,28 @@ html.tema-night .token-descarga-link:hover {
 }
 
 
-.perfil-fila {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  padding: 0 10px 10px;
-}
-
-.perfil-fila .perfil-usuario {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-
-html.tema-night .perfil-fila .perfil-usuario {
-  background: var(--hover-noche, #1B1E29);
-}
-
 .adsense-cuadrito {
-  width: 80px;
+  width: 100%;
   height: 80px;
-  flex-shrink: 0;
+  margin: 0 0 8px 0;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--borde);
   background: var(--crema-oscuro);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 html.tema-night .adsense-cuadrito {
   background: var(--hover-noche, #1B1E29);
   border-color: var(--borde-noche, #2A2E40);
 }
-
 .adsense-cuadrito ins.adsbygoogle {
-  width: 80px !important;
+  width: 100% !important;
   height: 80px !important;
 }
-
 @media (max-width: 768px) {
-  .adsense-cuadrito {
-    width: 100px;
-    height: 100px;
-  }
-  .adsense-cuadrito ins.adsbygoogle {
-    width: 100px !important;
-    height: 100px !important;
-  }
+  .adsense-cuadrito { height: 70px; }
+  .adsense-cuadrito ins.adsbygoogle { height: 70px !important; }
 }
 
