@@ -20,6 +20,25 @@ Configura estas variables en el dashboard de Render:
 - `APP_USER`: Usuario admin para login (ej: admin)
 - `APP_PASS`: Contraseña para el usuario admin
 - `AUTH_SECRET`: Secreto aleatorio largo para firmar cookies (genera uno con: openssl rand -base64 32)
+- `JUDGE0_API_URL`: (opcional) URL base de Judge0 para la herramienta de ejecución de código de NewserAdvanced1.5. Default: `https://judge0-ce.p.rapidapi.com` (RapidAPI). Si tenés tu propia instancia de Judge0 CE (self-hosted), poné esa URL acá y dejá `JUDGE0_API_KEY` vacío.
+- `JUDGE0_API_KEY`: Tu clave de RapidAPI (solo necesaria si usás la URL default de RapidAPI). Conseguila en https://rapidapi.com/judge0-official/api/judge0-ce
+
+## Migración de Piston a Judge0
+El sandbox de ejecución de código usaba la API pública de Piston (emkc.org), que
+pasó a requerir whitelist obligatoria desde el 15/2/2026 y por eso empezó a
+devolver `401` en cada ejecución. Se reemplazó por Judge0, que soporta dos modos:
+1. **RapidAPI (recomendado para arrancar rápido)**: dejá `JUDGE0_API_URL` en su
+   valor default y configurá `JUDGE0_API_KEY` con tu clave de RapidAPI. Tiene un
+   plan gratuito con límite de peticiones por día/mes.
+2. **Self-hosted**: si preferís no depender de un tercero, podés levantar tu
+   propia instancia de Judge0 CE en un contenedor Docker (en Render o donde sea)
+   y apuntar `JUDGE0_API_URL` a esa URL, sin necesidad de `JUDGE0_API_KEY`.
+
+De paso se corrigió un bug donde el costo en créditos de las herramientas
+(`web`, `code`) se cobraba completo aunque la herramienta fallara (por ejemplo,
+cuando Piston tiraba 401). Ahora el costo se reserva por adelantado pero solo
+se cobra lo que efectivamente se ejecutó con éxito; lo demás se reembolsa
+automáticamente.
 
 ## Configuración de Email
 Tienes dos opciones para enviar correos:

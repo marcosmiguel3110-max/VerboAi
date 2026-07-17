@@ -698,6 +698,19 @@ function descontarCreditosGlobales(usuario, cantidad, tipo, modeloNombre) {
   guardarUsuarios(usuarios);
   return { ok: true, restantes: cuenta.creditosGlobales };
 }
+function reembolsarCreditosGlobales(usuario, cantidad) {
+  if (!usuario || !cantidad || cantidad <= 0) return;
+  if (usuario.startsWith('local:')) return;
+  const usuarios = leerUsuarios();
+  const cuenta = usuarios[usuario];
+  if (!cuenta) return;
+  if (typeof cuenta.creditosGlobales !== 'number') cuenta.creditosGlobales = CREDITOS_GLOBALES_INICIALES;
+  cuenta.creditosGlobales += cantidad;
+  if (cuenta.estadisticas) {
+    cuenta.estadisticas.totalGastado = Math.max(0, (cuenta.estadisticas.totalGastado || 0) - cantidad);
+  }
+  guardarUsuarios(usuarios);
+}
 function hashearClave(clave) {
   const sal = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(clave, sal, 64).toString('hex');
@@ -1558,12 +1571,13 @@ app.post('/api/v1/chat', async (req, res) => {
       if (codeQueryApi) { costoExtra += 1; herramientasUsadas.push({ herramienta: 'code', lenguaje: codeQueryApi.lenguaje, costo: 1 }); }
       if (apidataQueryApi) { herramientasUsadas.push({ herramienta: 'apidata', recurso: apidataQueryApi, costo: 0 }); }
     }
-    const costoTotal = configModelo.costoCreditos + costoExtra;
+    const costoReservado = costoExtra;
+    let costoRealHerramientas = 0;
 
     let herramientasResultado = [];
     let herramientasOmitidas = false;
-    if (costoExtra > 0) {
-      const controlExtra = descontarCreditosGlobales(token.propietario, costoExtra, 'web', configModelo.nombre);
+    if (costoReservado > 0) {
+      const controlExtra = descontarCreditosGlobales(token.propietario, costoReservado, 'web', configModelo.nombre);
       if (!controlExtra.ok) {
         herramientasOmitidas = true;
         webSearchQueryApi = null;
@@ -1577,6 +1591,7 @@ app.post('/api/v1/chat', async (req, res) => {
       try {
         const resultado = await buscarWebGoogle(webSearchQueryApi);
         if (resultado.exito) {
+          costoRealHerramientas += 1;
           herramientasResultado.push({
             herramienta: 'web',
             query: webSearchQueryApi,
@@ -1620,8 +1635,9 @@ app.post('/api/v1/chat', async (req, res) => {
 
     if (codeQueryApi) {
       try {
-        const resultado = await ejecutarCodigoPiston(codeQueryApi.lenguaje, codeQueryApi.codigo);
+        const resultado = await ejecutarCodigoJudge0(codeQueryApi.lenguaje, codeQueryApi.codigo);
         if (resultado.exito) {
+          costoRealHerramientas += 1;
           herramientasResultado.push({
             herramienta: 'code', lenguaje: resultado.lenguaje, version: resultado.version,
             stdout: resultado.stdout, stderr: resultado.stderr, codigoSalida: resultado.codigoSalida,
@@ -1653,6 +1669,12 @@ app.post('/api/v1/chat', async (req, res) => {
       }
     }
 
+    const aReembolsar = costoReservado - costoRealHerramientas;
+    if (aReembolsar > 0) {
+      reembolsarCreditosGlobales(token.propietario, aReembolsar);
+    }
+    const costoTotal = configModelo.costoCreditos + costoRealHerramientas;
+
     const actualizado = buscarTokenPorValor(valorToken);
     res.json({
       ok: true,
@@ -1661,7 +1683,7 @@ app.post('/api/v1/chat', async (req, res) => {
       modeloUsado: configModelo.nombre,
       costoCreditos: costoTotal,
       costoBase: configModelo.costoCreditos,
-      costoExtraHerramientas: costoExtra,
+      costoExtraHerramientas: costoRealHerramientas,
       herramientas: herramientasResultado,
       herramientasOmitidas,
       creditosRestantes: token.propietario.startsWith('local:') ? -1 : leerCreditosGlobales(token.propietario),
@@ -1917,9 +1939,9 @@ en su propia linea, EXACTAMENTE este formato:
 [[CODE::lenguaje::codigo]]
 Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real dentro de la etiqueta.
 Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
-rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r, dart.
+rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r.
 Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
-Esto ejecuta el codigo REAL en un sandbox (Piston API) y el resultado real (stdout/stderr) se agrega
+Esto ejecuta el codigo REAL en un sandbox (Judge0 API) y el resultado real (stdout/stderr) se agrega
 despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
 esta herramienta en vez de imaginarte el resultado.
 
@@ -2537,48 +2559,79 @@ function describirCodigoClima(code) {
   return mapa[code] || 'condiciones desconocidas';
 }
 
-const PISTON_VERSIONES = {
-  python: '3.10.0', javascript: '18.15.0', typescript: '5.0.3', java: '15.0.2',
-  c: '10.2.0', cpp: '10.2.0', csharp: '6.12.0', go: '1.16.2', rust: '1.68.2',
-  ruby: '3.0.1', php: '8.2.3', bash: '5.2.0', sql: '3.36.0', kotlin: '1.8.20',
-  swift: '5.3.3', perl: '5.36.0', lua: '5.4.4', r: '4.1.1', dart: '2.19.6',
+// Judge0: soporta tanto una instancia propia (self-hosted, sin API key) como
+// la version hosteada de RapidAPI (necesita JUDGE0_API_KEY). Se detecta sola
+// segun la URL configurada en JUDGE0_API_URL.
+const JUDGE0_API_URL = (process.env.JUDGE0_API_URL || 'https://judge0-ce.p.rapidapi.com').replace(/\/+$/, '');
+const JUDGE0_API_KEY = process.env.JUDGE0_API_KEY || '';
+const JUDGE0_ES_RAPIDAPI = /rapidapi\.com$/i.test(new URL(JUDGE0_API_URL).hostname);
+const JUDGE0_API_HOST = process.env.JUDGE0_API_HOST || new URL(JUDGE0_API_URL).hostname;
+
+// IDs de lenguaje de Judge0 CE (estables desde hace años en la version publica).
+const JUDGE0_LANGUAGE_IDS = {
+  python: 71, javascript: 63, typescript: 74, java: 62,
+  c: 50, cpp: 54, csharp: 51, go: 60, rust: 73,
+  ruby: 72, php: 68, bash: 46, sql: 82, kotlin: 78,
+  swift: 83, perl: 85, lua: 64, r: 80,
 };
 
-async function ejecutarCodigoPiston(lenguaje, codigo) {
+function judge0Headers() {
+  const headers = { 'Content-Type': 'application/json' };
+  if (JUDGE0_ES_RAPIDAPI) {
+    headers['X-RapidAPI-Key'] = JUDGE0_API_KEY;
+    headers['X-RapidAPI-Host'] = JUDGE0_API_HOST;
+  }
+  return headers;
+}
+
+async function ejecutarCodigoJudge0(lenguaje, codigo) {
   try {
     const lang = (lenguaje || '').trim().toLowerCase();
     const fuente = (codigo || '').replace(/\\n/g, '\n');
     if (!lang || !fuente.trim()) return { exito: false, error: 'Falta lenguaje o codigo.' };
     if (fuente.length > 6000) return { exito: false, error: 'El codigo es demasiado largo (max 6000 caracteres).' };
 
-    const version = PISTON_VERSIONES[lang] || '*';
-    const resp = await fetch('https://emkc.org/api/v2/piston/execute', {
+    const languageId = JUDGE0_LANGUAGE_IDS[lang];
+    if (!languageId) {
+      return { exito: false, error: `Lenguaje "${lang}" no soportado por Judge0. Usa: ${Object.keys(JUDGE0_LANGUAGE_IDS).join(', ')}.` };
+    }
+    if (JUDGE0_ES_RAPIDAPI && !JUDGE0_API_KEY) {
+      return { exito: false, error: 'Falta configurar JUDGE0_API_KEY (RapidAPI) en el servidor.' };
+    }
+
+    const resp = await fetch(`${JUDGE0_API_URL}/submissions?base64_encoded=true&wait=true&fields=*`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: judge0Headers(),
       body: JSON.stringify({
-        language: lang,
-        version,
-        files: [{ content: fuente }],
+        source_code: Buffer.from(fuente, 'utf-8').toString('base64'),
+        language_id: languageId,
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(20000),
     });
     if (!resp.ok) {
       const detalle = await resp.text().catch(() => '');
-      return { exito: false, error: `Piston HTTP ${resp.status}: ${detalle.slice(0, 200)}` };
+      return { exito: false, error: `Judge0 HTTP ${resp.status}: ${detalle.slice(0, 200)}` };
     }
     const data = await resp.json();
-    const run = data.run || {};
+    const decode = (b64) => (b64 ? Buffer.from(b64, 'base64').toString('utf-8') : '');
+    const stdout = decode(data.stdout);
+    const stderr = decode(data.stderr) || decode(data.compile_output);
+    const estado = (data.status && data.status.description) || 'Desconocido';
+    if (data.status && ![3].includes(data.status.id) && stderr === '' && stdout === '') {
+      // status.id 3 = "Accepted"/ejecutado ok; otros ids (compile error, TLE, etc.) sin salida
+      return { exito: false, error: `Judge0: ${estado}` };
+    }
     return {
       exito: true,
       lenguaje: lang,
-      version: data.version || version,
-      stdout: (run.stdout || '').slice(0, 3000),
-      stderr: (run.stderr || '').slice(0, 1500),
-      codigoSalida: typeof run.code === 'number' ? run.code : null,
-      senal: run.signal || null,
+      version: estado,
+      stdout: stdout.slice(0, 3000),
+      stderr: stderr.slice(0, 1500),
+      codigoSalida: typeof data.exit_code === 'number' ? data.exit_code : null,
+      senal: data.status ? data.status.id : null,
     };
   } catch (e) {
-    return { exito: false, error: 'Piston fallo: ' + e.message };
+    return { exito: false, error: 'Judge0 fallo: ' + e.message };
   }
 }
 
@@ -3348,8 +3401,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
     if (codeQuery) {
       enviar({ type: 'investigando', query: `Ejecutando codigo (${codeQuery.lenguaje})...` });
-      enviar({ type: 'investigando_sitio', sitio: 'Piston API (emkc.org)' });
-      const resultadoCode = await esperarMinimo(ejecutarCodigoPiston(codeQuery.lenguaje, codeQuery.codigo), 900);
+      enviar({ type: 'investigando_sitio', sitio: 'Judge0 API' });
+      const resultadoCode = await esperarMinimo(ejecutarCodigoJudge0(codeQuery.lenguaje, codeQuery.codigo), 900);
       enviar({ type: 'investigando_fin' });
 
       if (resultadoCode.exito) {
