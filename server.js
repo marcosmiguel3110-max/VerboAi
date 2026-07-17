@@ -12,7 +12,14 @@ const app = express();
 app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 
-const CLAVES_GROQ = [...new Set([process.env.GROQ_API_KEY, process.env.BTATESTERS_KEY].filter(Boolean))];
+const CLAVES_GROQ = [...new Set([
+  process.env.GROQ_API_KEY,
+  process.env.BTATESTERS_KEY,
+  process.env.GROQ_API_KEY_2,
+  process.env.GROQ_API_KEY_3,
+  process.env.GROQ_API_KEY_4,
+  process.env.GROQ_API_KEY_5,
+].filter(Boolean))];
 const BTATESTERS_KEY = CLAVES_GROQ[0];
 
 const GROQ_MODEL_TEXTO = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
@@ -46,6 +53,19 @@ const MODELOS_DISPONIBLES = {
     badge: 'beta',
     disponible: true,
   },
+  'NewserAdvanced1.5': {
+    nombre: 'NewserAdvanced1.5',
+    descripcion: 'El mas potente. Combina GPT-OSS-120B y Qwen3-32B para un razonamiento aun mas profundo. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Rate limits mas estrictos.',
+    modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
+    modeloTextoRazonamiento: process.env.GROQ_MODEL_QWEN || 'qwen/qwen3-32b',
+    modeloVision: GROQ_MODEL_VISION,
+    costoCreditos: 10,
+    rateLimitMax: 3,
+    rateLimitMaxWeb: 4,
+    maxTokens: 3072,
+    badge: 'pro',
+    disponible: true,
+  },
   NewserPro: {
     nombre: 'NewserPro',
     descripcion: 'Pronto. Modelo profesional con capacidades premium.',
@@ -69,7 +89,7 @@ function resolverModelo(valor) {
   if (!clave) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
   const config = MODELOS_DISPONIBLES[clave];
   if (config.disponible === false) {
-    const err = new Error('El modelo "' + config.nombre + '" no esta disponible aun. Usa NewserLite o NewserAdvanced.');
+    const err = new Error('El modelo "' + config.nombre + '" no esta disponible aun. Usa NewserLite, NewserAdvanced o NewserAdvanced1.5.');
     err.codigo = 400;
     err.modeloBloqueado = true;
     throw err;
@@ -1235,6 +1255,35 @@ app.post('/api/v1/chat', async (req, res) => {
   let systemPrompt = modo === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT;
   if (configModelo.nombre === 'NewserAdvanced') {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
+  } else if (configModelo.nombre === 'NewserAdvanced1.5') {
+    systemPrompt = systemPrompt + SYSTEM_PROMPT_ADVANCED_15_EXTRA;
+  }
+
+  let razonamientoPrevioApi = '';
+  if (configModelo.nombre === 'NewserAdvanced1.5' && configModelo.modeloTextoRazonamiento) {
+    try {
+      const respRaz = await llamarGroqConReintentos({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: configModelo.modeloTextoRazonamiento,
+          messages: [
+            { role: 'system', content: 'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta, un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo va a usar despues. Se breve (maximo 120 palabras).' },
+            { role: 'user', content: mensaje },
+          ],
+          temperature: 0.4,
+          max_tokens: 400,
+          stream: false,
+        }),
+      }, () => {});
+      if (respRaz && respRaz.ok) {
+        const dataRaz = await respRaz.json();
+        razonamientoPrevioApi = (dataRaz.choices && dataRaz.choices[0] && dataRaz.choices[0].message && dataRaz.choices[0].message.content) || '';
+      }
+    } catch (e) { console.error('[api/v1/chat] fallo el paso de razonamiento con Qwen3-32B:', e.message); }
+    if (razonamientoPrevioApi) {
+      systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por Qwen3-32B, no lo repitas literalmente ni lo menciones, usalo solo como guia]:\n${razonamientoPrevioApi}`;
+    }
   }
 
   systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
@@ -1331,6 +1380,8 @@ app.post('/api/v1/chat', async (req, res) => {
 
     let webSearchQueryApi = null;
     let climaQueryApi = null;
+    let codeQueryApi = null;
+    let apidataQueryApi = null;
     let textoLimpio = texto;
 
     textoLimpio = textoLimpio.replace(/\[\[IMAGEN::[^\]]*\]\]/g, '');
@@ -1339,9 +1390,23 @@ app.post('/api/v1/chat', async (req, res) => {
     const mWeb = [...texto.matchAll(reWebApi)];
     if (mWeb.length) { webSearchQueryApi = mWeb[0][1].trim(); textoLimpio = textoLimpio.replace(reWebApi, ''); }
 
-    const reClimaApi = /\[\[CLIMA::([^\]]+)\]\]/g;
-    const mClima = [...texto.matchAll(reClimaApi)];
-    if (mClima.length) { climaQueryApi = mClima[0][1].trim(); textoLimpio = textoLimpio.replace(reClimaApi, ''); }
+    const reCodeApi = /\[\[CODE::([^:\]]+)::([\s\S]*?)\]\]/g;
+    const mCode = [...texto.matchAll(reCodeApi)];
+    if (mCode.length && configModelo.nombre === 'NewserAdvanced1.5') { codeQueryApi = { lenguaje: mCode[0][1].trim(), codigo: mCode[0][2].trim() }; }
+    textoLimpio = textoLimpio.replace(reCodeApi, '');
+
+    const reApidataApi = /\[\[APIDATA::([^\]]+)\]\]/g;
+    const mApidata = [...texto.matchAll(reApidataApi)];
+    if (mApidata.length && configModelo.nombre === 'NewserAdvanced1.5') { apidataQueryApi = mApidata[0][1].trim(); }
+    textoLimpio = textoLimpio.replace(reApidataApi, '');
+
+    if (configModelo.nombre !== 'NewserAdvanced1.5') {
+      const reClimaApi = /\[\[CLIMA::([^\]]+)\]\]/g;
+      const mClima = [...texto.matchAll(reClimaApi)];
+      if (mClima.length) { climaQueryApi = mClima[0][1].trim(); textoLimpio = textoLimpio.replace(reClimaApi, ''); }
+    } else {
+      textoLimpio = textoLimpio.replace(/\[\[CLIMA::([^\]]+)\]\]/g, '');
+    }
 
     let textoExtraidoEtiquetas = '';
 
@@ -1391,6 +1456,11 @@ app.post('/api/v1/chat', async (req, res) => {
       if (webSearchQueryApi) { costoExtra += 1; herramientasUsadas.push({ herramienta: 'web', query: webSearchQueryApi, costo: 1 }); }
       if (climaQueryApi) { herramientasUsadas.push({ herramienta: 'clima', query: climaQueryApi, costo: 0 }); }
     }
+    if (configModelo.nombre === 'NewserAdvanced1.5') {
+      if (webSearchQueryApi) { costoExtra += 1; herramientasUsadas.push({ herramienta: 'web', query: webSearchQueryApi, costo: 1 }); }
+      if (codeQueryApi) { costoExtra += 1; herramientasUsadas.push({ herramienta: 'code', lenguaje: codeQueryApi.lenguaje, costo: 1 }); }
+      if (apidataQueryApi) { herramientasUsadas.push({ herramienta: 'apidata', recurso: apidataQueryApi, costo: 0 }); }
+    }
     const costoTotal = configModelo.costoCreditos + costoExtra;
 
     let herramientasResultado = [];
@@ -1401,6 +1471,8 @@ app.post('/api/v1/chat', async (req, res) => {
         herramientasOmitidas = true;
         webSearchQueryApi = null;
         climaQueryApi = null;
+        codeQueryApi = null;
+        apidataQueryApi = null;
       }
     }
 
@@ -1446,6 +1518,41 @@ app.post('/api/v1/chat', async (req, res) => {
       } catch (e) {
         console.error('[api/v1/chat] Error en CLIMA:', e.message);
         herramientasResultado.push({ herramienta: 'clima', error: `Error interno: ${e.message}` });
+      }
+    }
+
+    if (codeQueryApi) {
+      try {
+        const resultado = await ejecutarCodigoPiston(codeQueryApi.lenguaje, codeQueryApi.codigo);
+        if (resultado.exito) {
+          herramientasResultado.push({
+            herramienta: 'code', lenguaje: resultado.lenguaje, version: resultado.version,
+            stdout: resultado.stdout, stderr: resultado.stderr, codigoSalida: resultado.codigoSalida,
+          });
+          const textoCode = `\n\nResultado de ejecutar el codigo (${resultado.lenguaje}):\n\`\`\`\n${resultado.stdout || '(sin salida)'}${resultado.stderr ? '\n--- stderr ---\n' + resultado.stderr : ''}\n\`\`\``;
+          textoLimpio = `${textoLimpio}${textoCode}`;
+        } else {
+          herramientasResultado.push({ herramienta: 'code', error: resultado.error || 'No se pudo ejecutar el codigo.' });
+        }
+      } catch (e) {
+        console.error('[api/v1/chat] Error en CODE:', e.message);
+        herramientasResultado.push({ herramienta: 'code', error: `Error interno: ${e.message}` });
+      }
+    }
+
+    if (apidataQueryApi) {
+      try {
+        const resultado = await consultarJsonPlaceholder(apidataQueryApi);
+        if (resultado.exito) {
+          herramientasResultado.push({ herramienta: 'apidata', recurso: resultado.recurso, url: resultado.url, datos: resultado.datos });
+          const textoApi = `\n\nDatos de ejemplo (${resultado.url}):\n\`\`\`json\n${JSON.stringify(resultado.datos, null, 2).slice(0, 1200)}\n\`\`\``;
+          textoLimpio = `${textoLimpio}${textoApi}`;
+        } else {
+          herramientasResultado.push({ herramienta: 'apidata', error: resultado.error || 'No se pudo consultar la API.' });
+        }
+      } catch (e) {
+        console.error('[api/v1/chat] Error en APIDATA:', e.message);
+        herramientasResultado.push({ herramienta: 'apidata', error: `Error interno: ${e.message}` });
       }
     }
 
@@ -1669,6 +1776,49 @@ despues de tu respuesta. NUNCA inventes datos del clima tu mismo — si te pregu
 Estas etiquetas [[WEB::...]] y [[CLIMA::...]] son invisibles para el usuario, se procesan aparte por el
 sistema. Nunca las menciones ni las escribas a la mitad del texto. Puedes combinar varias herramientas
 en la misma respuesta, cada una en su propia linea al final.`;
+
+const SYSTEM_PROMPT_ADVANCED_15_EXTRA = `
+
+TENES RAZONAMIENTO EXTRA: antes de esta respuesta, otro modelo (Qwen3-32B) ya penso un borrador interno
+del plan de respuesta; si ves una seccion "[RAZONAMIENTO INTERNO PREVIO...]" en tu contexto, usala solo
+como guia para pensar mejor, nunca la repitas literalmente ni la menciones al usuario.
+
+HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserAdvanced1.5):
+Ademas de CUADERNO, BUSCAR, DESCARGAR, INVESTIGAR y WEB, en este modelo tenes 2 herramientas mas,
+pensadas para programacion y datos de prueba. Se activan igual que las demas: con una etiqueta al FINAL
+de tu respuesta, en su propia linea, sin explicarla ni mencionarla al usuario.
+
+NOTA: este modelo NO tiene la herramienta CLIMA (fue reemplazada por estas dos herramientas nuevas). Si
+te preguntan por el clima, respondeles que en este modelo no esta disponible y sugeriles cambiar a
+NewserAdvanced para eso.
+
+HERRAMIENTA "CODE" (para ejecutar codigo real y devolver el resultado real, nunca inventado):
+Cuando el usuario te pida ejecutar codigo, probar un snippet, ver el resultado de un programa, o cuando
+vos mismo quieras verificar que un codigo funciona antes de dárselo, agregas al FINAL de tu respuesta,
+en su propia linea, EXACTAMENTE este formato:
+[[CODE::lenguaje::codigo]]
+Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real dentro de la etiqueta.
+Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
+rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r, dart.
+Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
+Esto ejecuta el codigo REAL en un sandbox (Piston API) y el resultado real (stdout/stderr) se agrega
+despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
+esta herramienta en vez de imaginarte el resultado.
+
+HERRAMIENTA "APIDATA" (para traer datos de ejemplo reales desde una API REST de prueba, util para
+explicar estructuras JSON, endpoints, o mostrar como luce una respuesta de API real):
+Cuando el usuario pida ver un ejemplo de API REST, un endpoint de prueba, o datos de ejemplo (posts,
+usuarios, comentarios, tareas, albumes, fotos), agregas al FINAL de tu respuesta, en su propia linea,
+EXACTAMENTE este formato:
+[[APIDATA::recurso]]
+Donde "recurso" es uno de: posts, comments, albums, photos, todos, users (opcionalmente podes pedir uno
+solo agregando /ID, ej "posts/1" o "users/3").
+Ejemplo: "mostrame un ejemplo de un post de una API" -> tu respuesta breve + [[APIDATA::posts/1]]
+Esto consulta JSONPlaceholder (API REST publica de prueba) y agrega el JSON real despues de tu respuesta.
+
+Estas etiquetas [[CODE::...]] y [[APIDATA::...]] son invisibles para el usuario, se procesan aparte por
+el sistema. Nunca las menciones ni las escribas a la mitad del texto. Podes combinar varias herramientas
+en la misma respuesta (WEB, CODE, APIDATA), cada una en su propia linea al final.`;
 
 const SYSTEM_PROMPT_CATOLICO = `${SYSTEM_PROMPT}
 
@@ -1900,7 +2050,7 @@ async function investigarBiblia(query) {
   }
 }
 
-async function sintetizarInvestigacion(query, wiki, versiculos) {
+async function sintetizarInvestigacion(query, wiki, versiculos, webResultados, modeloOverride) {
   try {
     let contexto = '';
     if (wiki) contexto += `Wikipedia (${wiki.titulo}): ${wiki.extracto}\n\n`;
@@ -1908,25 +2058,37 @@ async function sintetizarInvestigacion(query, wiki, versiculos) {
       contexto += 'Versiculos biblicos encontrados en una busqueda real dentro del texto completo:\n';
       versiculos.forEach((v) => { contexto += `- ${v.referencia}: "${v.texto}"\n`; });
     }
+    if (webResultados && webResultados.length) {
+      contexto += '\nResultados adicionales de busqueda web real:\n';
+      webResultados.forEach((r) => { contexto += `- ${r.titulo}: ${r.resumen} (${r.link})\n`; });
+    }
     if (!contexto.trim()) return null;
 
+    const esProfunda = !!webResultados;
     const resp = await llamarGroqConReintentos({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: GROQ_MODEL_TEXTO,
+        model: modeloOverride || GROQ_MODEL_TEXTO,
         messages: [
           {
             role: 'system',
-            content: 'Resumes investigacion biblica real de forma breve, calida y en espanol natural. ' +
-              'Usa UNICAMENTE la informacion entregada en el mensaje del usuario, nunca agregues datos, ' +
-              'fechas ni afirmaciones que no esten ahi. Maximo 4 frases. Menciona brevemente de donde salio ' +
-              '(Wikipedia o el texto biblico), sin sonar tecnico ni mencionar APIs.',
+            content: esProfunda
+              ? 'Haces investigacion profunda y real, de forma clara y en espanol natural. ' +
+                'Usa UNICAMENTE la informacion entregada en el mensaje del usuario (Wikipedia, texto biblico y ' +
+                'resultados web reales), nunca agregues datos, fechas ni afirmaciones que no esten ahi. ' +
+                'Cruza y compara las distintas fuentes cuando aporte valor, se mas extenso que un resumen ' +
+                'comun (hasta 8 frases), y menciona brevemente de donde salio cada dato, sin sonar tecnico ' +
+                'ni mencionar APIs.'
+              : 'Resumes investigacion biblica real de forma breve, calida y en espanol natural. ' +
+                'Usa UNICAMENTE la informacion entregada en el mensaje del usuario, nunca agregues datos, ' +
+                'fechas ni afirmaciones que no esten ahi. Maximo 4 frases. Menciona brevemente de donde salio ' +
+                '(Wikipedia o el texto biblico), sin sonar tecnico ni mencionar APIs.',
           },
           { role: 'user', content: `Tema investigado: "${query}"\n\n${contexto}\n\nEscribe el resumen.` },
         ],
         temperature: 0.5,
-        max_tokens: 300,
+        max_tokens: esProfunda ? 600 : 300,
         stream: false,
       }),
     }, () => {});
@@ -2250,6 +2412,76 @@ function describirCodigoClima(code) {
     99: 'tormenta con granizo intenso',
   };
   return mapa[code] || 'condiciones desconocidas';
+}
+
+const PISTON_VERSIONES = {
+  python: '3.10.0', javascript: '18.15.0', typescript: '5.0.3', java: '15.0.2',
+  c: '10.2.0', cpp: '10.2.0', csharp: '6.12.0', go: '1.16.2', rust: '1.68.2',
+  ruby: '3.0.1', php: '8.2.3', bash: '5.2.0', sql: '3.36.0', kotlin: '1.8.20',
+  swift: '5.3.3', perl: '5.36.0', lua: '5.4.4', r: '4.1.1', dart: '2.19.6',
+};
+
+async function ejecutarCodigoPiston(lenguaje, codigo) {
+  try {
+    const lang = (lenguaje || '').trim().toLowerCase();
+    const fuente = (codigo || '').replace(/\\n/g, '\n');
+    if (!lang || !fuente.trim()) return { exito: false, error: 'Falta lenguaje o codigo.' };
+    if (fuente.length > 6000) return { exito: false, error: 'El codigo es demasiado largo (max 6000 caracteres).' };
+
+    const version = PISTON_VERSIONES[lang] || '*';
+    const resp = await fetch('https://emkc.org/api/v2/piston/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        language: lang,
+        version,
+        files: [{ content: fuente }],
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!resp.ok) {
+      const detalle = await resp.text().catch(() => '');
+      return { exito: false, error: `Piston HTTP ${resp.status}: ${detalle.slice(0, 200)}` };
+    }
+    const data = await resp.json();
+    const run = data.run || {};
+    return {
+      exito: true,
+      lenguaje: lang,
+      version: data.version || version,
+      stdout: (run.stdout || '').slice(0, 3000),
+      stderr: (run.stderr || '').slice(0, 1500),
+      codigoSalida: typeof run.code === 'number' ? run.code : null,
+      senal: run.signal || null,
+    };
+  } catch (e) {
+    return { exito: false, error: 'Piston fallo: ' + e.message };
+  }
+}
+
+const JSONPLACEHOLDER_RECURSOS_VALIDOS = ['posts', 'comments', 'albums', 'photos', 'todos', 'users'];
+
+async function consultarJsonPlaceholder(recurso) {
+  try {
+    let r = (recurso || '').trim().toLowerCase();
+    if (!r) return { exito: false, error: 'Falta el recurso.' };
+    r = r.replace(/^\/+/, '');
+    const base = r.split('/')[0];
+    if (!JSONPLACEHOLDER_RECURSOS_VALIDOS.includes(base)) {
+      return { exito: false, error: `Recurso invalido "${base}". Usa: ${JSONPLACEHOLDER_RECURSOS_VALIDOS.join(', ')}.` };
+    }
+    const url = `https://jsonplaceholder.typicode.com/${r}`;
+    const resp = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return { exito: false, error: `JSONPlaceholder HTTP ${resp.status}` };
+    const data = await resp.json();
+    const arr = Array.isArray(data) ? data.slice(0, 5) : data;
+    return { exito: true, recurso: r, url, datos: arr };
+  } catch (e) {
+    return { exito: false, error: 'JSONPlaceholder fallo: ' + e.message };
+  }
 }
 
 app.get('/api/chats', (req, res) => {
@@ -2616,6 +2848,40 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let systemPrompt = modoElegido === 'catolico' ? SYSTEM_PROMPT_CATOLICO : SYSTEM_PROMPT;
     if (configModelo.nombre === 'NewserAdvanced') {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
+    } else if (configModelo.nombre === 'NewserAdvanced1.5') {
+      systemPrompt = systemPrompt + SYSTEM_PROMPT_ADVANCED_15_EXTRA;
+    }
+
+    if (configModelo.nombre === 'NewserAdvanced1.5' && configModelo.modeloTextoRazonamiento && !imagenes.length) {
+      enviar({ type: 'investigando', query: 'Razonando con Qwen3-32B...' });
+      enviar({ type: 'investigando_sitio', sitio: 'Modulo de razonamiento (Qwen3-32B)' });
+      try {
+        const respRaz = await llamarGroqConReintentos({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: configModelo.modeloTextoRazonamiento,
+            messages: [
+              { role: 'system', content: 'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta: web, code, apidata, cuaderno biblico, imagenes, investigar; y un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo (GPT-OSS-120B) va a usar despues para redactar la respuesta final. Se breve y concreto (maximo 120 palabras).' },
+              { role: 'user', content: mensajeParaModelo || 'Describe estas imagenes.' },
+            ],
+            temperature: 0.4,
+            max_tokens: 400,
+            stream: false,
+          }),
+          signal: controladorGroq.signal,
+        }, () => {});
+        if (respRaz && respRaz.ok) {
+          const dataRaz = await respRaz.json();
+          const razonamientoPrevio = (dataRaz.choices && dataRaz.choices[0] && dataRaz.choices[0].message && dataRaz.choices[0].message.content) || '';
+          if (razonamientoPrevio) {
+            systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por Qwen3-32B, no lo repitas literalmente ni lo menciones al usuario, usalo solo como guia para pensar mejor tu respuesta final]:\n${razonamientoPrevio}`;
+          }
+        }
+      } catch (e) {
+        console.error('[chat] fallo el paso de razonamiento con Qwen3-32B:', e.message);
+      }
+      enviar({ type: 'investigando_fin' });
     }
 
     systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
@@ -2658,7 +2924,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let textoCompleto = '';
     let emitido = 0;
 
-    const MARCADORES = ['[[CUADERNO::', '[[BUSCAR::', '[[INVESTIGAR::', '[[DESCARGAR::', '[[IMAGEN::', '[[WEB::', '[[CLIMA::'];
+    const MARCADORES = ['[[CUADERNO::', '[[BUSCAR::', '[[INVESTIGAR::', '[[DESCARGAR::', '[[IMAGEN::', '[[WEB::', '[[CLIMA::', '[[CODE::', '[[APIDATA::'];
     function calcularCorte(buffer) {
       let corte = buffer.length;
       for (const m of MARCADORES) {
@@ -2717,6 +2983,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
     let webSearchQuery = null;
     let climaQuery = null;
+    let codeQuery = null;
+    let apidataQuery = null;
 
     const reCuadernoG = /\[\[CUADERNO::(.+?)::([\s\S]*?)\]\]/g;
     const coincidenciasCuaderno = [...textoVisible.matchAll(reCuadernoG)];
@@ -2758,11 +3026,33 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
 
     const reClimaG = /\[\[CLIMA::([^\]]+)\]\]/g;
-    const coincidenciasClima = [...textoVisible.matchAll(reClimaG)];
-    if (coincidenciasClima.length) {
-      climaQuery = coincidenciasClima[0][1].trim();
+    if (configModelo.nombre !== 'NewserAdvanced1.5') {
+      const coincidenciasClima = [...textoVisible.matchAll(reClimaG)];
+      if (coincidenciasClima.length) {
+        climaQuery = coincidenciasClima[0][1].trim();
+        textoVisible = textoVisible.replace(reClimaG, '');
+      }
+    } else {
       textoVisible = textoVisible.replace(reClimaG, '');
     }
+
+    const reCodeG = /\[\[CODE::([^:\]]+)::([\s\S]*?)\]\]/g;
+    if (configModelo.nombre === 'NewserAdvanced1.5') {
+      const coincidenciasCode = [...textoVisible.matchAll(reCodeG)];
+      if (coincidenciasCode.length) {
+        codeQuery = { lenguaje: coincidenciasCode[0][1].trim(), codigo: coincidenciasCode[0][2].trim() };
+      }
+    }
+    textoVisible = textoVisible.replace(reCodeG, '');
+
+    const reApidataG = /\[\[APIDATA::([^\]]+)\]\]/g;
+    if (configModelo.nombre === 'NewserAdvanced1.5') {
+      const coincidenciasApidata = [...textoVisible.matchAll(reApidataG)];
+      if (coincidenciasApidata.length) {
+        apidataQuery = coincidenciasApidata[0][1].trim();
+      }
+    }
+    textoVisible = textoVisible.replace(reApidataG, '');
 
     if (!descargaQuery) {
       const pideDescarga = /\b(descarg\w*|baj\w*)\b[\s\S]{0,40}\b(imagen\w*|foto\w*)\b|\b(imagen\w*|foto\w*)\b[\s\S]{0,40}\b(descarg\w*|baj\w*|mandame\w*|mandamela\w*|pasame\w*|pasamela\w*)\b/i;
@@ -2784,7 +3074,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
     if (emitido < textoCompleto.length) {
       let restante = textoCompleto.slice(emitido);
-      restante = restante.replace(reCuadernoG, '').replace(reBuscarG, '').replace(reInvestigarG, '').replace(reDescargarG, '').replace(/\[\[IMAGEN::[^\]]*\]\]/g, '').replace(reWebG, '').replace(reClimaG, '').trim();
+      restante = restante.replace(reCuadernoG, '').replace(reBuscarG, '').replace(reInvestigarG, '').replace(reDescargarG, '').replace(/\[\[IMAGEN::[^\]]*\]\]/g, '').replace(reWebG, '').replace(reClimaG, '').replace(reCodeG, '').replace(reApidataG, '').trim();
       if (restante) enviar({ type: 'chunk', text: restante });
     }
 
@@ -2807,12 +3097,20 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       enviar({ type: 'investigando_sitio', sitio: 'Biblia completa (busqueda de versiculos)' });
       const versiculos = await esperarMinimo(investigarBiblia(investigarQuery), 1000);
 
+      let webInvestigacion = null;
+      if (configModelo.nombre === 'NewserAdvanced1.5') {
+        enviar({ type: 'investigando_sitio', sitio: 'Busqueda web adicional (investigacion profunda)' });
+        const resWeb = await esperarMinimo(buscarWebGoogle(investigarQuery), 1000);
+        if (resWeb && resWeb.exito && resWeb.resultados.length) webInvestigacion = resWeb.resultados;
+      }
+
       const fuentes = [];
       if (wiki) fuentes.push({ titulo: `Wikipedia: ${wiki.titulo}`, url: wiki.url });
       if (versiculos && versiculos.length) fuentes.push({ titulo: 'Busqueda en el texto biblico completo (RV1960)', url: null });
+      if (webInvestigacion) webInvestigacion.forEach((r) => fuentes.push({ titulo: r.titulo, url: r.link }));
 
-      if (wiki || (versiculos && versiculos.length)) {
-        const textoInvestigado = await sintetizarInvestigacion(investigarQuery, wiki, versiculos);
+      if (wiki || (versiculos && versiculos.length) || webInvestigacion) {
+        const textoInvestigado = await sintetizarInvestigacion(investigarQuery, wiki, versiculos, webInvestigacion, configModelo.nombre === 'NewserAdvanced1.5' ? configModelo.modeloTexto : null);
         if (textoInvestigado) {
           enviar({ type: 'chunk', text: `\n\n${textoInvestigado}` });
           textoVisible = `${textoVisible}\n\n${textoInvestigado}`.trim();
@@ -2881,6 +3179,45 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         textoVisible = `${textoVisible}${textoClima}`.trim();
       } else {
         const aviso = `\n\nNo pude consultar el clima de "${climaQuery}" en este momento.`;
+        enviar({ type: 'chunk', text: aviso });
+        textoVisible = `${textoVisible}${aviso}`.trim();
+      }
+    }
+
+    if (codeQuery) {
+      enviar({ type: 'investigando', query: `Ejecutando codigo (${codeQuery.lenguaje})...` });
+      enviar({ type: 'investigando_sitio', sitio: 'Piston API (emkc.org)' });
+      const resultadoCode = await esperarMinimo(ejecutarCodigoPiston(codeQuery.lenguaje, codeQuery.codigo), 900);
+      enviar({ type: 'investigando_fin' });
+
+      if (resultadoCode.exito) {
+        const salida = resultadoCode.stdout || '(sin salida)';
+        const errores = resultadoCode.stderr ? `\n--- stderr ---\n${resultadoCode.stderr}` : '';
+        const textoCode = `\n\n**Resultado de ejecutar el codigo (${resultadoCode.lenguaje}):**\n\`\`\`\n${salida}${errores}\n\`\`\``;
+        enviar({ type: 'chunk', text: textoCode });
+        enviar({ type: 'code_result', lenguaje: resultadoCode.lenguaje, version: resultadoCode.version, stdout: resultadoCode.stdout, stderr: resultadoCode.stderr, codigoSalida: resultadoCode.codigoSalida });
+        textoVisible = `${textoVisible}${textoCode}`.trim();
+      } else {
+        const aviso = `\n\nNo pude ejecutar ese codigo (${resultadoCode.error || 'error desconocido'}).`;
+        enviar({ type: 'chunk', text: aviso });
+        textoVisible = `${textoVisible}${aviso}`.trim();
+      }
+    }
+
+    if (apidataQuery) {
+      enviar({ type: 'investigando', query: `Consultando API de prueba: ${apidataQuery}` });
+      enviar({ type: 'investigando_sitio', sitio: 'jsonplaceholder.typicode.com' });
+      const resultadoApi = await esperarMinimo(consultarJsonPlaceholder(apidataQuery), 900);
+      enviar({ type: 'investigando_fin' });
+
+      if (resultadoApi.exito) {
+        const jsonTexto = JSON.stringify(resultadoApi.datos, null, 2).slice(0, 1200);
+        const textoApi = `\n\n**Datos de ejemplo (${resultadoApi.url}):**\n\`\`\`json\n${jsonTexto}\n\`\`\``;
+        enviar({ type: 'chunk', text: textoApi });
+        enviar({ type: 'fuentes', items: [{ titulo: `JSONPlaceholder: ${resultadoApi.recurso}`, url: resultadoApi.url }] });
+        textoVisible = `${textoVisible}${textoApi}`.trim();
+      } else {
+        const aviso = `\n\nNo pude consultar esos datos de ejemplo (${resultadoApi.error || 'error desconocido'}).`;
         enviar({ type: 'chunk', text: aviso });
         textoVisible = `${textoVisible}${aviso}`.trim();
       }

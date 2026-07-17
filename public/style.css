@@ -803,30 +803,12 @@ html.tema-night .item-chat.activo {
 }
 html.tema-night .item-chat:hover { background: var(--chat-activo-noche-fondo); }
 
-.item-chat-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
 .item-chat-titulo {
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.item-chat-uuid {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 10px;
-  color: var(--texto-suave);
-  opacity: 0.65;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.item-chat.activo .item-chat-uuid { opacity: 0.8; }
 
 /* ---------- Boton "+" (Codes) y panel flotante "Verbo Code" ---------- */
 .nav-mas-wrap {
@@ -838,17 +820,18 @@ html.tema-night .item-chat:hover { background: var(--chat-activo-noche-fondo); }
 }
 .nav-item-mas svg { color: inherit; }
 
+/* Se appendea a document.body (igual que .menu-item-chat) para que el
+   overflow:hidden del sidebar no lo recorte. */
 .nav-mas-panel {
-  position: absolute;
-  top: 0;
-  left: calc(100% + 8px);
-  z-index: 40;
+  position: fixed;
+  z-index: 60;
   min-width: 168px;
-  background: var(--fondo-tarjeta, #fff);
-  border: 1px solid var(--borde, rgba(0,0,0,0.08));
+  background: var(--papel-cuaderno);
+  border: 1px solid var(--borde);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
   padding: 6px;
+  animation: aparecer 0.12s ease;
 }
 .nav-mas-panel.oculto { display: none; }
 
@@ -858,11 +841,6 @@ html.tema-night .item-chat:hover { background: var(--chat-activo-noche-fondo); }
   opacity: 0.75;
 }
 .nav-item-verbocode:hover { background: none; }
-
-html.tema-night .nav-mas-panel {
-  background: var(--fondo-tarjeta-noche, #1B1E29);
-  border-color: rgba(255,255,255,0.1);
-}
 
 .item-chat-menu {
   flex-shrink: 0;
@@ -1619,9 +1597,13 @@ html.tema-night .opcion-modelo-check { color: var(--chat-activo-noche-borde); }
   background: #6c757d;
   font-style: italic;
 }
+.opcion-modelo-badge-pro {
+  background: #8033e0;
+}
 html.tema-night .opcion-modelo-badge { background: var(--chat-activo-noche-borde); color: var(--texto); }
 html.tema-night .opcion-modelo-badge-beta { background: #2E8B57; color: white; }
 html.tema-night .opcion-modelo-badge-pronto { background: #6c757d; color: white; }
+html.tema-night .opcion-modelo-badge-pro { background: #8033e0; color: white; }
 
 .opcion-modelo.no-disponible {
   opacity: 0.6;
@@ -2787,6 +2769,12 @@ html.tema-night .anuncio-creditos-titulo { color: var(--texto); }
 }
 html.tema-night .anuncio-creditos-contenedor {
   background: var(--hover-noche, #1B1E29);
+}
+.anuncio-creditos-placeholder {
+  font-size: 12px;
+  color: var(--texto-secundario, #8a8a8a);
+  text-align: center;
+  padding: 0 16px;
 }
 
 .anuncio-creditos-timer {

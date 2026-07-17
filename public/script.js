@@ -116,6 +116,7 @@ let modelosDisponibles = [
 
   { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20, rateLimitMaxWeb: 30 },
   { nombre: 'NewserAdvanced', descripcion: 'Mas potente. Genera imagenes, busca en la web y consulta el clima.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8, badge: 'beta', disponible: true },
+  { nombre: 'NewserAdvanced1.5', descripcion: 'El mas potente. Combina GPT-OSS-120B y Qwen3-32B para razonamiento aun mas profundo. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba.', costoCreditos: 10, rateLimitMax: 3, rateLimitMaxWeb: 4, badge: 'pro', disponible: true },
   { nombre: 'NewserPro', descripcion: 'Pronto. Modelo profesional con capacidades premium.', costoCreditos: 0, rateLimitMax: 0, rateLimitMaxWeb: 0, badge: 'pronto', disponible: false },
 ];
 let hayCuaderno = false;
@@ -320,21 +321,10 @@ function pintarListaChats(chats) {
     const item = document.createElement('div');
     item.className = 'item-chat' + (c.id === chatIdActual ? ' activo' : '');
 
-    const info = document.createElement('div');
-    info.className = 'item-chat-info';
-
     const titulo = document.createElement('span');
     titulo.className = 'item-chat-titulo';
     titulo.textContent = c.titulo || 'Conversacion';
-    info.appendChild(titulo);
-
-    const uuid = document.createElement('span');
-    uuid.className = 'item-chat-uuid';
-    uuid.textContent = c.id;
-    uuid.title = c.id;
-    info.appendChild(uuid);
-
-    item.appendChild(info);
+    item.appendChild(titulo);
 
     const btnMenu = document.createElement('button');
     btnMenu.className = 'item-chat-menu';
@@ -454,12 +444,55 @@ const btnRecargarCreditos = document.getElementById('btnRecargarCreditos');
 const overlayAnuncioCreditos = document.getElementById('overlayAnuncioCreditos');
 const anuncioCreditosTimer = document.getElementById('anuncioCreditosTimer');
 const btnCerrarAnuncioCreditos = document.getElementById('btnCerrarAnuncioCreditos');
+const anuncioCreditosContenedor = document.getElementById('anuncioCreditosContenedor');
+
+// El <ins class="adsbygoogle"> tiene que crearse y "pushearse" de nuevo CADA VEZ que se
+// abre el overlay. Antes estaba fijo en el HTML y AdSense solo lo procesaba una vez, en el
+// primer load de la pagina, mientras el overlay estaba oculto (display:none) -> Google no
+// renderiza anuncios dentro de contenedores ocultos, asi que quedaba vacio para siempre
+// despues de esa unica pasada. Ahora se recrea el <ins> a mano y se llama a push() recien
+// cuando el contenedor ya es visible.
+function cargarAnuncioCreditos() {
+  if (!anuncioCreditosContenedor) return;
+  anuncioCreditosContenedor.innerHTML = '';
+
+  const adClient = anuncioCreditosContenedor.dataset.adClient;
+  const adSlot = anuncioCreditosContenedor.dataset.adSlot;
+
+  // "ZZZZZZZZZZ" es un slot de ejemplo/placeholder, no un ID real de AdSense: reemplazalo
+  // por el ID real que te da Google en tu panel de AdSense (Anuncios -> Por unidad de anuncio),
+  // si no el anuncio nunca va a cargar (AdSense rechaza slots invalidos silenciosamente).
+  if (!adSlot || adSlot === 'ZZZZZZZZZZ') {
+    anuncioCreditosContenedor.innerHTML = '<div class="anuncio-creditos-placeholder">Anuncio no configurado (falta el ID real de la unidad de anuncio de AdSense).</div>';
+    return;
+  }
+
+  const ins = document.createElement('ins');
+  ins.className = 'adsbygoogle';
+  ins.style.display = 'block';
+  ins.style.width = '336px';
+  ins.style.height = '280px';
+  ins.setAttribute('data-ad-client', adClient);
+  ins.setAttribute('data-ad-slot', adSlot);
+  ins.setAttribute('data-ad-format', 'auto');
+  ins.setAttribute('data-full-width-responsive', 'true');
+  anuncioCreditosContenedor.appendChild(ins);
+
+  try {
+    (window.adsbygoogle = window.adsbygoogle || []).push({});
+  } catch (e) {
+    console.error('No se pudo cargar el anuncio de AdSense:', e);
+  }
+}
 
 if (btnRecargarCreditos) {
   btnRecargarCreditos.addEventListener('click', () => {
     if (overlayAnuncioCreditos) overlayAnuncioCreditos.classList.remove('oculto');
     if (btnCerrarAnuncioCreditos) btnCerrarAnuncioCreditos.classList.add('oculto');
     if (anuncioCreditosTimer) anuncioCreditosTimer.textContent = 'Espera 5 segundos...';
+    // Se genera el anuncio recien aca, con el overlay ya visible, para que AdSense pueda
+    // medir el contenedor y renderizar de verdad (y para que cada apertura pida uno nuevo).
+    setTimeout(cargarAnuncioCreditos, 50);
     var seg = 5;
     var interval = setInterval(() => {
       seg--;
@@ -481,6 +514,7 @@ if (btnCerrarAnuncioCreditos) {
       const d = await r.json();
       if (d.ok) {
         if (overlayAnuncioCreditos) overlayAnuncioCreditos.classList.add('oculto');
+        if (anuncioCreditosContenedor) anuncioCreditosContenedor.innerHTML = '';
         cargarCreditos();
       } else {
         alert(d.error || 'No se pudieron recargar los creditos.');
@@ -580,14 +614,44 @@ if (overlayCodes) {
 }
 
 const btnMasCodes = document.getElementById('btnMasCodes');
-const panelMasCodes = document.getElementById('panelMasCodes');
-if (btnMasCodes && panelMasCodes) {
+function cerrarPanelMasCodes() {
+  const existente = document.getElementById('panelMasCodes');
+  if (existente) existente.remove();
+}
+document.addEventListener('click', cerrarPanelMasCodes);
+if (btnMasCodes) {
   btnMasCodes.addEventListener('click', (ev) => {
     ev.stopPropagation();
-    panelMasCodes.classList.toggle('oculto');
+    const yaAbierto = document.getElementById('panelMasCodes');
+    cerrarPanelMasCodes();
+    if (yaAbierto) return; // el click ya lo cerro, no lo reabrimos
+
+    const panel = document.createElement('div');
+    panel.id = 'panelMasCodes';
+    panel.className = 'nav-mas-panel';
+    panel.addEventListener('click', (e) => e.stopPropagation());
+
+    const btnVerboCode = document.createElement('button');
+    btnVerboCode.id = 'btnVerboCode';
+    btnVerboCode.className = 'nav-item nav-item-verbocode';
+    btnVerboCode.disabled = true;
+    btnVerboCode.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg> Verbo Code <span class="badge-prox">Pronto</span>';
+    panel.appendChild(btnVerboCode);
+
+    document.body.appendChild(panel);
+
+    const r = btnMasCodes.getBoundingClientRect();
+    const panelAncho = panel.offsetWidth || 180;
+    // En escritorio se abre a la derecha del boton; si no entra (ej. mobile), abajo.
+    let left = r.right + 8;
+    let top = r.top;
+    if (left + panelAncho > window.innerWidth - 8) {
+      left = Math.max(8, r.left);
+      top = r.bottom + 6;
+    }
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
   });
-  panelMasCodes.addEventListener('click', (ev) => ev.stopPropagation());
-  document.addEventListener('click', () => panelMasCodes.classList.add('oculto'));
 }
 
 if (btnCanjearCodigo) {
@@ -955,6 +1019,9 @@ function renderOpcionesModeloEn(contenedor) {
     if (m.badge === 'beta' || m.nombre === 'NewserAdvanced') {
       badges += '<span class="opcion-modelo-badge opcion-modelo-badge-beta">Beta</span>';
     }
+    if (m.badge === 'pro' || m.nombre === 'NewserAdvanced1.5') {
+      badges += '<span class="opcion-modelo-badge opcion-modelo-badge-pro">Pro</span>';
+    }
     if (m.badge === 'pronto' || !disponible) {
       badges += '<span class="opcion-modelo-badge opcion-modelo-badge-pronto">Pronto</span>';
     }
@@ -1086,12 +1153,22 @@ function abrirMenuChat(chat, btnAncla, elTitulo) {
   opBorrar.addEventListener('click', async (ev) => {
     ev.stopPropagation();
     cerrarMenusChat();
-    await fetch(`/api/chats/${encodeURIComponent(chat.id)}`, { method: 'DELETE' });
+    if (!confirm('¿Eliminar esta conversacion? Esta accion no se puede deshacer.')) return;
+    try {
+      const res = await fetch(`/api/chats/${encodeURIComponent(chat.id)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        alert('No se pudo eliminar la conversacion. Intenta de nuevo.');
+        return;
+      }
+    } catch (e) {
+      alert('No se pudo eliminar la conversacion (sin conexion). Intenta de nuevo.');
+      return;
+    }
     if (chat.id === chatIdActual) {
       fijarChatActual(null);
       await iniciarNuevoChat(false);
     }
-    cargarListaChats();
+    await cargarListaChats();
   });
 
   menu.appendChild(opRenombrar);

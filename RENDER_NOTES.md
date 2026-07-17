@@ -4,8 +4,11 @@
 Configura estas variables en el dashboard de Render:
 - `BTATESTERS_KEY`: Tu clave de API para el modelo de IA (preferido)
 - `GROQ_API_KEY`: (opcional) También acepta esta variable para compatibilidad
+- `GROQ_API_KEY_2`, `GROQ_API_KEY_3`, `GROQ_API_KEY_4`, `GROQ_API_KEY_5`: (opcionales) Claves adicionales de Groq. El servidor las combina todas y rota automaticamente cuando una se queda sin cuota (401/402/403), asi podes juntar varias cuentas sin quedarte sin espacio.
 - `GROQ_MODEL`: (opcional) Modelo de texto, default: openai/gpt-oss-20b
 - `GROQ_MODEL_VISION`: (opcional) Modelo de visión, default: meta-llama/llama-4-scout-17b-16e-instruct
+- `GROQ_MODEL_AVANCED`: (opcional) Modelo de texto para NewserAdvanced y NewserAdvanced1.5, default: openai/gpt-oss-120b
+- `GROQ_MODEL_QWEN`: (opcional) Modelo de razonamiento previo para NewserAdvanced1.5 (se combina con GROQ_MODEL_AVANCED), default: qwen/qwen3-32b
 - `MONGODB_URI`: Tu conexión de MongoDB Atlas
 - `MONGODB_DB_NAME`: (opcional) Nombre de la base de datos, default: biblia_ai
 - `EMAIL_USER`: Tu correo de Gmail para enviar códigos de verificación

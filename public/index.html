@@ -57,13 +57,6 @@
         <button id="btnMasCodes" class="nav-item nav-item-mas" title="Mas opciones">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
         </button>
-        <div id="panelMasCodes" class="nav-mas-panel oculto">
-          <button id="btnVerboCode" class="nav-item nav-item-verbocode" disabled>
-            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Verbo Code
-            <span class="badge-prox">Pronto</span>
-          </button>
-        </div>
       </div>
     </nav>
 
@@ -652,16 +645,8 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
   <div id="overlayAnuncioCreditos" class="overlay-anuncio-creditos oculto">
     <div class="anuncio-creditos-cuerpo">
       <div class="anuncio-creditos-titulo">Mira el anuncio para recargar creditos</div>
-      <div class="anuncio-creditos-contenedor" id="anuncioCreditosContenedor">
-        <ins class="adsbygoogle"
-             style="display:block;width:336px;height:280px;"
-             data-ad-client="ca-pub-2832971109540830"
-             data-ad-slot="ZZZZZZZZZZ"
-             data-ad-format="auto"
-             data-full-width-responsive="true"></ins>
-        <script>
-             (adsbygoogle = window.adsbygoogle || []).push({});
-        </script>
+      <div class="anuncio-creditos-contenedor" id="anuncioCreditosContenedor" data-ad-client="ca-pub-2832971109540830" data-ad-slot="3651699880">
+        <!-- El anuncio se inyecta dinamicamente desde script.js cada vez que se abre este overlay -->
       </div>
       <div class="anuncio-creditos-timer" id="anuncioCreditosTimer">Espera 5 segundos...</div>
       <button id="btnCerrarAnuncioCreditos" class="btn-cerrar-anuncio oculto">
