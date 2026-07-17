@@ -207,12 +207,26 @@ def llamar_g4f(messages, model, temperature, max_tokens):
 
     # Lista de modelos a probar en orden: el pedido primero, luego fallbacks
     # que sabemos que funcionan gratis en g4f hoy.
+    #
+    # Modelos probados que SÍ funcionan gratis (sin API key):
+    #   - deepseek-r1     → razonamiento profundo (estilo OpenAI o1)
+    #   - o3-mini          → razonamiento de OpenAI
+    #   - gpt-4o           → general potente
+    #   - deepseek-v3      → general rápido
+    #   - gpt-4o-mini      → fallback clásico
+    #   - r1-1776          → variante de DeepSeek R1
+    #
+    # Modelos que NO funcionan gratis (todos los providers piden auth):
+    #   - llama-3.1-405b, qwen3-235b, nemotron-3-ultra-550b, glm-5.2,
+    #     qwen-2.5-coder-32b, gpt-4.5, grok-3, kimi-k2, qwq-32b, gpt-oss-120b
     modelos_disponibles = [
         modelo_a_usar,
         'deepseek-r1',                         # MAS POTENTE, razonamiento profundo (estilo o1)
-        'deepseek-v3',                         # fallback rapido de deepseek
+        'o3-mini',                              # razonamiento de OpenAI
+        'gpt-4o',                               # general potente
+        'deepseek-v3',                          # fallback rapido de deepseek
         'gpt-4o-mini',                          # fallback clasico, rapido
-        'gpt-4o',                                # fallback (a veces dice "Copilot")
+        'r1-1776',                              # variante de DeepSeek R1
     ]
     vistos = set()
     modelos_a_probar = []
