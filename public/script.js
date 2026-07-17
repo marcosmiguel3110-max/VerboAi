@@ -725,7 +725,7 @@ function aplicarModeloUI() {
 }
 
 function abrirSelectorModelo() {
-  if (!selectorModeloMenu) return;
+  if (!selectorModeloMenu && !document.getElementById('selectorModeloMenuHeader')) return;
   if (btnSelectorModelo) {
     btnSelectorModelo.classList.add('abierto');
     btnSelectorModelo.setAttribute('aria-expanded', 'true');
@@ -734,25 +734,16 @@ function abrirSelectorModelo() {
   if (btnHeader) btnHeader.classList.add('abierto');
   const menuHeader = document.getElementById('selectorModeloMenuHeader');
   if (menuHeader) {
-    menuHeader.innerHTML = selectorModeloMenu.innerHTML;
+    renderOpcionesModeloEn(menuHeader);
     menuHeader.classList.remove('oculto');
-    menuHeader.querySelectorAll('.opcion-modelo').forEach((op) => {
-      if (op.disabled) return;
-      op.addEventListener('click', () => {
-        modeloActual = op.dataset.modelo;
-        localStorage.setItem('verboAiModelo', modeloActual);
-        aplicarModeloUI();
-        cerrarSelectorModelo();
-      });
-    });
   }
-  selectorModeloMenu.classList.remove('oculto');
+  if (selectorModeloMenu && window.matchMedia('(min-width: 769px)').matches) {
+    selectorModeloMenu.classList.remove('oculto');
+  }
   aplicarModeloUI();
 }
 
 function cerrarSelectorModelo() {
-  if (!selectorModeloMenu) return;
-  selectorModeloMenu.classList.add('oculto');
   if (btnSelectorModelo) {
     btnSelectorModelo.classList.remove('abierto');
     btnSelectorModelo.setAttribute('aria-expanded', 'false');
@@ -761,11 +752,47 @@ function cerrarSelectorModelo() {
   if (btnHeader) btnHeader.classList.remove('abierto');
   const menuHeader = document.getElementById('selectorModeloMenuHeader');
   if (menuHeader) menuHeader.classList.add('oculto');
+  if (selectorModeloMenu) selectorModeloMenu.classList.add('oculto');
+}
+
+function renderOpcionesModeloEn(contenedor) {
+  if (!contenedor) return;
+  contenedor.innerHTML = modelosDisponibles.map(function(m) {
+    var activa = m.nombre === modeloActual;
+    var disponible = m.disponible !== false;
+    var badges = [];
+    if (disponible && m.costoCreditos && m.costoCreditos > 1) {
+      badges.push('<span class="opcion-modelo-badge">' + m.costoCreditos + ' creditos</span>');
+    }
+    if (m.badge === 'beta' || m.nombre === 'NewserAdvanced') {
+      badges.push('<span class="opcion-modelo-badge opcion-modelo-badge-beta">Beta</span>');
+    }
+    if (m.badge === 'pronto' || !disponible) {
+      badges.push('<span class="opcion-modelo-badge opcion-modelo-badge-pronto">Pronto</span>');
+    }
+    var claseNoDisponible = disponible ? '' : 'no-disponible';
+    var checkSvg = disponible ? '<svg class="opcion-modelo-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
+    return '<button type="button" class="opcion-modelo ' + (activa ? 'activa' : '') + ' ' + claseNoDisponible + '" data-modelo="' + escapeHtml(m.nombre) + '" role="option" aria-selected="' + activa + '" ' + (disponible ? '' : 'disabled') + '>' +
+      '<div class="opcion-modelo-fila"><span class="opcion-modelo-nombre">' + escapeHtml(m.nombre) + '</span><span class="opcion-modelo-badges">' + badges.join('') + checkSvg + '</span></div>' +
+      '<span class="opcion-modelo-desc">' + escapeHtml(m.descripcion || '') + '</span></button>';
+  }).join('');
+  contenedor.querySelectorAll('.opcion-modelo').forEach(function(op) {
+    if (op.disabled) return;
+    op.addEventListener('click', function() {
+      modeloActual = op.dataset.modelo;
+      localStorage.setItem('verboAiModelo', modeloActual);
+      aplicarModeloUI();
+      cerrarSelectorModelo();
+    });
+  });
 }
 
 function toggleSelectorModelo() {
-  if (!selectorModeloMenu) return;
-  if (selectorModeloMenu.classList.contains('oculto')) abrirSelectorModelo();
+  var menuHeader = document.getElementById('selectorModeloMenuHeader');
+  var estaOculto = true;
+  if (menuHeader && !menuHeader.classList.contains('oculto')) estaOculto = false;
+  if (selectorModeloMenu && !selectorModeloMenu.classList.contains('oculto')) estaOculto = false;
+  if (estaOculto) abrirSelectorModelo();
   else cerrarSelectorModelo();
 }
 
@@ -786,14 +813,24 @@ if (btnSelectorModeloHeader) {
 }
 
 document.addEventListener('click', (ev) => {
-  if (!selectorModeloMenu || selectorModeloMenu.classList.contains('oculto')) return;
-  const contenedor = document.getElementById('selectorModelo');
-  if (contenedor && !contenedor.contains(ev.target)) cerrarSelectorModelo();
+  var menuHeader = document.getElementById('selectorModeloMenuHeader');
+  var menuOculto = true;
+  if (selectorModeloMenu && !selectorModeloMenu.classList.contains('oculto')) menuOculto = false;
+  if (menuHeader && !menuHeader.classList.contains('oculto')) menuOculto = false;
+  if (menuOculto) return;
+  var contInput = document.getElementById('selectorModelo');
+  var contHeader = document.getElementById('selectorModeloHeader');
+  if ((contInput && contInput.contains(ev.target)) || (contHeader && contHeader.contains(ev.target))) return;
+  cerrarSelectorModelo();
 });
 
 document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape' && selectorModeloMenu && !selectorModeloMenu.classList.contains('oculto')) {
-    cerrarSelectorModelo();
+  if (ev.key === 'Escape') {
+    var menuHeader = document.getElementById('selectorModeloMenuHeader');
+    var menuOculto = true;
+    if (selectorModeloMenu && !selectorModeloMenu.classList.contains('oculto')) menuOculto = false;
+    if (menuHeader && !menuHeader.classList.contains('oculto')) menuOculto = false;
+    if (!menuOculto) cerrarSelectorModelo();
   }
 });
 

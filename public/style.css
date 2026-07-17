@@ -2347,13 +2347,14 @@ html.tema-night .btn-menu-movil:hover { background: var(--hover-noche); }
   .selector-modelo-nombre { font-size: 12px; }
   .selector-modelo-header { display: block !important; position: absolute; top: 50%; right: 12px; transform: translateY(-50%); }
   .selector-modelo-header .btn-selector-modelo { background: var(--crema-oscuro); border: 1px solid var(--borde); font-size: 12px; height: 30px; padding: 0 8px; }
-  .selector-modelo-header .selector-modelo-menu { position: absolute; top: 100%; right: 0; margin-top: 6px; min-width: 240px; z-index: 500; }
+  .selector-modelo-header .selector-modelo-menu { position: fixed; top: auto; bottom: 120px; right: 8px; left: 8px; min-width: auto; max-width: 320px; margin: 0 auto; z-index: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
   .selector-modelo-header .selector-modelo-menu.oculto { display: none; }
   .selector-modelo { position: absolute; width: 0; height: 0; overflow: visible; opacity: 0; pointer-events: none; }
   .selector-modelo .btn-selector-modelo { display: none; }
   .selector-modelo-menu { z-index: 500; }
   .selector-modelo-menu.oculto { display: none; }
   .btn-cuaderno-toggle { display: none; }
+  .entrada { margin-bottom: 40px; }
 }
 
 @media (max-width: 480px) {
@@ -2364,7 +2365,7 @@ html.tema-night .btn-menu-movil:hover { background: var(--hover-noche); }
   .nav-item-nuevo { font-size: 13px; padding: 10px; }
   .item-chat { font-size: 12.5px; }
 
-  .entrada { gap: 4px; margin: 8px 2%; padding: 5px 6px; }
+  .entrada { gap: 4px; margin: 8px 2% 40px; padding: 5px 6px; }
   .btn-icono { width: 30px; height: 30px; flex-shrink: 0; }
   .btn-icono svg { width: 16px; height: 16px; }
   .btn-selector-modelo { padding: 0 6px; font-size: 11px; height: 30px; }
