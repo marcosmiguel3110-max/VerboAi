@@ -621,7 +621,6 @@ async function enviarChat() {
   const texto = input.value.trim();
   if (!texto) return;
 
-  // Función helper para rehabilitar el input SIEMPRE
   const rehabilitarInput = () => {
     try { input.disabled = false; } catch(e) {}
     try { btnEnviar.disabled = false; } catch(e) {}
@@ -629,7 +628,6 @@ async function enviarChat() {
     try { input.focus(); } catch(e) {}
   };
 
-  // Render mensaje del usuario
   const msgUser = { role: 'user', content: texto, fecha: new Date().toISOString() };
   if (!estado.proyecto.chat) estado.proyecto.chat = [];
   estado.proyecto.chat.push(msgUser);
@@ -640,37 +638,31 @@ async function enviarChat() {
   btnEnviar.disabled = true;
   estado.chatEnProgreso = true;
 
-  // Indicador de "pensando"
   const thinkingEl = document.createElement('div');
   thinkingEl.className = 'vc-msg-thinking';
   thinkingEl.id = 'thinkingIndicator';
-  thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> La IA está pensando...';
+  thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> Creando plan de acción...';
   document.getElementById('vcChatMensajes').appendChild(thinkingEl);
   scrollChatAbajo();
 
   try {
-    // Timeout del lado del cliente: 120 segundos (más tiempo para plan + código)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     const r = await fetch(`/api/verbocode/chat/${estado.proyectoId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mensaje: texto,
-        modelo: estado.modeloSeleccionado,
-      }),
+      body: JSON.stringify({ mensaje: texto, modelo: estado.modeloSeleccionado }),
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
 
     if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      throw new Error(e.error || `Error ${r.status} en la petición`);
+      const errText = await r.text().catch(() => 'Error');
+      try { const ej = JSON.parse(errText); throw new Error(ej.error || errText); } catch(_) { throw new Error(errText); }
     }
 
-    // Procesar respuesta SSE (streaming)
     const reader = r.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -679,7 +671,7 @@ async function enviarChat() {
     let modeloRecibido = 'VerboAITeams';
     let archivosActualizados = null;
     let proyectoActualizado = false;
-    // Crear elemento del assistant vacío que vamos a ir llenando
+
     const msgDiv = document.createElement('div');
     msgDiv.className = 'vc-msg assistant';
     document.getElementById('vcChatMensajes').appendChild(msgDiv);
@@ -694,46 +686,45 @@ async function enviarChat() {
 
       for (const line of lines) {
         if (!line.trim()) continue;
-        try {
-          const evt = JSON.parse(line);
+        let evt;
+        try { evt = JSON.parse(line); } catch (e) { continue; }
 
-          if (evt.type === 'status') {
-            // Actualizar indicador de "pensando"
-            if (thinkingEl) {
-              thinkingEl.innerHTML = `<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> ${evt.text}`;
-            }
-          } else if (evt.type === 'plan') {
-            // Mostrar plan inmediatamente
-            planRecibido = evt.plan;
-            if (thinkingEl) thinkingEl.remove();
-            const planDiv = document.createElement('div');
-            planDiv.className = 'vc-msg-plan';
-            planDiv.innerHTML = '<div class="vc-plan-header"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke-linecap="round" stroke-linejoin="round"/></svg> PLAN DE ACCIÓN</div><pre>' + escapeHtmlPlan(evt.plan) + '</pre>';
-            document.getElementById('vcChatMensajes').appendChild(planDiv);
-            scrollChatAbajo();
-          } else if (evt.type === 'chunk') {
-            // Texto de la respuesta (streaming)
-            textoRespuesta += evt.text;
-            msgDiv.innerHTML = formatearMarkdown(textoRespuesta);
-            scrollChatAbajo();
-          } else if (evt.type === 'action') {
-            // Acción (archivo creado, imagen, etc)
-            renderAccion(evt.accion);
-          } else if (evt.type === 'done') {
-            modeloRecibido = evt.modeloUsado || 'VerboAITeams';
-            proyectoActualizado = evt.proyectoActualizado;
-            archivosActualizados = evt.archivos;
-            if (evt.plan) planRecibido = evt.plan;
-          } else if (evt.type === 'error') {
-            throw new Error(evt.message);
+        if (evt.type === 'status') {
+          if (thinkingEl && thinkingEl.parentNode) {
+            thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> ' + evt.text;
           }
-        } catch (e) {
-          // ignorar parse errors de líneas parciales
+        } else if (evt.type === 'plan') {
+          planRecibido = evt.plan;
+          if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
+          const planDiv = document.createElement('div');
+          planDiv.className = 'vc-msg-plan';
+          planDiv.innerHTML = '<div class="vc-plan-header"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke-linecap="round" stroke-linejoin="round"/></svg> PLAN DE ACCIÓN</div><pre class="vc-plan-content"></pre>';
+          document.getElementById('vcChatMensajes').appendChild(planDiv);
+          scrollChatAbajo();
+          const planPre = planDiv.querySelector('.vc-plan-content');
+          for (let i = 0; i < evt.plan.length; i += 2) {
+            planPre.textContent = evt.plan.slice(0, i + 2);
+            scrollChatAbajo();
+            await new Promise(rr => setTimeout(rr, 8));
+          }
+          planPre.textContent = evt.plan;
+        } else if (evt.type === 'chunk') {
+          textoRespuesta += evt.text;
+          msgDiv.innerHTML = formatearMarkdownConColapsado(textoRespuesta);
+          scrollChatAbajo();
+        } else if (evt.type === 'action') {
+          renderAccion(evt.accion);
+        } else if (evt.type === 'done') {
+          modeloRecibido = evt.modeloUsado || 'VerboAITeams';
+          proyectoActualizado = evt.proyectoActualizado;
+          archivosActualizados = evt.archivos;
+          if (evt.plan) planRecibido = evt.plan;
+        } else if (evt.type === 'error') {
+          throw new Error(evt.message);
         }
       }
     }
 
-    // Agregar meta del modelo al mensaje
     if (modeloRecibido) {
       const meta = document.createElement('div');
       meta.className = 'vc-msg-meta';
@@ -741,7 +732,6 @@ async function enviarChat() {
       msgDiv.appendChild(meta);
     }
 
-    // Guardar en el chat del proyecto
     const msgAssistant = {
       role: 'assistant',
       content: textoRespuesta,
@@ -751,17 +741,22 @@ async function enviarChat() {
     };
     estado.proyecto.chat.push(msgAssistant);
 
-    // Si la IA modificó archivos, actualizar
     if (proyectoActualizado && archivosActualizados) {
       estado.archivos = archivosActualizados;
       if (estado.archivoActual) {
         const nuevoContenido = estado.archivos[estado.archivoActual];
-        if (nuevoContenido !== undefined) {
-          if (typeof monaco !== 'undefined' && estado.monacoModels && estado.monacoModels[estado.archivoActual]) {
-            if (estado.monacoModels[estado.archivoActual].getValue() !== nuevoContenido) {
-              estado.monacoModels[estado.archivoActual].setValue(nuevoContenido);
-            }
-          } else if (estado.monaco) {
+        if (nuevoContenido !== undefined && estado.monaco) {
+          if (typeof monaco !== 'undefined' && estado.monaco.setModel) {
+            if (estado.monacoModels[estado.archivoActual]) estado.monacoModels[estado.archivoActual].dispose();
+            const model = monaco.editor.createModel(nuevoContenido, obtenerLenguajeMonaco(estado.archivoActual));
+            model.onDidChangeContent(() => {
+              estado.archivos[estado.archivoActual] = model.getValue();
+              clearTimeout(estado.debounceGuardar);
+              estado.debounceGuardar = setTimeout(guardarArchivos, 1500);
+            });
+            estado.monacoModels[estado.archivoActual] = model;
+            estado.monaco.setModel(model);
+          } else {
             estado.monaco.setValue(nuevoContenido);
           }
         }
@@ -772,14 +767,40 @@ async function enviarChat() {
     await guardarArchivos();
   } catch (e) {
     if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
-    const errorMsg = e.name === 'AbortError' ? 'Timeout: el servidor tardó demasiado en responder.' : e.message;
+    const errorMsg = e.name === 'AbortError' ? 'Timeout: el servidor tardó demasiado.' : e.message;
     mostrarToast(errorMsg, 'error');
-    const msgError = { role: 'assistant', content: 'Error: ' + errorMsg + '\n\nIntentá de nuevo, ya podés escribir.', fecha: new Date().toISOString() };
+    const msgError = { role: 'assistant', content: 'Error: ' + errorMsg + '\n\nIntentá de nuevo.', fecha: new Date().toISOString() };
     renderMensaje(msgError);
   } finally {
     rehabilitarInput();
   }
 }
+
+function formatearMarkdownConColapsado(texto) {
+  let html = texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code) => {
+    const langLabel = lang || 'code';
+    const codeId = 'code_' + Math.random().toString(36).substr(2, 9);
+    return '<div class="vc-code-block"><div class="vc-code-header" onclick="toggleCodeBlock(\'' + codeId + '\')"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg><span>' + langLabel + '</span><span class="vc-code-toggle">colapsar</span></div><pre id="' + codeId + '" class="vc-code-content"><code>' + code.trim() + '</code></pre></div>';
+  });
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+window.toggleCodeBlock = function(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    el.previousElementSibling.querySelector('.vc-code-toggle').textContent = 'colapsar';
+  } else {
+    el.style.display = 'none';
+    el.previousElementSibling.querySelector('.vc-code-toggle').textContent = 'expandir';
+  }
+};
 
 function renderMensaje(m) {
   const cont = document.getElementById('vcChatMensajes');
