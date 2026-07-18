@@ -4525,7 +4525,11 @@ app.get('/api/creditos', (req, res) => {
   const usuario = obtenerUsuarioActual(req);
   if (!usuario) return res.status(401).json({ error: 'No autenticado.' });
   const creditos = leerCreditosGlobales(usuario);
-  const esAdmin = usuario.startsWith('local:');
+  // IMPORTANTE: usar usuarioEsAdmin() que cubre tanto local: como ADMIN_EMAILS.
+  // Antes usabamos solo usuario.startsWith('local:') que NO detectaba admins
+  // que entraron con email (ej: marcos.miguel.3110@gmail.com).
+  const esAdmin = usuarioEsAdmin(usuario);
+  const esLocal = usuario.startsWith('local:');
   const usuarios = leerUsuarios();
   const cuenta = usuarios[usuario] || {};
   const estadisticas = cuenta.estadisticas || {
@@ -4534,7 +4538,7 @@ app.get('/api/creditos', (req, res) => {
   };
   res.json({
     ok: true,
-    usuario: esAdmin ? usuario.slice(6) : usuario,
+    usuario: esLocal ? usuario.slice(6) : usuario,
     esAdmin,
     creditos: esAdmin ? -1 : creditos,
     creditosIniciales: esAdmin ? -1 : 1000,
