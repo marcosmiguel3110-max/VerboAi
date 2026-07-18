@@ -125,8 +125,8 @@ const MODELOS_DISPONIBLES = {
     modeloOpenRouter: 'meta-llama/llama-3.3-70b-instruct:free',
     modelosOpenRouterTexto: [
       'meta-llama/llama-3.3-70b-instruct:free',
+      'nvidia/nemotron-3-nano-30b-a3b:free',
       'z-ai/glm-4.5-air:free',
-      'nousresearch/hermes-3-llama-3.1-405b:free',
     ],
     modeloOpenRouterVision: 'google/gemma-4-26b-a4b-it:free',
     modelosOpenRouterVision: [
@@ -146,8 +146,8 @@ const MODELOS_DISPONIBLES = {
     modeloOpenRouter: 'nvidia/nemotron-3-super-120b-a12b:free',
     modelosOpenRouterTexto: [
       'nvidia/nemotron-3-super-120b-a12b:free',
-      'openai/gpt-oss-120b:free',
-      'z-ai/glm-4.5-air:free',
+      'nvidia/nemotron-3-nano-30b-a3b:free',
+      'meta-llama/llama-3.3-70b-instruct:free',
     ],
     modeloOpenRouterRazonamiento: 'qwen/qwen3-next-80b-a3b-instruct:free',
     modelosOpenRouterRazonamiento: [
@@ -172,10 +172,9 @@ const MODELOS_DISPONIBLES = {
     modeloOpenRouter: 'nvidia/nemotron-3-super-120b-a12b:free',
     modelosOpenRouterTexto: [
       'nvidia/nemotron-3-super-120b-a12b:free',
-      'nousresearch/hermes-3-llama-3.1-405b:free',
-      'openai/gpt-oss-120b:free',
-      'qwen/qwen3-next-80b-a3b-instruct:free',
+      'nvidia/nemotron-3-nano-30b-a3b:free',
       'meta-llama/llama-3.3-70b-instruct:free',
+      'qwen/qwen3-next-80b-a3b-instruct:free',
     ],
     modeloOpenRouterRazonamiento: 'qwen/qwen3-next-80b-a3b-instruct:free',
     modelosOpenRouterRazonamiento: [
@@ -207,9 +206,9 @@ const MODELOS_DISPONIBLES = {
       'qwen/qwen3-coder:free',
       'cohere/north-mini-code:free',
       'nvidia/nemotron-3-ultra-550b-a55b:free',
-      'nousresearch/hermes-3-llama-3.1-405b:free',
       'nvidia/nemotron-3-super-120b-a12b:free',
-      'openai/gpt-oss-120b:free',
+      'nvidia/nemotron-3-nano-30b-a3b:free',
+      'meta-llama/llama-3.3-70b-instruct:free',
       'poolside/laguna-m.1:free',
       'poolside/laguna-xs-2.1:free',
     ],
@@ -321,14 +320,19 @@ function esperarMinimo(promesa, ms) {
 // ============================================================
 // CAPA UNIFICADA DE MODELOS GRATIS (reemplaza por completo a Groq)
 // ============================================================
-// Prueba, en orden, cada modelo OpenRouter ":free" de la lista (con 2
-// reintentos ante HTTP 429 antes de pasar al siguiente modelo). Si TODA
-// la cascada de OpenRouter falla, hace un ultimo intento con Pollinations
-// texto (text.pollinations.ai/openai, sin API key, sin limite conocido).
+// PRIORIDAD: Pollinations texto primero (sin límites, sin auth, siempre disponible).
+// Si Pollinations falla, prueba OpenRouter ":free" con reintentos ante HTTP 429.
 //
 // Devuelve siempre el mismo shape: { ok, texto, modelo, capa } donde
-// capa es 'openrouter' | 'pollinations' | null.
+// capa es 'pollinations' | 'openrouter' | null.
 async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, enviar = () => {}, opciones = {}) {
+  // PRIMERO: Intentar Pollinations texto (sin límites, siempre disponible)
+  if (!opciones.signal?.aborted) {
+    const rp = await llamarPollinationsTexto(messages, systemPrompt, opciones);
+    if (rp.ok) return { ok: true, texto: rp.texto, modelo: rp.modelo, capa: 'pollinations' };
+  }
+
+  // SEGUNDO: Si Pollinations falló, intentar OpenRouter free
   const lista = (Array.isArray(modelos) ? modelos : [modelos]).filter((v, i, a) => v && a.indexOf(v) === i);
   let ultimoError = null;
 
@@ -344,15 +348,8 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
         await new Promise((resolve) => setTimeout(resolve, 3000));
         continue;
       }
-      break; // este modelo fallo por otra razon: pasar al siguiente de la cascada
+      break;
     }
-  }
-
-  // Fallback final: Pollinations texto (gratis, sin auth, siempre disponible)
-  if (!opciones.signal?.aborted) {
-    const rp = await llamarPollinationsTexto(messages, systemPrompt, opciones);
-    if (rp.ok) return { ok: true, texto: rp.texto, modelo: rp.modelo, capa: 'pollinations' };
-    ultimoError = rp.error || ultimoError;
   }
 
   return { ok: false, error: ultimoError || 'Todos los modelos gratis fallaron', capa: null };
