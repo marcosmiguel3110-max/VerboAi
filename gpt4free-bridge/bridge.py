@@ -183,6 +183,106 @@ def strip_think_tags(texto):
     return texto.lstrip()
 
 
+# ============================================================
+# SELECTOR INTELIGENTE DE MODELOS
+# ============================================================
+# DeepSeek-R1 hace razonamiento profundo antes de responder, por eso tarda
+# 30-60 segundos incluso para "hola". Este selector detecta el tipo de
+# pregunta y elige el modelo adecuado:
+#
+#   - Saludo / charla casual / pregunta simple → deepseek-v3 (rapido, ~3s)
+#   - Programacion / codigo → deepseek-r1 (razonamiento, mejor para codigo)
+#   - Matematicas / logica / analisis → deepseek-r1 (razonamiento profundo)
+#   - Pregunta compleja / larga → deepseek-r1 (razonamiento)
+#   - Default → deepseek-r1 (el mas potente)
+#
+# Esto hace que respuestas rapidas sean rapidas, y respuestas complejas
+# sean de alta calidad.
+def elegir_modelo_inteligente(messages, model_pedido):
+    """Elige el mejor modelo segun el tipo de pregunta. Si el usuario pidio
+    un modelo especifico, respeta su eleccion. Sino, elige automaticamente."""
+    # Si el usuario pidio un modelo especifico, respetarlo
+    if model_pedido and model_pedido != DEFAULT_MODEL:
+        return model_pedido
+
+    # Si no hay mensajes, default
+    if not messages:
+        return 'deepseek-r1'
+
+    # Buscar el ultimo mensaje del usuario
+    ultimo_user = ''
+    for m in reversed(messages):
+        if m.get('role') == 'user':
+            contenido = m.get('content', '')
+            if isinstance(contenido, str):
+                ultimo_user = contenido
+            break
+
+    if not ultimo_user:
+        return 'deepseek-r1'
+
+    texto = ultimo_user.lower()
+    longitud = len(ultimo_user)
+
+    # SALUDOS / CHARLA CASUAL → rapido (deepseek-v3)
+    patrones_saludo = [
+        r'^(hola|buenas|hey|hi|hello|que tal|como estas|como va|que haces)\b',
+        r'^(gracias|chau|adios|nos vemos|hasta luego|bye)\b',
+        r'^(buen dia|buenas tardes|buenas noches)\b',
+        r'\b(que mas|que onda|que pasa)\b',
+    ]
+    for patron in patrones_saludo:
+        if re.search(patron, texto):
+            log.info(f'[selector] SALUDO detectado → deepseek-v3 (rapido)')
+            return 'deepseek-v3'
+
+    # PREGUNTAS SIMPLES Y CORTAS → rapido (deepseek-v3)
+    # Mensajes cortos (<50 chars) sin signos de complejidad
+    if longitud < 50 and not any(x in texto for x in [
+        'explica', 'analiza', 'compara', 'diferencia', 'por que', 'como funciona',
+        'paso a paso', 'detalle', 'ejemplo', 'codigo', 'programa', 'funcion',
+        'matematica', 'calcular', 'ecuacion', 'problema',
+    ]):
+        log.info(f'[selector] PREGUNTA SIMPLE detectada → deepseek-v3 (rapido)')
+        return 'deepseek-v3'
+
+    # PROGRAMACION / CODIGO → deepseek-r1 (mejor para codigo)
+    patrones_codigo = [
+        r'\b(codigo|code|programa|programacion|python|javascript|java|c\+\+|rust|go\b|ruby|php|bash|sql|html|css|react|node|api)\b',
+        r'\b(funcion|function|clase|class|metodo|method|variable|array|loop|bucle|bug|error|debug|compilar)\b',
+        r'```',  # bloque de codigo markdown
+        r'\b(algoritmo|algorithm|implementar|implement|optimizar|optimize|refactor)\b',
+    ]
+    for patron in patrones_codigo:
+        if re.search(patron, texto):
+            log.info(f'[selector] PROGRAMACION detectada → deepseek-r1 (codigo)')
+            return 'deepseek-r1'
+
+    # MATEMATICAS / LOGICA / ANALISIS → deepseek-r1
+    patrones_razonamiento = [
+        r'\b(matematica|math|calcular|calculate|ecuacion|equation|formula|teorema|theorem)\b',
+        r'\b(logica|logic|razonamiento|reasoning|deduccion|inferencia)\b',
+        r'\b(analiza|analisis|analyze|compara|comparacion|compare|diferencia|difference)\b',
+        r'\b(por que|why|como funciona|how does|explica|explain|demuestra|prove)\b',
+        r'\b(problema|problem|solucion|solution|resuelve|solve|resolver|resolver)\b',
+        r'\b(paso a paso|step by step|detalle|detail|profundidad|depth)\b',
+        r'\d\s*[\+\-\*\/\=]\s*\d',  # operaciones matematicas
+    ]
+    for patron in patrones_razonamiento:
+        if re.search(patron, texto):
+            log.info(f'[selector] RAZONAMIENTO detectado → deepseek-r1 (profundo)')
+            return 'deepseek-r1'
+
+    # PREGUNTA LARGA (>200 chars) → deepseek-r1 (probablemente compleja)
+    if longitud > 200:
+        log.info(f'[selector] PREGUNTA LARGA ({longitud} chars) → deepseek-r1')
+        return 'deepseek-r1'
+
+    # DEFAULT → deepseek-v3 (rapido) para no hacer esperar al usuario
+    log.info(f'[selector] DEFAULT → deepseek-v3 (rapido)')
+    return 'deepseek-v3'
+
+
 def llamar_g4f(messages, model, temperature, max_tokens):
     """Llama al modelo via g4f. Si el modelo tiene prefijo 'provider:', usa ese
     provider sin forzar Modelscope. Sino, prueba Modelscope primero (que respeta
@@ -204,6 +304,18 @@ def llamar_g4f(messages, model, temperature, max_tokens):
             provider_desde_modelo = partes[0]
             modelo_a_usar = partes[1]
             log.info(f'Modelo con provider explicito: provider={provider_desde_modelo} | modelo={modelo_a_usar}')
+
+    # ============================================================
+    # SELECTOR INTELIGENTE: si el usuario no pidio un modelo especifico
+    # (o pidio el default), elegir automaticamente segun el tipo de pregunta.
+    # Esto hace que "hola" responda rapido (deepseek-v3) y preguntas complejas
+    # usen deepseek-r1 (razonamiento profundo).
+    # ============================================================
+    if not provider_desde_modelo and (model == DEFAULT_MODEL or model == 'auto' or not model):
+        modelo_elegido = elegir_modelo_inteligente(messages, model)
+        if modelo_elegido and modelo_elegido != modelo_a_usar:
+            modelo_a_usar = modelo_elegido
+            log.info(f'[selector] Modelo cambiado automaticamente a: {modelo_a_usar}')
 
     # Lista de modelos a probar en orden: el pedido primero, luego fallbacks
     # que sabemos que funcionan gratis en g4f hoy.
