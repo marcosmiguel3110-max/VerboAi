@@ -2263,10 +2263,18 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
       if (elAvatar) elAvatar.textContent = nombre.trim().charAt(0) || '?';
       esUsuarioAdmin = !!d.esAdmin;
       window.esUsuarioAdmin = esUsuarioAdmin;
-      // Guardar en localStorage para que Verbo Code y otras páginas lo detecten
       try { localStorage.setItem('verboAiEsAdmin', esUsuarioAdmin ? 'true' : 'false'); } catch (e) {}
       const codesAdmin = document.getElementById('codesAdmin');
       if (codesAdmin) codesAdmin.classList.toggle('oculto', !esUsuarioAdmin);
+      // Re-renderizar el panel "Mas Codes" para que el botón Verbo Code
+      // aparezca correctamente después de saber si el usuario es admin.
+      // Esto fixea el bug donde el botón no aparecía para admins nuevos.
+      const btnMasCodes = document.getElementById('btnMasCodes');
+      if (btnMasCodes && typeof window.toggleSelectorModelo === 'function') {
+        // Cerrar y reabrir el panel para que se re-renderice con los permisos correctos
+        const panelExistente = document.getElementById('panelMasCodes');
+        if (panelExistente) panelExistente.remove();
+      }
     })
     .catch(() => {});
 
