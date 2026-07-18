@@ -322,18 +322,24 @@ def llamar_g4f(messages, model, temperature, max_tokens):
     #
     # Modelos probados que SÍ funcionan gratis (sin API key):
     #   - deepseek-r1     → razonamiento profundo (estilo OpenAI o1)
-    #   - o3-mini          → razonamiento de OpenAI
-    #   - gpt-4o           → general potente
     #   - deepseek-v3      → general rápido
+    #   - gpt-4o           → general potente
     #   - gpt-4o-mini      → fallback clásico
+    #   - o3-mini          → razonamiento de OpenAI
     #   - r1-1776          → variante de DeepSeek R1
     #
+    # Modelos que tienen RATE LIMIT o requieren auth (a veces andan, a veces no):
+    #   - qwen-3-235b      → rate limit 3 días/12 días (lo dejamos como fallback)
+    #   - gemini-3.1-pro   → requiere auth (lo dejamos como fallback por si acaso)
+    #
     # Modelos que NO funcionan gratis (todos los providers piden auth):
-    #   - llama-3.1-405b, qwen3-235b, nemotron-3-ultra-550b, glm-5.2,
+    #   - llama-3.1-405b, nemotron-3-ultra-550b, glm-5.2,
     #     qwen-2.5-coder-32b, gpt-4.5, grok-3, kimi-k2, qwq-32b, gpt-oss-120b
     modelos_disponibles = [
         modelo_a_usar,
         'deepseek-r1',                         # MAS POTENTE, razonamiento profundo (estilo o1)
+        'qwen-3-235b',                        # Qwen3 235B (rate limit, a veces anda)
+        'gemini-3.1-pro',                     # Gemini 3.1 Pro (requiere auth, a veces anda)
         'o3-mini',                              # razonamiento de OpenAI
         'gpt-4o',                               # general potente
         'deepseek-v3',                          # fallback rapido de deepseek
