@@ -729,10 +729,23 @@ function renderAccion(accion) {
     image: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     web: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" stroke-linecap="round"/></svg>',
     run: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+    npm_install: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    test: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   };
   const icono = iconos[accion.tipo] || '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
   div.innerHTML = `${icono} <span>${accion.descripcion}</span>`;
   cont.appendChild(div);
+
+  // Si es un test con resultado, mostrar el output
+  if (accion.tipo === 'test' && accion.resultado) {
+    const resultDiv = document.createElement('div');
+    resultDiv.className = 'vc-msg-accion vc-test-result';
+    const output = accion.resultado.stdout || accion.resultado.error || '(sin output)';
+    const stderr = accion.resultado.stderr ? `\n--- stderr ---\n${accion.resultado.stderr}` : '';
+    resultDiv.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19" stroke-linecap="round"/></svg> <pre>${output}${stderr}</pre>`;
+    cont.appendChild(resultDiv);
+  }
+
   scrollChatAbajo();
 }
 
@@ -789,23 +802,43 @@ function probarProyecto() {
 }
 
 // Construye el HTML combinando index.html + todos los CSS/JS inline
-// Soporta archivos en carpetas: "css/styles.css", "js/app.js"
+// Soporta archivos en carpetas y paquetes npm cargados desde esm.sh CDN
 function construirHtmlParaPreview() {
   let html = estado.archivos['index.html'] || '';
+
+  // Cargar package.json y agregar imports de esm.sh para las dependencias
+  let deps = {};
+  try {
+    const pkg = JSON.parse(estado.archivos['package.json'] || '{}');
+    deps = pkg.dependencies || {};
+  } catch (e) {}
+
+  // Reemplazar imports de npm en el JS por URLs de esm.sh
+  // Ej: import React from 'react' → import React from 'https://esm.sh/react'
+  Object.entries(estado.archivos).forEach(([nombre, contenido]) => {
+    if (nombre.endsWith('.js') || nombre.endsWith('.mjs')) {
+      let nuevoContenido = contenido;
+      // Reemplazar importaciones de paquetes npm conocidos
+      Object.keys(deps).forEach(pkg => {
+        const reImport = new RegExp(`from ['"]${pkg}['"]`, 'g');
+        nuevoContenido = nuevoContenido.replace(reImport, `from 'https://esm.sh/${pkg}'`);
+        const reImport2 = new RegExp(`import\\(['"]${pkg}['"]\\)`, 'g');
+        nuevoContenido = nuevoContenido.replace(reImport2, `import('https://esm.sh/${pkg}')`);
+      });
+      estado.archivos[nombre] = nuevoContenido;
+    }
+  });
 
   // Reemplazar todas las referencias a archivos CSS del proyecto
   Object.entries(estado.archivos).forEach(([nombre, contenido]) => {
     if (nombre.endsWith('.css') && nombre !== 'styles.css') {
-      // Para CSS en carpetas como "css/styles.css", el href puede ser "css/styles.css" o "styles.css"
       const basename = nombre.split('/').pop();
-      // Reemplazar tanto el path completo como el basename
       const reFullPath = new RegExp(`<link[^>]*href=["']${nombre.replace(/\//g, '\\/')}["'][^>]*>`, 'g');
       const reBasename = new RegExp(`<link[^>]*href=["']${basename}["'][^>]*>`, 'g');
       html = html.replace(reFullPath, `<style>${contenido}</style>`);
       html = html.replace(reBasename, `<style>${contenido}</style>`);
     }
   });
-  // styles.css en raíz (caso común)
   if (estado.archivos['styles.css']) {
     html = html.replace(/<link[^>]*styles\.css[^>]*>/g, `<style>${estado.archivos['styles.css']}</style>`);
   }
@@ -816,13 +849,17 @@ function construirHtmlParaPreview() {
       const basename = nombre.split('/').pop();
       const reFullPath = new RegExp(`<script[^>]*src=["']${nombre.replace(/\//g, '\\/')}["'][^>]*><\\/script>`, 'g');
       const reBasename = new RegExp(`<script[^>]*src=["']${basename}["'][^>]*><\\/script>`, 'g');
-      html = html.replace(reFullPath, `<script>${contenido}<\/script>`);
-      html = html.replace(reBasename, `<script>${contenido}<\/script>`);
+      const esModulo = contenido.includes('import ') || contenido.includes('export ');
+      const tag = esModulo ? `<script type="module">${contenido}<\/script>` : `<script>${contenido}<\/script>`;
+      html = html.replace(reFullPath, tag);
+      html = html.replace(reBasename, tag);
     }
   });
-  // script.js en raíz (caso común)
   if (estado.archivos['script.js']) {
-    html = html.replace(/<script[^>]*script\.js[^>]*><\/script>/g, `<script>${estado.archivos['script.js']}<\/script>`);
+    const js = estado.archivos['script.js'];
+    const esModulo = js.includes('import ') || js.includes('export ');
+    const tag = esModulo ? `<script type="module">${js}<\/script>` : `<script>${js}<\/script>`;
+    html = html.replace(/<script[^>]*script\.js[^>]*><\/script>/g, tag);
   }
 
   return html;

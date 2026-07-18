@@ -300,6 +300,22 @@
   padding-left: 20px !important;
 }
 
+/* Resultado de test — terminal-style */
+.vc-test-result {
+  background: var(--vc-bg-secondary) !important;
+  border-left-color: #16a34a !important;
+  margin-top: -8px;
+}
+.vc-test-result pre {
+  font-family: var(--vc-font-mono);
+  font-size: 11px;
+  color: var(--vc-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  padding: 4px 0;
+}
+
 /* ============================================================
    Editor (Monaco) — sin padding extra, full bleed
    ============================================================ */
