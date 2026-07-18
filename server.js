@@ -2490,11 +2490,11 @@ Nombre del proyecto: ${proyecto.nombre}`;
 
     systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, modeloPedido);
 
-    // Llamar al modelo de texto
-    // 1. Intentar con el puente GPT4Free (g4f) si está habilitado y el modelo es NewserPro
+    // Llamar al modelo de texto — cascada de fallbacks
     let textoRespuesta = '';
     let modeloUsado = configModelo.modeloTexto;
 
+    // 1. Intentar con el puente GPT4Free (g4f) si está habilitado y el modelo es NewserPro
     if (modeloPedido === 'NewserPro' && GPT4FREE_ENABLED && GPT4FREE_URL) {
       const resultadoGlm = await llamarGlm4Bridge(chatHistorial.slice(-3), systemPrompt);
       if (resultadoGlm.ok) {
@@ -2505,29 +2505,46 @@ Nombre del proyecto: ${proyecto.nombre}`;
       }
     }
 
-    // 2. Fallback a Groq (configModelo.modeloTexto)
+    // 2. Fallback a Groq — probar varios modelos en orden hasta que uno responda
     if (!textoRespuesta) {
-      const respuestaGroq = await llamarGroqConReintentos({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: configModelo.modeloTexto,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...chatHistorial,
-          ],
-          temperature: 0.7,
-          max_tokens: configModelo.maxTokens,
-          stream: false,
-        }),
-      }, () => {});
-      if (!respuestaGroq || !respuestaGroq.ok) {
-        const status = respuestaGroq ? respuestaGroq.status : 0;
-        return res.status(502).json({ error: mensajeErrorAmigableIA(status) });
+      // Lista de modelos a probar en orden: el configurado primero,
+      // luego fallbacks seguros que sabemos que funcionan en Groq.
+      const modelosGroq = [
+        configModelo.modeloTexto,           // gpt-oss-120b o qwen3-32b (lo configurado)
+        'qwen/qwen3-32b',                    // siempre funciona
+        'openai/gpt-oss-20b',                // el de NewserLite, siempre funciona
+      ].filter((v, i, a) => v && a.indexOf(v) === i); // sin duplicados
+
+      for (const modeloGroq of modelosGroq) {
+        try {
+          const respuestaGroq = await llamarGroqConReintentos({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: modeloGroq,
+              messages: [
+                { role: 'system', content: systemPrompt },
+                ...chatHistorial,
+              ],
+              temperature: 0.7,
+              max_tokens: configModelo.maxTokens,
+              stream: false,
+            }),
+          }, () => {});
+          if (respuestaGroq && respuestaGroq.ok) {
+            const data = await respuestaGroq.json();
+            textoRespuesta = stripThinkTags((data.choices?.[0]?.message?.content) || '');
+            modeloUsado = modeloGroq;
+            break; // salimos del loop, ya respondió
+          }
+        } catch (e) {
+          console.warn(`[verbocode] modelo ${modeloGroq} fallo: ${e.message}`);
+        }
       }
-      const data = await respuestaGroq.json();
-      textoRespuesta = stripThinkTags((data.choices?.[0]?.message?.content) || '');
-      modeloUsado = configModelo.modeloTexto;
+
+      if (!textoRespuesta) {
+        return res.status(502).json({ error: 'No se pudo conectar con ningún modelo. Intenta de nuevo en unos minutos.' });
+      }
     }
 
     // Procesar las herramientas en la respuesta ([[FILE_CREATE::]], [[IMAGE::]], etc)

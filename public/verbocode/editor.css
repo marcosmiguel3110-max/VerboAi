@@ -232,15 +232,20 @@
   border-bottom: 2px solid var(--vc-accent);
 }
 
+.vc-tab-nombre {
+  font-weight: 500;
+}
+
 .vc-tab-close {
-  width: 16px; height: 16px;
-  border-radius: 3px;
+  width: 18px; height: 18px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.6;
+  opacity: 0.5;
+  transition: all 0.15s;
 }
-.vc-tab-close:hover { background: var(--vc-bg-tertiary); opacity: 1; }
+.vc-tab-close:hover { background: var(--vc-bg-tertiary); opacity: 1; color: var(--vc-danger); }
 
 .vc-monaco-container {
   flex: 1;
