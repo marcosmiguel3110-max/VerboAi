@@ -1825,14 +1825,39 @@ app.post('/api/v1/chat', async (req, res) => {
 
   try {
     // ============================================================
-    // CHAT PRINCIPAL (/api/v1/chat) — USA GROQ PRIMERO
+    // CHAT PRINCIPAL (/api/v1/chat) — OpenRouter primero, Groq fallback
     // ============================================================
-    // El chat principal NO usa OpenRouter (se gasta el rate limit de 50/dia).
-    // OpenRouter se reserva SOLO para Verbo Code.
-    // Groq es más rápido y tiene más rate limit para el chat normal.
+    // Usa los modelos de OpenRouter (ClawLabsAI) igual que Verbo Code.
+    // Si OpenRouter tiene rate limit (429), cae a Groq inmediatamente.
+    // NewserAdmin NO está disponible aquí (solo en Verbo Code).
     let texto = '';
     let modeloUsadoReal = configModelo.modeloTexto;
     let glmUsado = false;
+
+    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && configModelo.nombre !== 'NewserAdmin') {
+      const mensajesParaOR = mensajesParaModelo.filter((m) => m.role !== 'system');
+      const modelosOR = [
+        configModelo.modeloOpenRouter,
+        'nvidia/nemotron-3-ultra-550b-a55b:free',
+        'meta-llama/llama-3.3-70b-instruct:free',
+        'openai/gpt-oss-20b:free',
+      ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+      for (const modeloOR of modelosOR) {
+        const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, modeloOR);
+        if (resultadoOR.ok) {
+          texto = stripThinkTags(resultadoOR.texto);
+          modeloUsadoReal = resultadoOR.modelo;
+          glmUsado = true;
+          break;
+        }
+        // Si es 429 (rate limit), no probar más modelos de OpenRouter, ir a Groq
+        if (resultadoOR.error && resultadoOR.error.includes('429')) break;
+      }
+      if (!glmUsado) {
+        console.warn(`[api/v1/chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f/Groq.`);
+      }
+    }
 
     // ============================================================
     // CAPA G4F — fallback para NewserPro y NewserAdmin
@@ -2094,6 +2119,7 @@ app.get('/api/v1/info', (req, res) => {
 
   const modelos = Object.values(MODELOS_DISPONIBLES)
     .filter((m) => !m.soloAdmin || esAdminToken)
+    .filter((m) => m.nombre !== 'NewserAdmin')  // NewserAdmin solo en Verbo Code
     .map((m) => ({
       nombre: m.nombre,
       descripcion: m.descripcion,
@@ -4165,6 +4191,7 @@ app.get('/api/config', (req, res) => {
 
   const modelos = Object.values(MODELOS_DISPONIBLES)
     .filter((m) => !m.soloAdmin || esAdminConfig)
+    .filter((m) => m.nombre !== 'NewserAdmin')  // NewserAdmin solo en Verbo Code
     .map((m) => ({
       nombre: m.nombre,
       descripcion: m.descripcion,
@@ -4575,14 +4602,43 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     ];
 
     // ============================================================
-    // CHAT WEB STREAMING (/api/chat) — USA GROQ PRIMERO
+    // CHAT WEB STREAMING (/api/chat) — OpenRouter primero, Groq fallback
     // ============================================================
-    // El chat principal NO usa OpenRouter (se gasta el rate limit de 50/dia).
-    // OpenRouter se reserva SOLO para Verbo Code.
+    // Usa OpenRouter igual que Verbo Code. Si hay rate limit (429), cae a Groq.
+    // NewserAdmin NO está disponible aquí (solo en Verbo Code).
     let glmTextoPreGenerado = null;
+    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && !imagenes.length && configModelo.nombre !== 'NewserAdmin') {
+      enviar({ type: 'investigando', query: `Procesando con ${configModelo.nombre}...` });
+      enviar({ type: 'investigando_sitio', sitio: `OpenRouter Free` });
 
-    // CAPA G4F — solo para NewserPro y NewserAdmin (fallback antes de Groq)
-    if ((configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED && !imagenes.length) {
+      const mensajesParaOR = [
+        ...construirHistorialParaModelo(historial),
+        { role: 'user', content: contenidoUsuario },
+      ];
+      const modelosOR = [
+        configModelo.modeloOpenRouter,
+        'nvidia/nemotron-3-ultra-550b-a55b:free',
+        'meta-llama/llama-3.3-70b-instruct:free',
+        'openai/gpt-oss-20b:free',
+      ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+      let rateLimited = false;
+      for (const modeloOR of modelosOR) {
+        const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, modeloOR, { signal: controladorGroq.signal });
+        if (resultadoOR.ok) {
+          glmTextoPreGenerado = stripThinkTags(resultadoOR.texto);
+          break;
+        }
+        if (resultadoOR.error && resultadoOR.error.includes('429')) { rateLimited = true; break; }
+      }
+      enviar({ type: 'investigando_fin' });
+      if (!glmTextoPreGenerado) {
+        console.warn(`[chat] OpenRouter fallo para ${configModelo.nombre}${rateLimited ? ' (rate limit)' : ''}, fallback a g4f/Groq.`);
+      }
+    }
+
+    // CAPA G4F — solo para NewserPro y NewserAdmin
+    if (!glmTextoPreGenerado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED && !imagenes.length) {
       const mensajesParaGlm = [
         ...construirHistorialParaModelo(historial),
         { role: 'user', content: contenidoUsuario },
