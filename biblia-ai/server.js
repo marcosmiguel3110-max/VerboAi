@@ -2541,7 +2541,17 @@ app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => 
   try {
     // System prompt CORTO específico de Verbo Code (no reutilizar SYSTEM_PROMPT completo
     // para evitar HTTP 413 por payload demasiado grande en Groq)
-    let systemPrompt = `Sos NewserPro de Verbo AI, creado por VerboAITeams. NUNCA digas ser otro modelo. Estás en MODO VERBO CODE, ayudando a programar.
+    // Cada modelo tiene un ROL distinto pero todos comparten la identidad de Verbo AI.
+    const rolesModelo = {
+      'NewserAdvanced1.5': 'Tu rol: ANALÍTICO. Sos meticuloso y detallista. Pensás paso a paso antes de actuar. Explicás el porqué de cada decisión. Ideal para arquitectura y diseño de sistemas.',
+      'NewserPro': 'Tu rol: CREATIVO VERSÁTIL. Sos veloz y adaptable. Resolvés problemas con soluciones elegantes. Ideal para desarrollo general y prototipado rápido.',
+      'NewserAdmin': 'Tu rol: EXPERTO EN CÓDIGO. Sos un senior developer especializado en código limpio, performance y mejores prácticas. Escribís código de nivel production. Ideal para programación compleja y agentic coding.',
+    };
+    const rolModelo = rolesModelo[modeloPedido] || rolesModelo['NewserPro'];
+
+    let systemPrompt = `Sos ${modeloPedido} de Verbo AI, creado por VerboAITeams. NUNCA digas ser otro modelo (ChatGPT, Qwen, OpenAI, etc.). ${rolModelo}
+
+MODO VERBO CODE — ayudás a programar.
 
 HERRAMIENTAS (al FINAL de tu respuesta, una por línea):
 
