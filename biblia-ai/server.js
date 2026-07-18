@@ -1714,29 +1714,20 @@ app.post('/api/v1/chat', async (req, res) => {
   }
 
   let razonamientoPrevioApi = '';
-  if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') && configModelo.modeloTextoRazonamiento) {
+  if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') && OPENROUTER_FREE_ENABLED) {
     try {
-      const respRaz = await llamarGroqConReintentos({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: configModelo.modeloTextoRazonamiento,
-          messages: [
-            { role: 'system', content: 'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta, un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo va a usar despues. Se breve (maximo 120 palabras).' },
-            { role: 'user', content: mensaje },
-          ],
-          temperature: 0.4,
-          max_tokens: 400,
-          stream: false,
-        }),
-      }, () => {});
-      if (respRaz && respRaz.ok) {
-        const dataRaz = await respRaz.json();
-        razonamientoPrevioApi = stripThinkTags((dataRaz.choices && dataRaz.choices[0] && dataRaz.choices[0].message && dataRaz.choices[0].message.content) || '');
+      const modeloRazOR = configModelo.modeloOpenRouterRazonamiento || configModelo.modeloOpenRouter || 'qwen/qwen3-next-80b-a3b-instruct:free';
+      const resultadoRaz = await llamarOpenRouterFree(
+        [{ role: 'user', content: mensaje }],
+        'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta, un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo va a usar despues. Se breve (maximo 120 palabras).',
+        modeloRazOR
+      );
+      if (resultadoRaz.ok) {
+        razonamientoPrevioApi = stripThinkTags(resultadoRaz.texto);
       }
-    } catch (e) { console.error('[api/v1/chat] fallo el paso de razonamiento con Qwen3-32B:', e.message); }
+    } catch (e) { console.error('[api/v1/chat] fallo el paso de razonamiento con OpenRouter:', e.message); }
     if (razonamientoPrevioApi) {
-      systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por Qwen3-32B, no lo repitas literalmente ni lo menciones, usalo solo como guia]:\n${razonamientoPrevioApi}`;
+      systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO, no lo repitas literalmente ni lo menciones, usalo solo como guia]:\n${razonamientoPrevioApi}`;
     }
   }
 
@@ -1828,16 +1819,16 @@ app.post('/api/v1/chat', async (req, res) => {
 
   try {
     // ============================================================
-    // CHAT PRINCIPAL (/api/v1/chat) — OpenRouter primero, Groq fallback
+    // CHAT PRINCIPAL (/api/v1/chat) — OpenRouter Free + g4f (sin Groq)
     // ============================================================
-    // Usa los modelos de OpenRouter (ClawLabsAI) igual que Verbo Code.
-    // Si OpenRouter tiene rate limit (429), cae a Groq inmediatamente.
-    // NewserAdmin NO está disponible aquí (solo en Verbo Code).
+    // Usa los modelos de OpenRouter (ClawLabsAI/free-ai-models) igual que
+    // Verbo Code. Si OpenRouter tiene rate limit (429), cae a g4f (GLM-4).
+    // Si ambos fallan, devuelve error. NUNCA usa Groq (decision final).
     let texto = '';
     let modeloUsadoReal = configModelo.modeloTexto;
     let glmUsado = false;
 
-    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && configModelo.nombre !== 'NewserAdmin') {
+    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
       const mensajesParaOR = mensajesParaModelo.filter((m) => m.role !== 'system');
       const modelosOR = [
         configModelo.modeloOpenRouter,
@@ -1854,18 +1845,18 @@ app.post('/api/v1/chat', async (req, res) => {
           glmUsado = true;
           break;
         }
-        // Si es 429 (rate limit), no probar más modelos de OpenRouter, ir a Groq
+        // Si es 429 (rate limit), no probar más modelos de OpenRouter
         if (resultadoOR.error && resultadoOR.error.includes('429')) break;
       }
       if (!glmUsado) {
-        console.warn(`[api/v1/chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f/Groq.`);
+        console.warn(`[api/v1/chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f.`);
       }
     }
 
     // ============================================================
-    // CAPA G4F — fallback para NewserPro y NewserAdmin
+    // CAPA G4F — fallback para NewserPro y NewserAdmin (todos los modelos)
     // ============================================================
-    if (!glmUsado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED) {
+    if (!glmUsado && GPT4FREE_ENABLED) {
       const mensajesParaGlm = mensajesParaModelo.filter((m) => m.role !== 'system');
       const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt);
       if (resultadoGlm.ok) {
@@ -1875,44 +1866,27 @@ app.post('/api/v1/chat', async (req, res) => {
       }
     }
 
+    // ============================================================
+    // Fallback OpenRouter con otro modelo free (sin Groq)
+    // ============================================================
+    if (!glmUsado && OPENROUTER_FREE_ENABLED) {
+      const mensajesParaOR = mensajesParaModelo.filter((m) => m.role !== 'system');
+      const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, PRO_FALLBACK_OPENROUTER);
+      if (resultadoOR.ok) {
+        texto = stripThinkTags(resultadoOR.texto);
+        modeloUsadoReal = resultadoOR.modelo;
+        glmUsado = true;
+      }
+    }
+
+    // Si todos los proveedores gratis fallaron, devolver error claro.
+    // Groq fue eliminado definitivamente como fallback.
     if (!glmUsado) {
-      // Para NewserPro y NewserAdmin: usar OpenRouter como fallback (NO Groq)
-      if ((configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && OPENROUTER_FREE_ENABLED) {
-        const mensajesParaOR = mensajesParaModelo.filter((m) => m.role !== 'system');
-        const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, PRO_FALLBACK_OPENROUTER);
-        if (resultadoOR.ok) {
-          texto = stripThinkTags(resultadoOR.texto);
-          modeloUsadoReal = resultadoOR.modelo;
-          glmUsado = true;
-        }
-      }
-
-      // Si todavía no hay texto, usar Groq (ultimo recurso para modelos no-Pro)
-      if (!glmUsado) {
-        const respuestaGroq = await llamarGroqConReintentos({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: configModelo.modeloTexto,
-            messages: mensajesParaModelo,
-            temperature: 0.7,
-            max_tokens: configModelo.maxTokens,
-            stream: false,
-          }),
-        }, () => {});
-
-        if (!respuestaGroq || !respuestaGroq.ok) {
-          const status = respuestaGroq ? respuestaGroq.status : 0;
-          try {
-            const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
-            console.error(`[api/v1/chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
-          } catch (e) {  }
-          return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
-        }
-
-        const data = await respuestaGroq.json();
-        texto = stripThinkTags((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '');
-      }
+      console.error(`[api/v1/chat] Todos los proveedores gratis (OpenRouter + g4f) fallaron para ${configModelo.nombre}.`);
+      return res.status(502).json({
+        ok: false,
+        error: 'No se pudo conectar con ningun modelo gratuito (OpenRouter Free + g4f). Intenta de nuevo en unos minutos. Si el problema persiste, puede que el rate limit diario este agotado.',
+      });
     }
 
     let webSearchQueryApi = null;
@@ -2136,7 +2110,6 @@ app.get('/api/v1/info', (req, res) => {
 
   const modelos = Object.values(MODELOS_DISPONIBLES)
     .filter((m) => !m.soloAdmin || esAdminToken)
-    .filter((m) => m.nombre !== 'NewserAdmin')  // NewserAdmin solo en Verbo Code
     .map((m) => ({
       nombre: m.nombre,
       descripcion: m.descripcion,
@@ -2720,33 +2693,25 @@ Proyecto: ${proyecto.nombre}`;
     // Agregar el mensaje actual
     chatHistorial.push({ role: 'user', content: mensaje });
 
-    // Razonamiento previo con Qwen3-32B (solo si el modelo es NewserPro o NewserAdvanced1.5)
+    // Razonamiento previo con OpenRouter Free (sin Groq)
+    // Usa un modelo de razonamiento free si esta configurado, sino usa el principal.
     let razonamientoPrevio = '';
-    if (configModelo.modeloTextoRazonamiento && modeloPedido === 'NewserPro') {
+    if (modeloPedido === 'NewserPro' && OPENROUTER_FREE_ENABLED) {
       try {
-        const respRaz = await llamarGroqConReintentos({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: configModelo.modeloTextoRazonamiento,
-            messages: [
-              { role: 'system', content: 'Sos un modulo de razonamiento interno para Verbo Code. Analizá el pedido del usuario paso a paso: qué archivos necesita crear, qué estructura, qué investigación web hace falta. Plan breve (maximo 150 palabras). No respondas al usuario.' },
-              { role: 'user', content: mensaje },
-            ],
-            temperature: 0.4,
-            max_tokens: 500,
-            stream: false,
-          }),
-        }, () => {});
-        if (respRaz && respRaz.ok) {
-          const dataRaz = await respRaz.json();
-          razonamientoPrevio = stripThinkTags((dataRaz.choices?.[0]?.message?.content) || '');
+        const modeloRazOR = configModelo.modeloOpenRouterRazonamiento || configModelo.modeloOpenRouter || 'qwen/qwen3-next-80b-a3b-instruct:free';
+        const resultadoRaz = await llamarOpenRouterFree(
+          [{ role: 'user', content: mensaje }],
+          'Sos un modulo de razonamiento interno para Verbo Code. Analizá el pedido del usuario paso a paso: qué archivos necesita crear, qué estructura, qué investigación web hace falta. Plan breve (maximo 150 palabras). No respondas al usuario.',
+          modeloRazOR
+        );
+        if (resultadoRaz.ok) {
+          razonamientoPrevio = stripThinkTags(resultadoRaz.texto);
         }
       } catch (e) {
         console.warn('[verbocode] razonamiento previo fallo:', e.message);
       }
       if (razonamientoPrevio) {
-        systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por ${configModelo.modeloTextoRazonamiento}, no lo repitas, usalo como guia]:\n${razonamientoPrevio}`;
+        systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por ${configModelo.modeloOpenRouterRazonamiento || configModelo.modeloOpenRouter}, no lo repitas, usalo como guia]:\n${razonamientoPrevio}`;
       }
     }
 
@@ -2786,19 +2751,19 @@ Sea conciso. Máximo 5 pasos.`;
       }
 
       if (!planAccion) {
-        const respPlan = await llamarGroqConReintentos({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'openai/gpt-oss-20b',
-            messages: [{ role: 'system', content: planSystemPrompt }, ...planMessages],
-            temperature: 0.3, max_tokens: 300, stream: false,
-          }),
-        }, () => {});
-        if (respPlan && respPlan.ok) {
-          const dataPlan = await respPlan.json();
-          planAccion = stripThinkTags((dataPlan.choices?.[0]?.message?.content) || '');
+        // Groq eliminado — intentar g4f como fallback para el plan
+        if (GPT4FREE_ENABLED) {
+          const resultadoGlmPlan = await llamarGlm4Bridge(planMessages, planSystemPrompt);
+          if (resultadoGlmPlan.ok) {
+            planAccion = stripThinkTags(resultadoGlmPlan.texto);
+          }
         }
+      }
+
+      // Si ni OpenRouter ni g4f pudieron generar el plan, seguir sin plan
+      // (no es bloqueante, el codigo se genera igual)
+      if (!planAccion) {
+        console.warn('[verbocode] Plan fallo: OpenRouter y g4f no respondieron. Continuando sin plan.');
       }
 
       // ENVIAR PLAN INMEDIATAMENTE al cliente
@@ -2833,12 +2798,12 @@ Sea conciso. Máximo 5 pasos.`;
         }
       }
       if (!textoRespuesta) {
-        console.warn(`[verbocode] OpenRouter fallo para ${modeloPedido}, fallback a g4f/Groq.`);
+        console.warn(`[verbocode] OpenRouter fallo para ${modeloPedido}, fallback a g4f.`);
       }
     }
 
-    // 2. Fallback a g4f para NewserPro y NewserAdmin
-    if (!textoRespuesta && GPT4FREE_ENABLED && GPT4FREE_URL && (modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin')) {
+    // 2. Fallback a g4f para TODOS los modelos (Groq eliminado)
+    if (!textoRespuesta && GPT4FREE_ENABLED && GPT4FREE_URL) {
       const resultadoGlm = await llamarGlm4Bridge(chatHistorial.slice(-5), systemPrompt);
       if (resultadoGlm.ok) {
         textoRespuesta = stripThinkTags(resultadoGlm.texto);
@@ -2846,67 +2811,22 @@ Sea conciso. Máximo 5 pasos.`;
       }
     }
 
-    // 2. Fallback a Groq — probar varios modelos en orden hasta que uno responda
+    // 3. Fallback OpenRouter con otro modelo free (NO Groq)
+    if (!textoRespuesta && OPENROUTER_FREE_ENABLED) {
+      const resultadoOR2 = await llamarOpenRouterFree(chatHistorial.slice(-5), systemPrompt, PRO_FALLBACK_OPENROUTER);
+      if (resultadoOR2.ok) {
+        textoRespuesta = stripThinkTags(resultadoOR2.texto);
+        modeloUsado = resultadoOR2.modelo;
+      }
+    }
+
+    // Si todos los proveedores gratis fallaron, devolver error.
+    // Groq fue eliminado definitivamente como fallback.
     if (!textoRespuesta) {
-      // Lista de modelos a probar en orden: el configurado primero,
-      // luego fallbacks seguros que sabemos que funcionan en Groq.
-      const modelosGroq = [
-        configModelo.modeloTexto,           // gpt-oss-120b o qwen3-32b (lo configurado)
-        'qwen3-32b',                    // siempre funciona
-        'openai/gpt-oss-20b',                // el de NewserLite, siempre funciona
-        'llama-3.3-70b-versatile',           // otro fallback más
-      ].filter((v, i, a) => v && a.indexOf(v) === i); // sin duplicados
-
-      let ultimoError = '';
-      for (const modeloGroq of modelosGroq) {
-        try {
-          console.log(`[verbocode] Probando modelo: ${modeloGroq}`);
-          const respuestaGroq = await llamarGroqConReintentos({
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: modeloGroq,
-              messages: [
-                { role: 'system', content: systemPrompt },
-                ...chatHistorial,
-              ],
-              temperature: 0.7,
-              max_tokens: 16384,
-              stream: false,
-            }),
-          }, () => {});
-
-          if (respuestaGroq && respuestaGroq.ok) {
-            const data = await respuestaGroq.json();
-            const content = data.choices?.[0]?.message?.content || '';
-            if (content.trim()) {
-              textoRespuesta = stripThinkTags(content);
-              modeloUsado = modeloGroq;
-              console.log(`[verbocode] OK con modelo: ${modeloGroq}`);
-              break;
-            } else {
-              ultimoError = `${modeloGroq}: respuesta vacía`;
-              console.warn(`[verbocode] ${ultimoError}`);
-            }
-          } else {
-            const status = respuestaGroq ? respuestaGroq.status : 0;
-            ultimoError = `${modeloGroq}: HTTP ${status}`;
-            console.warn(`[verbocode] ${ultimoError}`);
-            // Si es 401 o 403, probablemente la API key no tiene acceso a ese modelo
-            // pero igual probamos el siguiente
-          }
-        } catch (e) {
-          ultimoError = `${modeloGroq}: ${e.message}`;
-          console.warn(`[verbocode] modelo ${modeloGroq} fallo: ${e.message}`);
-        }
-      }
-
-      if (!textoRespuesta) {
-        console.error(`[verbocode] TODOS los modelos fallaron. Último error: ${ultimoError}`);
-        return res.status(502).json({
-          error: `No se pudo conectar con ningún modelo (último error: ${ultimoError}). Verificá tu GROQ_API_KEY en Render.`,
-        });
-      }
+      console.error(`[verbocode] TODOS los proveedores gratis (OpenRouter + g4f) fallaron para ${modeloPedido}.`);
+      return res.status(502).json({
+        error: 'No se pudo conectar con ningun modelo gratuito (OpenRouter Free + g4f). Intenta de nuevo en unos minutos. Si el problema persiste, puede que el rate limit diario este agotado.',
+      });
     }
 
     // Mapear nombres técnicos a nombres amigables para mostrar al usuario.
@@ -3672,38 +3592,26 @@ async function sintetizarInvestigacion(query, wiki, versiculos, webResultados, m
     if (!contexto.trim()) return null;
 
     const esProfunda = !!webResultados;
-    const resp = await llamarGroqConReintentos({
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: modeloOverride || GROQ_MODEL_TEXTO,
-        messages: [
-          {
-            role: 'system',
-            content: esProfunda
-              ? 'Haces investigacion profunda y real, de forma clara y en espanol natural. ' +
-                'Usa UNICAMENTE la informacion entregada en el mensaje del usuario (Wikipedia, texto biblico y ' +
-                'resultados web reales), nunca agregues datos, fechas ni afirmaciones que no esten ahi. ' +
-                'Cruza y compara las distintas fuentes cuando aporte valor, se mas extenso que un resumen ' +
-                'comun (hasta 8 frases), y menciona brevemente de donde salio cada dato, sin sonar tecnico ' +
-                'ni mencionar APIs.'
-              : 'Resumes investigacion biblica real de forma breve, calida y en espanol natural. ' +
-                'Usa UNICAMENTE la informacion entregada en el mensaje del usuario, nunca agregues datos, ' +
-                'fechas ni afirmaciones que no esten ahi. Maximo 4 frases. Menciona brevemente de donde salio ' +
-                '(Wikipedia o el texto biblico), sin sonar tecnico ni mencionar APIs.',
-          },
-          { role: 'user', content: `Tema investigado: "${query}"\n\n${contexto}\n\nEscribe el resumen.` },
-        ],
-        temperature: 0.5,
-        max_tokens: esProfunda ? 600 : 300,
-        stream: false,
-      }),
-    }, () => {});
-
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const texto = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-    return texto ? texto.trim() : null;
+    // Groq eliminado — usar OpenRouter Free para sintetizar
+    if (!OPENROUTER_FREE_ENABLED) return null;
+    const modeloSint = modeloOverride && modeloOverride.includes(':free') ? modeloOverride : 'openai/gpt-oss-20b:free';
+    const resultadoSint = await llamarOpenRouterFree(
+      [{ role: 'user', content: `Tema investigado: "${query}"\n\n${contexto}\n\nEscribe el resumen.` }],
+      esProfunda
+        ? 'Haces investigacion profunda y real, de forma clara y en espanol natural. ' +
+          'Usa UNICAMENTE la informacion entregada en el mensaje del usuario (Wikipedia, texto biblico y ' +
+          'resultados web reales), nunca agregues datos, fechas ni afirmaciones que no esten ahi. ' +
+          'Cruza y compara las distintas fuentes cuando aporte valor, se mas extenso que un resumen ' +
+          'comun (hasta 8 frases), y menciona brevemente de donde salio cada dato, sin sonar tecnico ' +
+          'ni mencionar APIs.'
+        : 'Resumes investigacion biblica real de forma breve, calida y en espanol natural. ' +
+          'Usa UNICAMENTE la informacion entregada en el mensaje del usuario, nunca agregues datos, ' +
+          'fechas ni afirmaciones que no esten ahi. Maximo 4 frases. Menciona brevemente de donde salio ' +
+          '(Wikipedia o el texto biblico), sin sonar tecnico ni mencionar APIs.',
+      modeloSint
+    );
+    if (!resultadoSint.ok) return null;
+    return resultadoSint.texto.trim();
   } catch (e) {
     console.error('Error sintetizando investigacion:', e.message);
     return null;
@@ -4578,34 +4486,25 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       systemPrompt += `\n\nNOTA SOBRE IMAGENES ADJUNTAS: el usuario adjunto ${imagenes.length > 1 ? 'imagenes' : 'una imagen'} en este mensaje. Antes de responder, analizala con maxima atencion y en detalle: fijate bien en TODOS los elementos visibles (texto, numeros, colores, personas, objetos, disposicion, errores, codigo, capturas de pantalla, etc.), no te quedes con una descripcion superficial ni generica. Si el usuario pide una tarea concreta sobre la imagen (resolver algo, identificar un error, transcribir texto, explicar un codigo, comparar cosas, etc.), primero examina la imagen a fondo y recien despues cumplí exactamente lo que se te pide, basandote solo en lo que realmente se ve, sin inventar ni asumir detalles que no esten claramente visibles.`;
     }
 
-    if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') && configModelo.modeloTextoRazonamiento && !imagenes.length) {
-      enviar({ type: 'investigando', query: 'Razonando con Qwen3-32B...' });
-      enviar({ type: 'investigando_sitio', sitio: 'Modulo de razonamiento (Qwen3-32B)' });
+    if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') && OPENROUTER_FREE_ENABLED && !imagenes.length) {
+      enviar({ type: 'investigando', query: 'Razonando con OpenRouter...' });
+      enviar({ type: 'investigando_sitio', sitio: 'Modulo de razonamiento (OpenRouter Free)' });
       try {
-        const respRaz = await llamarGroqConReintentos({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: configModelo.modeloTextoRazonamiento,
-            messages: [
-              { role: 'system', content: 'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta: web, code, apidata, cuaderno biblico, imagenes, investigar; y un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo (GPT-OSS-120B) va a usar despues para redactar la respuesta final. Se breve y concreto (maximo 120 palabras).' },
-              { role: 'user', content: mensajeParaModelo || 'Describe estas imagenes.' },
-            ],
-            temperature: 0.4,
-            max_tokens: 400,
-            stream: false,
-          }),
-          signal: controladorGroq.signal,
-        }, () => {});
-        if (respRaz && respRaz.ok) {
-          const dataRaz = await respRaz.json();
-          const razonamientoPrevio = stripThinkTags((dataRaz.choices && dataRaz.choices[0] && dataRaz.choices[0].message && dataRaz.choices[0].message.content) || '');
+        const modeloRazOR = configModelo.modeloOpenRouterRazonamiento || configModelo.modeloOpenRouter || 'qwen/qwen3-next-80b-a3b-instruct:free';
+        const resultadoRaz = await llamarOpenRouterFree(
+          [{ role: 'user', content: mensajeParaModelo || 'Describe estas imagenes.' }],
+          'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta: web, code, apidata, cuaderno biblico, imagenes, investigar; y un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo va a usar despues para redactar la respuesta final. Se breve y concreto (maximo 120 palabras).',
+          modeloRazOR,
+          { signal: controladorGroq.signal }
+        );
+        if (resultadoRaz.ok) {
+          const razonamientoPrevio = stripThinkTags(resultadoRaz.texto);
           if (razonamientoPrevio) {
-            systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por Qwen3-32B, no lo repitas literalmente ni lo menciones al usuario, usalo solo como guia para pensar mejor tu respuesta final]:\n${razonamientoPrevio}`;
+            systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO, no lo repitas literalmente ni lo menciones al usuario, usalo solo como guia para pensar mejor tu respuesta final]:\n${razonamientoPrevio}`;
           }
         }
       } catch (e) {
-        console.error('[chat] fallo el paso de razonamiento con Qwen3-32B:', e.message);
+        console.error('[chat] fallo el paso de razonamiento con OpenRouter:', e.message);
       }
       enviar({ type: 'investigando_fin' });
     }
@@ -4619,12 +4518,12 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     ];
 
     // ============================================================
-    // CHAT WEB STREAMING (/api/chat) — OpenRouter primero, Groq fallback
+    // CHAT WEB STREAMING (/api/chat) — OpenRouter Free + g4f (sin Groq)
     // ============================================================
-    // Usa OpenRouter igual que Verbo Code. Si hay rate limit (429), cae a Groq.
-    // NewserAdmin NO está disponible aquí (solo en Verbo Code).
+    // Usa OpenRouter igual que Verbo Code. Si hay rate limit (429), cae a g4f.
+    // Si ambos fallan, devuelve error. NUNCA usa Groq.
     let glmTextoPreGenerado = null;
-    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && !imagenes.length && configModelo.nombre !== 'NewserAdmin') {
+    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && !imagenes.length) {
       enviar({ type: 'investigando', query: `Procesando con ${configModelo.nombre}...` });
       enviar({ type: 'investigando_sitio', sitio: `OpenRouter Free` });
 
@@ -4650,12 +4549,12 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
       enviar({ type: 'investigando_fin' });
       if (!glmTextoPreGenerado) {
-        console.warn(`[chat] OpenRouter fallo para ${configModelo.nombre}${rateLimited ? ' (rate limit)' : ''}, fallback a g4f/Groq.`);
+        console.warn(`[chat] OpenRouter fallo para ${configModelo.nombre}${rateLimited ? ' (rate limit)' : ''}, fallback a g4f.`);
       }
     }
 
-    // CAPA G4F — solo para NewserPro y NewserAdmin
-    if (!glmTextoPreGenerado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED && !imagenes.length) {
+    // CAPA G4F — fallback para todos los modelos (Groq eliminado)
+    if (!glmTextoPreGenerado && GPT4FREE_ENABLED && !imagenes.length) {
       const mensajesParaGlm = [
         ...construirHistorialParaModelo(historial),
         { role: 'user', content: contenidoUsuario },
@@ -4666,8 +4565,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
     }
 
-    // Fallback OpenRouter para NewserPro y NewserAdmin (NO Groq)
-    if (!glmTextoPreGenerado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && OPENROUTER_FREE_ENABLED && !imagenes.length) {
+    // Fallback OpenRouter con otro modelo free (NO Groq)
+    if (!glmTextoPreGenerado && OPENROUTER_FREE_ENABLED && !imagenes.length) {
       const mensajesParaOR = [
         ...construirHistorialParaModelo(historial),
         { role: 'user', content: contenidoUsuario },
@@ -4685,35 +4584,37 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let emitido = 0;
 
     if (!glmTextoPreGenerado) {
-      // Flujo normal: streaming con Groq (GPT-OSS-120B o Llama 4 Scout si hay imagenes)
-      const respuestaGroq = await llamarGroqConReintentos({
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: modeloElegido,
-          messages: mensajesParaModelo,
-          temperature: 0.7,
-          max_tokens: configModelo.maxTokens,
-          stream: true,
-        }),
-        signal: controladorGroq.signal,
-      }, enviar);
-
-      if (!respuestaGroq || !respuestaGroq.ok || !respuestaGroq.body) {
-        const status = respuestaGroq ? respuestaGroq.status : 0;
-
-        try {
-          const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
-          console.error(`[chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
-        } catch (e) {  }
-        enviar({ type: 'error', message: mensajeErrorAmigableIA(status) });
+      // ============================================================
+      // Groq ELIMINADO — si llegamos aca, todos los proveedores gratis
+      // (OpenRouter + g4f) fallaron. No intentamos Groq nunca mas.
+      // ============================================================
+      // Excepcion: si hay imagenes, OpenRouter no se usa (no soporta vision
+      // en tier free) y g4f tampoco. En ese caso SI necesitamos un proveedor
+      // de vision. Usamos OpenRouter con un modelo de vision free si existe,
+      // o devolvemos error.
+      if (imagenes.length) {
+        // Intentar OpenRouter con modelo de vision free
+        const modeloVisionOR = configModelo.modeloOpenRouterVision || 'nvidia/nemotron-nano-12b-v2-vl:free';
+        const mensajesVision = [
+          ...construirHistorialParaModelo(historial),
+          { role: 'user', content: [
+            { type: 'text', text: contenidoUsuario },
+            ...imagenes.map((img) => ({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.base64}` } })),
+          ]},
+        ];
+        const resultadoVision = await llamarOpenRouterFree(mensajesVision, systemPrompt, modeloVisionOR, { signal: controladorGroq.signal });
+        if (resultadoVision.ok && !clienteDesconectado) {
+          glmTextoPreGenerado = stripThinkTags(resultadoVision.texto);
+        }
+      }
+      if (!glmTextoPreGenerado) {
+        console.error(`[chat] Todos los proveedores gratis (OpenRouter + g4f) fallaron para ${configModelo.nombre}.`);
+        enviar({ type: 'error', message: 'No se pudo conectar con ningun modelo gratuito (OpenRouter Free + g4f). Intenta de nuevo en unos minutos. Si el problema persiste, puede que el rate limit diario este agotado.' });
         return res.end();
       }
-
-      reader = respuestaGroq.body.getReader();
-      decoder = new TextDecoder();
+      // GLM-4 / vision respondio: emitir como stream simulado
+      await emitirTextoComoStream(glmTextoPreGenerado, enviar, controladorGroq.signal);
+      if (clienteDesconectado) return res.end();
     } else {
       // GLM-4 respondio: emitir el texto como stream simulado para mantener
       // la UX de "maquina de escribir". El parseo de etiquetas [[WEB::]],
