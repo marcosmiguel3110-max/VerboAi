@@ -4768,19 +4768,20 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
     }
 
-    // CAPA 2: g4f GLM-4 (puente opcional)
+    // CAPA 2: g4f GLM-4 (puente opcional) — sin signal del AbortController de Groq
+    // porque si Groq fue cancelado, no queremos cancelar tambien los fallbacks.
     if (!glmTextoPreGenerado && GPT4FREE_ENABLED && !imagenes.length) {
       const mensajesParaGlm = [
         ...construirHistorialParaModelo(historial),
         { role: 'user', content: contenidoUsuario },
       ];
-      const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt, { signal: controladorGroq.signal });
+      const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt);
       if (resultadoGlm.ok && !clienteDesconectado) {
         glmTextoPreGenerado = stripThinkTags(resultadoGlm.texto);
       }
     }
 
-    // CAPA 3: Pollinations texto (UNLIMITED sin auth, ultimo recurso)
+    // CAPA 3: Pollinations texto (UNLIMITED sin auth, ultimo recurso) — sin signal
     if (!glmTextoPreGenerado && POLLINATIONS_TEXT_ENABLED && !imagenes.length) {
       enviar({ type: 'investigando', query: `Procesando con ${configModelo.nombre} (unlimited)...` });
       enviar({ type: 'investigando_sitio', sitio: `Pollinations (unlimited)` });
@@ -4789,12 +4790,13 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         { role: 'user', content: contenidoUsuario },
       ];
       const resultadoPoll = await llamarPollinationsTexto(mensajesParaPoll, systemPrompt, {
-        signal: controladorGroq.signal,
         maxTokens: configModelo.maxTokens,
       });
       enviar({ type: 'investigando_fin' });
       if (resultadoPoll.ok && !clienteDesconectado) {
         glmTextoPreGenerado = stripThinkTags(resultadoPoll.texto);
+      } else if (!clienteDesconectado) {
+        console.error(`[chat] Pollinations TAMBIEN fallo: ${resultadoPoll.error}`);
       }
     }
 
