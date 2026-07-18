@@ -329,7 +329,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     model: model,
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
     temperature: 0.7,
-    max_tokens: 4096,
+    max_tokens: 8192,
     stream: false,
   };
 
@@ -2573,17 +2573,19 @@ REGLAS CRÍTICAS:
 
 2. SEPARACIÓN DE ARCHIVOS: Siempre separá HTML, CSS y JS en archivos distintos. NUNCA pongas todo en un solo archivo.
 
-3. NPM PACKAGES: Cuando necesites una librería externa:
+3. CÓDIGO COMPLETO: NUNCA cortes un archivo. Si el archivo es largo (500+ líneas), mandalo COMPLETO igual. No uses "..." ni "// resto del código". El usuario necesita el archivo entero para que funcione.
+
+4. NPM PACKAGES: Cuando necesites una librería externa:
    - Usá [[NPM_INSTALL::paquete]] para instalarla
    - En el HTML, cargala desde CDN: <script type="module">import React from 'https://esm.sh/react'</script>
    - O usá <script src="https://esm.sh/paquete"></script> para librerías que se auto-ejecutan
    - NUNCA uses require() en código de navegador, siempre usá import con CDN
 
-4. TESTING: Cuando el usuario pida probar código, usá [[TEST::lenguaje::codigo]]. Esto ejecuta el código real y muestra el output.
+5. TESTING: Cuando el usuario pida probar código, usá [[TEST::lenguaje::codigo]]. Esto ejecuta el código real y muestra el output.
 
-5. El contenido del archivo va DESPUÉS de :: sin comillas, sin markdown, código plano.
+6. El contenido del archivo va DESPUÉS de :: sin comillas, sin markdown, código plano.
 
-6. Para Minecraft: Bedrock crea manifest.json (format_version: 2), Java crea pack.mcmeta o fabric.mod.json.
+7. Para Minecraft: Bedrock crea manifest.json (format_version: 2), Java crea pack.mcmeta o fabric.mod.json.
 
 Archivos actuales:
 ${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => `- ${n}`).join('\n') : '(vacío)'}
@@ -2705,7 +2707,7 @@ Proyecto: ${proyecto.nombre}`;
                 ...chatHistorial,
               ],
               temperature: 0.7,
-              max_tokens: configModelo.maxTokens || 3072,
+              max_tokens: 8192,
               stream: false,
             }),
           }, () => {});
