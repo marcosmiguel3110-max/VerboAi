@@ -103,6 +103,8 @@ const MODELOS_DISPONIBLES = {
     descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.',
     modeloTexto: GROQ_MODEL_TEXTO,
     modeloVision: GROQ_MODEL_VISION,
+    modeloOpenRouter: 'openai/gpt-oss-20b:free',
+    modeloOpenRouterVision: 'nvidia/nemotron-nano-12b-v2-vl:free',
     costoCreditos: 1,
     rateLimitMax: 20,
     rateLimitMaxWeb: 30,
@@ -115,6 +117,8 @@ const MODELOS_DISPONIBLES = {
     descripcion: 'Mas potente. Razonamiento profundo. Genera imagenes, busca en la web y consulta el clima.',
     modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
     modeloVision: GROQ_MODEL_VISION,
+    modeloOpenRouter: 'meta-llama/llama-3.3-70b-instruct:free',
+    modeloOpenRouterVision: 'google/gemma-4-26b-a4b-it:free',
     costoCreditos: 5,
     rateLimitMax: 5,
     rateLimitMaxWeb: 8,
@@ -128,6 +132,9 @@ const MODELOS_DISPONIBLES = {
     modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
     modeloTextoRazonamiento: process.env.GROQ_MODEL_QWEN || 'qwen/qwen3-32b',
     modeloVision: GROQ_MODEL_VISION,
+    modeloOpenRouter: 'nvidia/nemotron-3-super-120b-a12b:free',
+    modeloOpenRouterRazonamiento: 'qwen/qwen3-next-80b-a3b-instruct:free',
+    modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
     costoCreditos: 10,
     rateLimitMax: 3,
     rateLimitMaxWeb: 4,
@@ -141,6 +148,8 @@ const MODELOS_DISPONIBLES = {
     modeloTexto: GROQ_MODEL_PRO_TEXTO,
     modeloTextoRazonamiento: GROQ_MODEL_PRO_RAZONAMIENTO,
     modeloVision: GROQ_MODEL_VISION,
+    modeloOpenRouter: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    modeloOpenRouterVision: 'nvidia/nemotron-nano-12b-v2-vl:free',
     costoCreditos: 0,
     rateLimitMax: 5,
     rateLimitMaxWeb: 6,
@@ -159,6 +168,8 @@ const MODELOS_DISPONIBLES = {
     modeloTexto: GROQ_MODEL_PRO_TEXTO,
     modeloTextoRazonamiento: GROQ_MODEL_PRO_RAZONAMIENTO,
     modeloVision: GROQ_MODEL_VISION,
+    modeloOpenRouter: 'qwen/qwen3-coder:free',
+    modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
     costoCreditos: 0,
     rateLimitMax: 10,
     rateLimitMaxWeb: 15,
@@ -166,8 +177,6 @@ const MODELOS_DISPONIBLES = {
     badge: 'admin',
     disponible: true,
     soloAdmin: true,
-    modeloOpenRouter: 'qwen/qwen3-coder:free',
-    modeloG4F: 'qwen-3-coder-480b-a35b',
     imagenModelo: POLLINATIONS_PRO_MODEL,
     imagenAncho: POLLINATIONS_PRO_WIDTH,
     imagenAlto: POLLINATIONS_PRO_HEIGHT,
@@ -329,7 +338,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     model: model,
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
     temperature: 0.7,
-    max_tokens: 16384,
+    max_tokens: 4096,
     stream: false,
   };
 
@@ -1806,23 +1815,22 @@ app.post('/api/v1/chat', async (req, res) => {
 
   try {
     // ============================================================
-    // CAPA OPENROUTER FREE — NewserAdmin (Qwen3-Coder-480B)
+    // CAPA OPENROUTER FREE — TODOS los modelos usan OpenRouter primero
     // ============================================================
-    // Si el modelo es NewserAdmin y OpenRouter está habilitado, probamos
-    // primero Qwen3-Coder-480B. Si tiene rate limit, probamos Nemotron-550B,
-    // Llama-3.3-70B, etc. Si todos fallan, cae a g4f/Groq.
+    // Cada modelo tiene su propio modeloOpenRouter configurado.
+    // Si OpenRouter falla, cae a g4f (NewserPro/Admin) o Groq (resto).
     let texto = '';
     let modeloUsadoReal = configModelo.modeloTexto;
     let glmUsado = false;
 
-    if (configModelo.nombre === 'NewserAdmin' && configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
+    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
       const mensajesParaOR = mensajesParaModelo.filter((m) => m.role !== 'system');
+      // Cascada: modelo principal + fallbacks
       const modelosOR = [
-        configModelo.modeloOpenRouter,                    // qwen/qwen3-coder:free
-        'nvidia/nemotron-3-ultra-550b-a55b:free',        // Nemotron 550B
-        'nvidia/nemotron-3-super-120b-a12b:free',        // Nemotron 120B
-        'meta-llama/llama-3.3-70b-instruct:free',        // Llama 3.3 70B
-        'openai/gpt-oss-20b:free',                        // GPT-OSS 20B
+        configModelo.modeloOpenRouter,
+        'nvidia/nemotron-3-ultra-550b-a55b:free',
+        'meta-llama/llama-3.3-70b-instruct:free',
+        'openai/gpt-oss-20b:free',
       ].filter((v, i, a) => v && a.indexOf(v) === i);
 
       for (const modeloOR of modelosOR) {
@@ -1835,27 +1843,14 @@ app.post('/api/v1/chat', async (req, res) => {
         }
       }
       if (!glmUsado) {
-        console.warn(`[api/v1/chat] Todos los OpenRouter free fallaron para NewserAdmin, fallback a g4f/Groq.`);
+        console.warn(`[api/v1/chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f/Groq.`);
       }
     }
 
     // ============================================================
-    // CAPA GLM-4 (GPT4Free) — opcional, solo NewserPro
+    // CAPA G4F — fallback para NewserPro y NewserAdmin
     // ============================================================
-    if (!glmUsado && configModelo.nombre === 'NewserPro' && GPT4FREE_ENABLED) {
-      const mensajesParaGlm = mensajesParaModelo.filter((m) => m.role !== 'system');
-      const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt);
-      if (resultadoGlm.ok) {
-        texto = stripThinkTags(resultadoGlm.texto);
-        modeloUsadoReal = resultadoGlm.modelo;
-        glmUsado = true;
-      } else {
-        console.warn(`[api/v1/chat] GLM-4 fallo (${resultadoGlm.error}), fallback a ${configModelo.modeloTexto}.`);
-      }
-    }
-
-    // También NewserAdmin puede usar g4f como fallback
-    if (!glmUsado && configModelo.nombre === 'NewserAdmin' && GPT4FREE_ENABLED) {
+    if (!glmUsado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED) {
       const mensajesParaGlm = mensajesParaModelo.filter((m) => m.role !== 'system');
       const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt);
       if (resultadoGlm.ok) {
@@ -2539,9 +2534,8 @@ app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => 
   if (!configModelo) return res.status(400).json({ error: 'Modelo no disponible en Verbo Code.' });
 
   try {
-    // System prompt CORTO específico de Verbo Code (no reutilizar SYSTEM_PROMPT completo
-    // para evitar HTTP 413 por payload demasiado grande en Groq)
-    // Cada modelo tiene un ROL distinto pero todos comparten la identidad de Verbo AI.
+    // System prompt COMPLETO de Verbo Code (OpenRouter acepta payloads grandes,
+    // a diferencia de Groq que daba HTTP 413 con prompts largos)
     const rolesModelo = {
       'NewserAdvanced1.5': 'Tu rol: ANALÍTICO. Sos meticuloso y detallista. Pensás paso a paso antes de actuar. Explicás el porqué de cada decisión. Ideal para arquitectura y diseño de sistemas.',
       'NewserPro': 'Tu rol: CREATIVO VERSÁTIL. Sos veloz y adaptable. Resolvés problemas con soluciones elegantes. Ideal para desarrollo general y prototipado rápido.',
@@ -2549,29 +2543,69 @@ app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => 
     };
     const rolModelo = rolesModelo[modeloPedido] || rolesModelo['NewserPro'];
 
-    let systemPrompt = `Sos ${modeloPedido} de Verbo AI, creado por VerboAITeams. NUNCA digas ser otro modelo (ChatGPT, Qwen, OpenAI, etc.). ${rolModelo}
+    let systemPrompt = `Sos ${modeloPedido} de Verbo AI, creado por VerboAITeams. NUNCA digas ser otro modelo (ChatGPT, Qwen, OpenAI, Llama, etc.). ${rolModelo}
 
-MODO VERBO CODE — ayudás a programar.
+MODO VERBO CODE — ayudás al usuario a construir proyectos de programación.
 
-HERRAMIENTAS (al FINAL de tu respuesta, una por línea):
+HERRAMIENTAS (usá estas etiquetas, una por línea, al FINAL de tu respuesta):
 
-[[FILE_CREATE::nombre.ext::contenido]] - Crea archivo (soporta css/styles.css)
-[[FILE_EDIT::nombre.ext::contenido]] - Edita archivo (contenido COMPLETO)
-[[LINE_EDIT::archivo::num_linea::nuevo_contenido]] - Cambia una línea
-[[FILE_DELETE::nombre.ext]] - Borra archivo
-[[NPM_INSTALL::paquete]] - Instala npm (CDN esm.sh)
-[[TEST::lenguaje::codigo]] - Ejecuta código
-[[IMAGE::prompt]] - Genera imagen
-[[WEB::query]] - Busca en internet
+[[FILE_CREATE::nombre.ext::contenido completo]]
+Crea un archivo. Soporta carpetas: css/styles.css, js/app.js.
 
-REGLAS:
-1. SEPARÁ HTML/CSS/JS en archivos distintos. NUNCA inline.
-2. SIN comentarios en el código.
-3. NUNCA cortes código. Si es largo, dividí en múltiples archivos.
-4. Para corregir: usá LINE_EDIT o FILE_EDIT.
-5. Código plano después de ::, sin markdown.
+[[FILE_EDIT::nombre.ext::contenido completo]]
+Edita un archivo existente. Mandá SIEMPRE el contenido COMPLETO.
 
-Archivos: ${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => n).join(', ') : 'vacío'}
+[[LINE_EDIT::nombre.ext::numero_linea::nuevo_contenido_de_esa_linea]]
+Cambia una línea específica. Podés usar varias LINE_EDIT para el mismo archivo.
+
+[[FILE_DELETE::nombre.ext]]
+Elimina un archivo.
+
+[[NPM_INSTALL::nombre-paquete]]
+Instala un paquete npm. Crea/actualiza package.json. Se carga desde esm.sh CDN.
+
+[[TEST::lenguaje::codigo a ejecutar]]
+Ejecuta código y muestra el resultado. Lenguajes: python, javascript, java, c, cpp, go, rust, ruby, php, bash, sql.
+
+[[IMAGE::prompt en inglés]]
+Genera una imagen.
+
+[[WEB::consulta corta]]
+Busca en internet.
+
+REGLAS CRÍTICAS:
+
+1. SEPARACIÓN OBLIGATORIA: NUNCA pongas CSS o JS dentro del HTML. SIEMPRE separá:
+   - index.html (solo estructura HTML, sin style ni script inline)
+   - styles.css (todos los estilos)
+   - script.js (toda la lógica)
+   - Para CSS largo, separá en: reset.css, layout.css, components.css, etc.
+   - Para JS largo, separá en: app.js, charts.js, utils.js, etc.
+   - Si el CSS o JS es muy largo (>200 líneas), DIVIDILO en múltiples archivos.
+
+2. CÓDIGO LIMPIO: NUNCA agregues comentarios. Sin // ni /* */ ni # ni <!-- -->.
+
+3. CÓDIGO COMPLETO: NUNCA cortes un archivo. Mandalo COMPLETO. Si es muy largo, dividilo en múltiples archivos más chicos.
+
+4. CORRECCIÓN DE CÓDIGO: Cuando el usuario te pida corregir, arreglar o debuggear:
+   - Analizá el código línea por línea
+   - Identificá los errores
+   - Usá FILE_EDIT o LINE_EDIT
+   - Explicá qué cambiaste y por qué
+
+5. REFACTORIZACIÓN: Mejorá la estructura sin cambiar funcionalidad. Separá funciones largas.
+
+6. ANÁLISIS DE CÓDIGO: Leé todos los archivos, identificá bugs, performance, código duplicado. Sugerí mejoras concretas.
+
+7. NPM PACKAGES: Usá [[NPM_INSTALL::paquete]] y cargá desde https://esm.sh/paquete en el HTML.
+
+8. El contenido del archivo va DESPUÉS de :: sin comillas, sin markdown, código plano.
+
+9. Para Minecraft: Bedrock crea manifest.json (format_version: 2), Java crea pack.mcmeta o fabric.mod.json.
+
+Archivos actuales:
+${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => `- ${n}`).join('\n') : '(vacío)'}
+
 Proyecto: ${proyecto.nombre}`;
 
     // Construir historial del chat (últimos 5 mensajes para no explotar contexto)
@@ -2620,48 +2654,34 @@ Proyecto: ${proyecto.nombre}`;
     let textoRespuesta = '';
     let modeloUsado = configModelo.modeloTexto;
 
-    // 1. Intentar con OpenRouter Free si el modelo tiene modeloOpenRouter configurado
-    //    NewserAdmin usa qwen/qwen3-coder:free (480B parametros, codigo)
-    //    Si Qwen3-Coder tiene rate limit, prueba Nemotron-550B, Llama-3.3-70B, etc.
+    // 1. Intentar con OpenRouter Free — TODOS los modelos lo usan primero
     if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
-      // Cascada de modelos free en OpenRouter (de más potente a menos)
-      const modelosOpenRouter = [
-        configModelo.modeloOpenRouter,                    // qwen/qwen3-coder:free (480B)
-        'nvidia/nemotron-3-ultra-550b-a55b:free',        // Nemotron 550B (siempre anda)
-        'nvidia/nemotron-3-super-120b-a12b:free',        // Nemotron 120B
-        'meta-llama/llama-3.3-70b-instruct:free',        // Llama 3.3 70B
-        'openai/gpt-oss-20b:free',                        // GPT-OSS 20B
+      const modelosOR = [
+        configModelo.modeloOpenRouter,
+        'nvidia/nemotron-3-ultra-550b-a55b:free',
+        'meta-llama/llama-3.3-70b-instruct:free',
+        'openai/gpt-oss-20b:free',
       ].filter((v, i, a) => v && a.indexOf(v) === i);
 
-      for (const modeloOR of modelosOpenRouter) {
-        const resultadoOR = await llamarOpenRouterFree(chatHistorial.slice(-3), systemPrompt, modeloOR);
+      for (const modeloOR of modelosOR) {
+        const resultadoOR = await llamarOpenRouterFree(chatHistorial.slice(-5), systemPrompt, modeloOR);
         if (resultadoOR.ok) {
           textoRespuesta = stripThinkTags(resultadoOR.texto);
           modeloUsado = resultadoOR.modelo;
           break;
-        } else {
-          console.warn(`[verbocode] OpenRouter ${modeloOR} fallo (${resultadoOR.error}), probando siguiente...`);
         }
       }
       if (!textoRespuesta) {
-        console.warn(`[verbocode] Todos los modelos OpenRouter fallaron, fallback a g4f/Groq.`);
+        console.warn(`[verbocode] OpenRouter fallo para ${modeloPedido}, fallback a g4f/Groq.`);
       }
     }
 
-    // 2. Intentar con el puente GPT4Free (g4f) si está habilitado
-    //    NewserAdmin usa qwen-3-coder-480b-a35b, NewserPro usa deepseek-r1
-    if (!textoRespuesta && GPT4FREE_ENABLED && GPT4FREE_URL) {
-      const modeloG4F = configModelo.modeloG4F;
-      const mensajesParaGlm = chatHistorial.slice(-3);
-      const resultadoGlm = (modeloG4F || modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin')
-        ? await llamarGlm4Bridge(mensajesParaGlm, systemPrompt)
-        : { ok: false, error: 'no aplica' };
-
+    // 2. Fallback a g4f para NewserPro y NewserAdmin
+    if (!textoRespuesta && GPT4FREE_ENABLED && GPT4FREE_URL && (modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin')) {
+      const resultadoGlm = await llamarGlm4Bridge(chatHistorial.slice(-5), systemPrompt);
       if (resultadoGlm.ok) {
         textoRespuesta = stripThinkTags(resultadoGlm.texto);
         modeloUsado = resultadoGlm.modelo;
-      } else {
-        console.warn(`[verbocode] GLM-4 fallo (${resultadoGlm.error}), fallback a Groq.`);
       }
     }
 
@@ -2690,7 +2710,7 @@ Proyecto: ${proyecto.nombre}`;
                 ...chatHistorial,
               ],
               temperature: 0.7,
-              max_tokens: 16384,
+              max_tokens: 4096,
               stream: false,
             }),
           }, () => {});
@@ -4392,14 +4412,12 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     ];
 
     // ============================================================
-    // CAPA OPENROUTER FREE — NewserAdmin (Qwen3-Coder-480B)
+    // CAPA OPENROUTER FREE — TODOS los modelos usan OpenRouter primero
     // ============================================================
-    // Si el modelo es NewserAdmin, probamos primero OpenRouter con cascada
-    // de modelos free. Si todos fallan, cae a g4f/Groq.
     let glmTextoPreGenerado = null;
-    if (configModelo.nombre === 'NewserAdmin' && configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && !imagenes.length) {
-      enviar({ type: 'investigando', query: `Procesando con Qwen3-Coder-480B...` });
-      enviar({ type: 'investigando_sitio', sitio: `OpenRouter Free (${configModelo.modeloOpenRouter})` });
+    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && !imagenes.length) {
+      enviar({ type: 'investigando', query: `Procesando con ${configModelo.nombre}...` });
+      enviar({ type: 'investigando_sitio', sitio: `OpenRouter Free` });
 
       const mensajesParaOR = [
         ...construirHistorialParaModelo(historial),
@@ -4408,7 +4426,6 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       const modelosOR = [
         configModelo.modeloOpenRouter,
         'nvidia/nemotron-3-ultra-550b-a55b:free',
-        'nvidia/nemotron-3-super-120b-a12b:free',
         'meta-llama/llama-3.3-70b-instruct:free',
         'openai/gpt-oss-20b:free',
       ].filter((v, i, a) => v && a.indexOf(v) === i);
@@ -4422,33 +4439,14 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
       enviar({ type: 'investigando_fin' });
       if (!glmTextoPreGenerado) {
-        console.warn(`[chat] Todos los OpenRouter free fallaron para NewserAdmin, fallback a g4f/Groq.`);
+        console.warn(`[chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f/Groq.`);
       }
     }
 
     // ============================================================
-    // CAPA GLM-4 (GPT4Free) — opcional, solo NewserPro
+    // CAPA G4F — fallback para NewserPro y NewserAdmin
     // ============================================================
-    if (!glmTextoPreGenerado && configModelo.nombre === 'NewserPro' && GPT4FREE_ENABLED && !imagenes.length) {
-      enviar({ type: 'investigando', query: `Procesando con GLM-4 (${GPT4FREE_MODEL})...` });
-      enviar({ type: 'investigando_sitio', sitio: `puente GPT4Free (${GPT4FREE_MODEL})` });
-
-      const mensajesParaGlm = [
-        ...construirHistorialParaModelo(historial),
-        { role: 'user', content: contenidoUsuario },
-      ];
-      const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt, { signal: controladorGroq.signal });
-      enviar({ type: 'investigando_fin' });
-
-      if (resultadoGlm.ok && !clienteDesconectado) {
-        glmTextoPreGenerado = stripThinkTags(resultadoGlm.texto);
-      } else if (!resultadoGlm.ok && resultadoGlm.error !== 'cancelado') {
-        console.warn(`[chat] GLM-4 fallo (${resultadoGlm.error}), fallback a GPT-OSS-120B streaming.`);
-      }
-    }
-
-    // También NewserAdmin puede usar g4f como fallback
-    if (!glmTextoPreGenerado && configModelo.nombre === 'NewserAdmin' && GPT4FREE_ENABLED && !imagenes.length) {
+    if (!glmTextoPreGenerado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED && !imagenes.length) {
       const mensajesParaGlm = [
         ...construirHistorialParaModelo(historial),
         { role: 'user', content: contenidoUsuario },
