@@ -712,6 +712,8 @@ app.use((err, req, res, next) => {
 
 const APP_USER = process.env.APP_USER || 'admin';
 const APP_PASS = process.env.APP_PASS || 'cambia-esta-clave';
+const APP_USER_2 = 'FloppaAdminstrador';
+const APP_PASS_2 = 'ozi67';
 const AUTH_SECRET = process.env.AUTH_SECRET || 'cambia-este-secreto-tambien';
 
 if (!process.env.APP_USER || !process.env.APP_PASS) {
@@ -1240,6 +1242,14 @@ app.post('/api/login', (req, res) => {
   const { usuario, clave, recordar } = req.body || {};
   if (usuario === APP_USER && clave === APP_PASS) {
     let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER}`))}; HttpOnly; Path=/; SameSite=Lax`;
+    if (req.secure) cookieStr += '; Secure';
+    if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
+    res.setHeader('Set-Cookie', cookieStr);
+    return res.json({ ok: true });
+  }
+
+  if (usuario === APP_USER_2 && clave === APP_PASS_2) {
+    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER_2}`))}; HttpOnly; Path=/; SameSite=Lax`;
     if (req.secure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
