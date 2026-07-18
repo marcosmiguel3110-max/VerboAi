@@ -37,7 +37,7 @@ const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 // NOTA: "Qwen 3.6 27B" no existe en Groq hoy; el modelo Qwen3 mas cercano es qwen3-32b.
 // Si Groq agrega ese modelo (o queres usar otro proveedor), sobrescribilo con GROQ_MODEL_QWEN_PRO.
 const GROQ_MODEL_PRO_TEXTO = process.env.GROQ_MODEL_PRO || process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b';
-const GROQ_MODEL_PRO_RAZONAMIENTO = process.env.GROQ_MODEL_QWEN_PRO || process.env.GROQ_MODEL_QWEN || 'qwen/qwen3-32b';
+const GROQ_MODEL_PRO_RAZONAMIENTO = process.env.GROQ_MODEL_QWEN_PRO || process.env.GROQ_MODEL_QWEN || 'qwen3-32b';
 
 // Config de Pollinations para NewserPro: flux-realism + enhance + 1536x1536
 // (mismo tamaño que NewserAdvanced1.5).
@@ -130,7 +130,7 @@ const MODELOS_DISPONIBLES = {
     nombre: 'NewserAdvanced1.5',
     descripcion: 'El mas potente. Un razonamiento interno previo aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Tambien genera imagenes con mas detalle (2 modelos de IA), maximo 2 por hora. Rate limits mas estrictos.',
     modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
-    modeloTextoRazonamiento: process.env.GROQ_MODEL_QWEN || 'qwen/qwen3-32b',
+    modeloTextoRazonamiento: process.env.GROQ_MODEL_QWEN || 'qwen3-32b',
     modeloVision: GROQ_MODEL_VISION,
     modeloOpenRouter: 'nvidia/nemotron-3-super-120b-a12b:free',
     modeloOpenRouterRazonamiento: 'qwen/qwen3-next-80b-a3b-instruct:free',
@@ -1825,37 +1825,14 @@ app.post('/api/v1/chat', async (req, res) => {
 
   try {
     // ============================================================
-    // CAPA OPENROUTER FREE — TODOS los modelos usan OpenRouter primero
+    // CHAT PRINCIPAL (/api/v1/chat) — USA GROQ PRIMERO
     // ============================================================
-    // Cada modelo tiene su propio modeloOpenRouter configurado.
-    // Si OpenRouter falla, cae a g4f (NewserPro/Admin) o Groq (resto).
+    // El chat principal NO usa OpenRouter (se gasta el rate limit de 50/dia).
+    // OpenRouter se reserva SOLO para Verbo Code.
+    // Groq es más rápido y tiene más rate limit para el chat normal.
     let texto = '';
     let modeloUsadoReal = configModelo.modeloTexto;
     let glmUsado = false;
-
-    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
-      const mensajesParaOR = mensajesParaModelo.filter((m) => m.role !== 'system');
-      // Cascada: modelo principal + fallbacks
-      const modelosOR = [
-        configModelo.modeloOpenRouter,
-        'nvidia/nemotron-3-ultra-550b-a55b:free',
-        'meta-llama/llama-3.3-70b-instruct:free',
-        'openai/gpt-oss-20b:free',
-      ].filter((v, i, a) => v && a.indexOf(v) === i);
-
-      for (const modeloOR of modelosOR) {
-        const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, modeloOR);
-        if (resultadoOR.ok) {
-          texto = stripThinkTags(resultadoOR.texto);
-          modeloUsadoReal = resultadoOR.modelo;
-          glmUsado = true;
-          break;
-        }
-      }
-      if (!glmUsado) {
-        console.warn(`[api/v1/chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f/Groq.`);
-      }
-    }
 
     // ============================================================
     // CAPA G4F — fallback para NewserPro y NewserAdmin
@@ -2832,7 +2809,7 @@ Sea conciso. Máximo 5 pasos.`;
       // luego fallbacks seguros que sabemos que funcionan en Groq.
       const modelosGroq = [
         configModelo.modeloTexto,           // gpt-oss-120b o qwen3-32b (lo configurado)
-        'qwen/qwen3-32b',                    // siempre funciona
+        'qwen3-32b',                    // siempre funciona
         'openai/gpt-oss-20b',                // el de NewserLite, siempre funciona
         'llama-3.3-70b-versatile',           // otro fallback más
       ].filter((v, i, a) => v && a.indexOf(v) === i); // sin duplicados
@@ -4598,41 +4575,14 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     ];
 
     // ============================================================
-    // CAPA OPENROUTER FREE — TODOS los modelos usan OpenRouter primero
+    // CHAT WEB STREAMING (/api/chat) — USA GROQ PRIMERO
     // ============================================================
+    // El chat principal NO usa OpenRouter (se gasta el rate limit de 50/dia).
+    // OpenRouter se reserva SOLO para Verbo Code.
     let glmTextoPreGenerado = null;
-    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && !imagenes.length) {
-      enviar({ type: 'investigando', query: `Procesando con ${configModelo.nombre}...` });
-      enviar({ type: 'investigando_sitio', sitio: `OpenRouter Free` });
 
-      const mensajesParaOR = [
-        ...construirHistorialParaModelo(historial),
-        { role: 'user', content: contenidoUsuario },
-      ];
-      const modelosOR = [
-        configModelo.modeloOpenRouter,
-        'nvidia/nemotron-3-ultra-550b-a55b:free',
-        'meta-llama/llama-3.3-70b-instruct:free',
-        'openai/gpt-oss-20b:free',
-      ].filter((v, i, a) => v && a.indexOf(v) === i);
-
-      for (const modeloOR of modelosOR) {
-        const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, modeloOR, { signal: controladorGroq.signal });
-        if (resultadoOR.ok) {
-          glmTextoPreGenerado = stripThinkTags(resultadoOR.texto);
-          break;
-        }
-      }
-      enviar({ type: 'investigando_fin' });
-      if (!glmTextoPreGenerado) {
-        console.warn(`[chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f/Groq.`);
-      }
-    }
-
-    // ============================================================
-    // CAPA G4F — fallback para NewserPro y NewserAdmin
-    // ============================================================
-    if (!glmTextoPreGenerado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED && !imagenes.length) {
+    // CAPA G4F — solo para NewserPro y NewserAdmin (fallback antes de Groq)
+    if ((configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED && !imagenes.length) {
       const mensajesParaGlm = [
         ...construirHistorialParaModelo(historial),
         { role: 'user', content: contenidoUsuario },
