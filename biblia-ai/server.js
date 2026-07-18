@@ -38,6 +38,9 @@ const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 // Si Groq agrega ese modelo (o queres usar otro proveedor), sobrescribilo con GROQ_MODEL_QWEN_PRO.
 const GROQ_MODEL_PRO_TEXTO = process.env.GROQ_MODEL_PRO || process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b';
 const GROQ_MODEL_PRO_RAZONAMIENTO = process.env.GROQ_MODEL_QWEN_PRO || process.env.GROQ_MODEL_QWEN || 'qwen3-32b';
+// Fallback final para NewserPro y NewserAdmin: usar OpenRouter gpt-oss-20b:free
+// (NO usar Groq porque la API key puede estar bloqueada)
+const PRO_FALLBACK_OPENROUTER = 'openai/gpt-oss-20b:free';
 
 // Config de Pollinations para NewserPro: flux-realism + enhance + 1536x1536
 // (mismo tamaño que NewserAdvanced1.5).
@@ -1873,29 +1876,43 @@ app.post('/api/v1/chat', async (req, res) => {
     }
 
     if (!glmUsado) {
-      const respuestaGroq = await llamarGroqConReintentos({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: configModelo.modeloTexto,
-          messages: mensajesParaModelo,
-          temperature: 0.7,
-          max_tokens: configModelo.maxTokens,
-          stream: false,
-        }),
-      }, () => {});
-
-      if (!respuestaGroq || !respuestaGroq.ok) {
-        const status = respuestaGroq ? respuestaGroq.status : 0;
-        try {
-          const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
-          console.error(`[api/v1/chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
-        } catch (e) {  }
-        return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
+      // Para NewserPro y NewserAdmin: usar OpenRouter como fallback (NO Groq)
+      if ((configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && OPENROUTER_FREE_ENABLED) {
+        const mensajesParaOR = mensajesParaModelo.filter((m) => m.role !== 'system');
+        const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, PRO_FALLBACK_OPENROUTER);
+        if (resultadoOR.ok) {
+          texto = stripThinkTags(resultadoOR.texto);
+          modeloUsadoReal = resultadoOR.modelo;
+          glmUsado = true;
+        }
       }
 
-      const data = await respuestaGroq.json();
-      texto = stripThinkTags((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '');
+      // Si todavía no hay texto, usar Groq (ultimo recurso para modelos no-Pro)
+      if (!glmUsado) {
+        const respuestaGroq = await llamarGroqConReintentos({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: configModelo.modeloTexto,
+            messages: mensajesParaModelo,
+            temperature: 0.7,
+            max_tokens: configModelo.maxTokens,
+            stream: false,
+          }),
+        }, () => {});
+
+        if (!respuestaGroq || !respuestaGroq.ok) {
+          const status = respuestaGroq ? respuestaGroq.status : 0;
+          try {
+            const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
+            console.error(`[api/v1/chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
+          } catch (e) {  }
+          return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
+        }
+
+        const data = await respuestaGroq.json();
+        texto = stripThinkTags((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '');
+      }
     }
 
     let webSearchQueryApi = null;
@@ -4646,6 +4663,18 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt, { signal: controladorGroq.signal });
       if (resultadoGlm.ok && !clienteDesconectado) {
         glmTextoPreGenerado = stripThinkTags(resultadoGlm.texto);
+      }
+    }
+
+    // Fallback OpenRouter para NewserPro y NewserAdmin (NO Groq)
+    if (!glmTextoPreGenerado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && OPENROUTER_FREE_ENABLED && !imagenes.length) {
+      const mensajesParaOR = [
+        ...construirHistorialParaModelo(historial),
+        { role: 'user', content: contenidoUsuario },
+      ];
+      const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, PRO_FALLBACK_OPENROUTER, { signal: controladorGroq.signal });
+      if (resultadoOR.ok && !clienteDesconectado) {
+        glmTextoPreGenerado = stripThinkTags(resultadoOR.texto);
       }
     }
 
