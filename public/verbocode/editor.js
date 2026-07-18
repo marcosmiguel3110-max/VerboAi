@@ -649,9 +649,9 @@ async function enviarChat() {
   scrollChatAbajo();
 
   try {
-    // Timeout del lado del cliente: 90 segundos
+    // Timeout del lado del cliente: 120 segundos (más tiempo para plan + código)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90000);
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     const r = await fetch(`/api/verbocode/chat/${estado.proyectoId}`, {
       method: 'POST',
@@ -665,34 +665,95 @@ async function enviarChat() {
 
     clearTimeout(timeoutId);
 
-    if (thinkingEl.parentNode) thinkingEl.remove();
-
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
       throw new Error(e.error || `Error ${r.status} en la petición`);
     }
 
-    const data = await r.json();
-    // Render respuesta de la IA
-    const msgAssistant = {
-      role: 'assistant',
-      content: data.respuesta,
-      fecha: new Date().toISOString(),
-      modelo: data.modeloUsado || 'VerboAITeams',
-      plan: data.plan || null,
-    };
-    estado.proyecto.chat.push(msgAssistant);
-    renderMensaje(msgAssistant);
+    // Procesar respuesta SSE (streaming)
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let textoRespuesta = '';
+    let planRecibido = null;
+    let modeloRecibido = 'VerboAITeams';
+    let archivosActualizados = null;
+    let proyectoActualizado = false;
+    // Crear elemento del assistant vacío que vamos a ir llenando
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'vc-msg assistant';
+    document.getElementById('vcChatMensajes').appendChild(msgDiv);
+    scrollChatAbajo();
 
-    // Render acciones
-    if (data.acciones && data.acciones.length > 0) {
-      data.acciones.forEach(accion => renderAccion(accion));
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const evt = JSON.parse(line);
+
+          if (evt.type === 'status') {
+            // Actualizar indicador de "pensando"
+            if (thinkingEl) {
+              thinkingEl.innerHTML = `<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> ${evt.text}`;
+            }
+          } else if (evt.type === 'plan') {
+            // Mostrar plan inmediatamente
+            planRecibido = evt.plan;
+            if (thinkingEl) thinkingEl.remove();
+            const planDiv = document.createElement('div');
+            planDiv.className = 'vc-msg-plan';
+            planDiv.innerHTML = '<div class="vc-plan-header"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke-linecap="round" stroke-linejoin="round"/></svg> PLAN DE ACCIÓN</div><pre>' + escapeHtmlPlan(evt.plan) + '</pre>';
+            document.getElementById('vcChatMensajes').appendChild(planDiv);
+            scrollChatAbajo();
+          } else if (evt.type === 'chunk') {
+            // Texto de la respuesta (streaming)
+            textoRespuesta += evt.text;
+            msgDiv.innerHTML = formatearMarkdown(textoRespuesta);
+            scrollChatAbajo();
+          } else if (evt.type === 'action') {
+            // Acción (archivo creado, imagen, etc)
+            renderAccion(evt.accion);
+          } else if (evt.type === 'done') {
+            modeloRecibido = evt.modeloUsado || 'VerboAITeams';
+            proyectoActualizado = evt.proyectoActualizado;
+            archivosActualizados = evt.archivos;
+            if (evt.plan) planRecibido = evt.plan;
+          } else if (evt.type === 'error') {
+            throw new Error(evt.message);
+          }
+        } catch (e) {
+          // ignorar parse errors de líneas parciales
+        }
+      }
     }
 
+    // Agregar meta del modelo al mensaje
+    if (modeloRecibido) {
+      const meta = document.createElement('div');
+      meta.className = 'vc-msg-meta';
+      meta.textContent = '→ ' + modeloRecibido;
+      msgDiv.appendChild(meta);
+    }
+
+    // Guardar en el chat del proyecto
+    const msgAssistant = {
+      role: 'assistant',
+      content: textoRespuesta,
+      fecha: new Date().toISOString(),
+      modelo: modeloRecibido,
+      plan: planRecibido,
+    };
+    estado.proyecto.chat.push(msgAssistant);
+
     // Si la IA modificó archivos, actualizar
-    if (data.proyectoActualizado && data.archivos) {
-      estado.archivos = data.archivos;
-      // Actualizar el editor si el archivo actual fue modificado
+    if (proyectoActualizado && archivosActualizados) {
+      estado.archivos = archivosActualizados;
       if (estado.archivoActual) {
         const nuevoContenido = estado.archivos[estado.archivoActual];
         if (nuevoContenido !== undefined) {
@@ -708,10 +769,9 @@ async function enviarChat() {
       renderArchivos();
     }
 
-    // Guardar chat
     await guardarArchivos();
   } catch (e) {
-    if (thinkingEl.parentNode) thinkingEl.remove();
+    if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
     const errorMsg = e.name === 'AbortError' ? 'Timeout: el servidor tardó demasiado en responder.' : e.message;
     mostrarToast(errorMsg, 'error');
     const msgError = { role: 'assistant', content: 'Error: ' + errorMsg + '\n\nIntentá de nuevo, ya podés escribir.', fecha: new Date().toISOString() };
