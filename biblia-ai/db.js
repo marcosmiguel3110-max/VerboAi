@@ -167,4 +167,20 @@ async function guardarDocumento(id, valor) {
   }
 }
 
-module.exports = { conectarMongo, estaConectado, leerDocumento, guardarDocumento };
+// Lee todos los documentos cuyo _id empieza con un prefijo (ej: 'verbocode-')
+// Devuelve array de { _id, valor } o [] si no hay conexión
+async function leerTodosPorPrefijo(prefijo) {
+  if (!db) return [];
+  try {
+    const docs = await db.collection(COLECCION).find({ _id: { $regex: `^${prefijo}` } }).toArray();
+    return docs.map(doc => {
+      const { _id, ...resto } = doc;
+      return { _id, valor: resto };
+    });
+  } catch (err) {
+    console.error(`[mongodb] Error leyendo todos con prefijo "${prefijo}":`, err.message);
+    return [];
+  }
+}
+
+module.exports = { conectarMongo, estaConectado, leerDocumento, guardarDocumento, leerTodosPorPrefijo };

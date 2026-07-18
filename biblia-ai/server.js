@@ -2442,10 +2442,9 @@ function guardarProyectoVerboCode(proyecto) {
 async function cargarProyectosVerboCodeDesdeMongo() {
   try {
     if (!mongoDb.estaConectado()) return;
-    const docs = await mongoDb.leerTodos('verbocode');
+    const docs = await mongoDb.leerTodosPorPrefijo('verbocode-');
     if (!docs || docs.length === 0) return;
     for (const doc of docs) {
-      if (!doc._id.startsWith('verbocode-')) continue;
       const proyecto = doc.valor;
       if (proyecto && proyecto.id) {
         const archivoLocal = path.join(VERBOCODE_DIR, `${proyecto.id}.json`);
