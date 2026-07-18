@@ -9,17 +9,23 @@ let usuarioActual = null;
 // Inicialización
 // ============================================================
 document.addEventListener('DOMContentLoaded', async () => {
+  aplicarTema();
   await cargarUsuario();
   await cargarProyectos();
   configurarEventos();
-  aplicarTema();
 });
 
 // ============================================================
-// Tema (hereda de Verbo AI)
+// Tema (hereda de Verbo AI — usa los mismos fondos y variables CSS)
 // ============================================================
 function aplicarTema() {
-  // Verbo AI guarda el tema en localStorage como 'verboAiTema'
+  // Cargar el style.css de Verbo AI para tener los mismos fondos
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/style.css';
+  document.head.appendChild(link);
+
+  // Aplicar tema guardado
   const tema = localStorage.getItem('verboAiTema') || 'default';
   if (tema === 'df-night') {
     document.documentElement.classList.add('tema-night');
@@ -27,7 +33,7 @@ function aplicarTema() {
 }
 
 // ============================================================
-// Usuario
+// Usuario (con doble check: API + localStorage)
 // ============================================================
 async function cargarUsuario() {
   try {
@@ -38,10 +44,18 @@ async function cargarUsuario() {
     }
     const d = await r.json();
     usuarioActual = d;
+
+    // Guardar esAdmin en localStorage para que el botón Verbo Code del
+    // sidebar principal lo detecte correctamente la próxima vez.
+    localStorage.setItem('verboAiEsAdmin', d.esAdmin ? 'true' : 'false');
+    // También guardarlo en window para que script.js lo lea al instante
+    window.esUsuarioAdmin = !!d.esAdmin;
+
     const nombre = d.usuario || 'Usuario';
     document.getElementById('vcPerfilNombre').textContent = nombre;
     document.getElementById('vcPerfilAvatar').textContent = nombre.charAt(0).toUpperCase();
-    // Si no es admin, mostrar mensaje
+
+    // Si no es admin, mostrar mensaje y redirigir
     if (!d.esAdmin) {
       mostrarToast('Solo las cuentas administrador pueden usar Verbo Code', 'error');
       setTimeout(() => { window.location.href = '/'; }, 2500);

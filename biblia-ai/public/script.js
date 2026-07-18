@@ -712,8 +712,8 @@ if (btnMasCodes) {
     const btnVerboCode = document.createElement('button');
     btnVerboCode.id = 'btnVerboCode';
     btnVerboCode.className = 'nav-item nav-item-verbocode';
-    // Visible para todos, pero solo admins pueden hacer click
-    const esAdminParaVerboCode = !!window.esUsuarioAdmin;
+    // Detectar admin desde window (seteado por cargarUsuario) o localStorage
+    const esAdminParaVerboCode = !!(window.esUsuarioAdmin || localStorage.getItem('verboAiEsAdmin') === 'true');
     if (esAdminParaVerboCode) {
       btnVerboCode.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg> Verbo Code <span class="badge-prox" style="background:linear-gradient(135deg,#d4af37,#b8860b);color:#1a1a1a;">Admin</span>';
       btnVerboCode.title = 'Abrir Verbo Code en nueva pestaña';
@@ -2260,6 +2260,9 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
       if (elNombre) elNombre.textContent = nombre;
       if (elAvatar) elAvatar.textContent = nombre.trim().charAt(0) || '?';
       esUsuarioAdmin = !!d.esAdmin;
+      window.esUsuarioAdmin = esUsuarioAdmin;
+      // Guardar en localStorage para que Verbo Code y otras páginas lo detecten
+      try { localStorage.setItem('verboAiEsAdmin', esUsuarioAdmin ? 'true' : 'false'); } catch (e) {}
       const codesAdmin = document.getElementById('codesAdmin');
       if (codesAdmin) codesAdmin.classList.toggle('oculto', !esUsuarioAdmin);
     })

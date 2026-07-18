@@ -39,6 +39,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function aplicarTema() {
+  // Cargar el style.css de Verbo AI para tener los mismos fondos
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/style.css';
+  document.head.appendChild(link);
+
   const tema = localStorage.getItem('verboAiTema') || 'default';
   if (tema === 'df-night') {
     document.documentElement.classList.add('tema-night');
@@ -46,13 +52,16 @@ function aplicarTema() {
 }
 
 // ============================================================
-// Usuario
+// Usuario (con guardado en localStorage para próxima vez)
 // ============================================================
 async function cargarUsuario() {
   try {
     const r = await fetch('/api/creditos');
     if (!r.ok) { window.location.href = '/login'; return; }
     estado.usuario = await r.json();
+    // Guardar en localStorage para que el botón Verbo Code del chat principal lo detecte
+    localStorage.setItem('verboAiEsAdmin', estado.usuario.esAdmin ? 'true' : 'false');
+    window.esUsuarioAdmin = !!estado.usuario.esAdmin;
     if (!estado.usuario.esAdmin) {
       alert('Solo las cuentas administrador pueden usar Verbo Code');
       window.location.href = '/';
@@ -168,7 +177,7 @@ function renderArchivos() {
     const activo = nombre === estado.archivoActual ? 'activo' : '';
     const icono = obtenerIconoArchivo(nombre);
     return `<div class="vc-archivo-item ${activo}" data-archivo="${nombre}">
-      ${icono}
+      <span class="vc-archivo-icono">${icono}</span>
       <span class="vc-archivo-nombre">${nombre}</span>
       <button class="vc-archivo-delete" data-delete="${nombre}" title="Eliminar">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/></svg>
@@ -204,13 +213,16 @@ function renderArchivos() {
 function obtenerIconoArchivo(nombre) {
   const ext = nombre.split('.').pop().toLowerCase();
   const iconos = {
-    html: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
-    css: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
-    js: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
-    json: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
-    py: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+    html: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    css: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    js: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    json: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    py: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    png: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    jpg: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    jpeg: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   };
-  return iconos[ext] || '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>';
+  return iconos[ext] || '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 }
 
 function abrirArchivo(nombre) {
@@ -282,10 +294,14 @@ function renderTabs() {
 }
 
 // ============================================================
-// Monaco Editor
+// Monaco Editor (cargado via AMD loader, no require común)
 // ============================================================
 async function initMonaco() {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    if (typeof require === 'undefined' || typeof require.config !== 'function') {
+      reject(new Error('Monaco AMD loader no está cargado. Verificá la conexión a internet.'));
+      return;
+    }
     require.config({
       paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' },
     });
@@ -517,15 +533,17 @@ function renderAccion(accion) {
   const cont = document.getElementById('vcChatMensajes');
   const div = document.createElement('div');
   div.className = 'vc-msg-accion';
-  const icono = {
-    file_create: '📁',
-    file_edit: '✏️',
-    file_delete: '🗑️',
-    image: '🎨',
-    web: '🌐',
-    run: '▶',
-  }[accion.tipo] || '✓';
-  div.innerHTML = `${icono} ${accion.descripcion}`;
+  // Iconos SVG reales en vez de emojis
+  const iconos = {
+    file_create: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    file_edit: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18l-3-3 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    file_delete: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    image: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    web: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" stroke-linecap="round"/></svg>',
+    run: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+  };
+  const icono = iconos[accion.tipo] || '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+  div.innerHTML = `${icono} <span>${accion.descripcion}</span>`;
   cont.appendChild(div);
   scrollChatAbajo();
 }
