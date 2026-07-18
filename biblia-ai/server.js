@@ -329,7 +329,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     model: model,
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
     temperature: 0.7,
-    max_tokens: 16384,
+    max_tokens: 4096,
     stream: false,
   };
 
@@ -2690,7 +2690,7 @@ Proyecto: ${proyecto.nombre}`;
                 ...chatHistorial,
               ],
               temperature: 0.7,
-              max_tokens: 16384,
+              max_tokens: 4096,
               stream: false,
             }),
           }, () => {});
