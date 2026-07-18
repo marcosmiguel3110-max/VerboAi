@@ -338,7 +338,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     model: model,
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
     temperature: 0.7,
-    max_tokens: 4096,
+    max_tokens: 8192,
     stream: false,
   };
 
@@ -2563,6 +2563,19 @@ app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => 
   const configModelo = MODELOS_VERBO_CODE[modeloPedido] || MODELOS_VERBO_CODE['NewserPro'];
   if (!configModelo) return res.status(400).json({ error: 'Modelo no disponible en Verbo Code.' });
 
+  // Configurar SSE
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  let clienteDesconectado = false;
+  res.on('close', () => { clienteDesconectado = true; });
+
+  const enviarSSE = (obj) => {
+    if (clienteDesconectado || res.writableEnded) return;
+    try { res.write(JSON.stringify(obj) + '\n'); } catch (e) { }
+  };
+
   try {
     // System prompt COMPLETO de Verbo Code (OpenRouter acepta payloads grandes,
     // a diferencia de Groq que daba HTTP 413 con prompts largos)
@@ -2682,9 +2695,9 @@ Proyecto: ${proyecto.nombre}`;
 
     // ============================================================
     // PASO 0: GENERAR PLAN (antes de responder)
-    // La IA primero crea un plan de acción que se muestra en el chat
-    // como un mensaje especial debajo de la burbuja del assistant.
+    // El plan se envía INMEDIATAMENTE al cliente vía SSE
     // ============================================================
+    enviarSSE({ type: 'status', text: 'Creando plan de acción...' });
     let planAccion = '';
     try {
       const planSystemPrompt = `Sos ${modeloPedido} de Verbo AI. NUNCA digas ser otro modelo. Estás en MODO VERBO CODE. El usuario te pidió algo. Tu trabajo es crear un PLAN DE ACCIÓN breve (máximo 5 pasos) de qué vas a hacer para resolverlo. No escribas código, solo el plan. Formato:
@@ -2696,7 +2709,6 @@ Sea conciso. Máximo 5 pasos.`;
 
       const planMessages = [{ role: 'user', content: `Pedido del usuario: ${mensaje}\n\nArchivos actuales: ${Object.keys(proyecto.archivos).join(', ') || 'vacío'}` }];
 
-      // Usar OpenRouter para el plan (rápido)
       if (OPENROUTER_FREE_ENABLED) {
         const modelosOR = [
           configModelo.modeloOpenRouter,
@@ -2714,20 +2726,14 @@ Sea conciso. Máximo 5 pasos.`;
         }
       }
 
-      // Si OpenRouter falló, usar Groq
       if (!planAccion) {
         const respPlan = await llamarGroqConReintentos({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model: 'openai/gpt-oss-20b',
-            messages: [
-              { role: 'system', content: planSystemPrompt },
-              ...planMessages,
-            ],
-            temperature: 0.3,
-            max_tokens: 300,
-            stream: false,
+            messages: [{ role: 'system', content: planSystemPrompt }, ...planMessages],
+            temperature: 0.3, max_tokens: 300, stream: false,
           }),
         }, () => {});
         if (respPlan && respPlan.ok) {
@@ -2735,9 +2741,16 @@ Sea conciso. Máximo 5 pasos.`;
           planAccion = stripThinkTags((dataPlan.choices?.[0]?.message?.content) || '');
         }
       }
+
+      // ENVIAR PLAN INMEDIATAMENTE al cliente
+      if (planAccion) {
+        enviarSSE({ type: 'plan', plan: planAccion });
+      }
     } catch (e) {
       console.warn('[verbocode] Plan fallo:', e.message);
     }
+
+    enviarSSE({ type: 'status', text: 'Desarrollando código...' });
 
     // Llamar al modelo de texto — cascada de fallbacks
     let textoRespuesta = '';
@@ -3048,24 +3061,42 @@ Sea conciso. Máximo 5 pasos.`;
     // Guardar el mensaje del usuario + respuesta en el chat del proyecto
     if (!proyecto.chat) proyecto.chat = [];
     proyecto.chat.push({ role: 'user', content: mensaje, fecha: new Date().toISOString() });
-    proyecto.chat.push({ role: 'assistant', content: textoLimpio, fecha: new Date().toISOString(), modelo: modeloDisplay });
-    // Limitar el chat a 50 mensajes para no explotar el storage
+    proyecto.chat.push({ role: 'assistant', content: textoLimpio, fecha: new Date().toISOString(), modelo: modeloDisplay, plan: planAccion || null });
     if (proyecto.chat.length > 50) proyecto.chat = proyecto.chat.slice(-50);
     guardarProyectoVerboCode(proyecto);
 
-    res.json({
-      ok: true,
-      respuesta: textoLimpio,
-      plan: planAccion || null,
-      acciones,
+    // Enviar respuesta como chunks (simulando streaming para que se vea progresivo)
+    if (textoLimpio && !clienteDesconectado) {
+      const chunkSize = 15;
+      for (let i = 0; i < textoLimpio.length; i += chunkSize) {
+        if (clienteDesconectado) break;
+        enviarSSE({ type: 'chunk', text: textoLimpio.slice(i, i + chunkSize) });
+        await new Promise(r => setTimeout(r, 15));
+      }
+    }
+
+    // Enviar acciones
+    if (acciones.length > 0) {
+      for (const accion of acciones) {
+        if (clienteDesconectado) break;
+        enviarSSE({ type: 'action', accion });
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    // Enviar done con metadata
+    enviarSSE({
+      type: 'done',
       proyectoActualizado,
       archivos: proyectoActualizado ? proyecto.archivos : undefined,
       modeloUsado: modeloDisplay,
-      razonamiento: razonamientoPrevio || null,
+      plan: planAccion || null,
     });
+    res.end();
   } catch (e) {
     console.error('[verbocode] error en chat:', e.message);
-    res.status(500).json({ error: 'Error procesando el mensaje: ' + e.message });
+    enviarSSE({ type: 'error', message: 'Error: ' + e.message });
+    res.end();
   }
 });
 
