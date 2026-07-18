@@ -556,8 +556,13 @@ async function enviarChat() {
     }
 
     const data = await r.json();
-    // Render respuesta de la IA
-    const msgAssistant = { role: 'assistant', content: data.respuesta, fecha: new Date().toISOString() };
+    // Render respuesta de la IA — incluir el modelo usado
+    const msgAssistant = {
+      role: 'assistant',
+      content: data.respuesta,
+      fecha: new Date().toISOString(),
+      modelo: data.modeloUsado || estado.modeloSeleccionado,
+    };
     estado.proyecto.chat.push(msgAssistant);
     renderMensaje(msgAssistant);
 
@@ -602,6 +607,15 @@ function renderMensaje(m) {
   div.className = 'vc-msg ' + (m.role === 'user' ? 'user' : 'assistant');
   // Convertir markdown básico (code blocks, inline code, bold)
   div.innerHTML = formatearMarkdown(m.content || '');
+
+  // Si es mensaje del assistant y tiene modelo, mostrarlo abajo
+  if (m.role === 'assistant' && m.modelo) {
+    const meta = document.createElement('div');
+    meta.className = 'vc-msg-meta';
+    meta.textContent = '→ ' + m.modelo;
+    div.appendChild(meta);
+  }
+
   cont.appendChild(div);
   scrollChatAbajo();
 }
