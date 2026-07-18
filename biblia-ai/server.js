@@ -2845,11 +2845,35 @@ Proyecto: ${proyecto.nombre}`;
       }
     }
 
-    // Procesar WEB (buscar en internet)
+    // Procesar WEB (buscar en internet DE VERDAD)
     let matchWeb;
+    let resultadosWebAcumulados = '';
     while ((matchWeb = reWeb.exec(textoRespuesta)) !== null) {
       const query = matchWeb[1].trim();
-      acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}"` });
+      try {
+        const resultadoWeb = await buscarWebGoogle(query);
+        if (resultadoWeb.exito && resultadoWeb.resultados.length > 0) {
+          const textoResultados = resultadoWeb.resultados.map((r, i) =>
+            `${i + 1}. ${r.titulo}\n   ${r.resumen}\n   ${r.link}`
+          ).join('\n\n');
+          resultadosWebAcumulados += `\n\n**Resultados de búsqueda "${query}":**\n${textoResultados}`;
+          acciones.push({
+            tipo: 'web',
+            query,
+            resultados: resultadoWeb.resultados,
+            descripcion: `Búsqueda web: "${query}" → ${resultadoWeb.resultados.length} resultados`,
+          });
+        } else {
+          resultadosWebAcumulados += `\n\nNo se encontraron resultados para "${query}".`;
+          acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}" → sin resultados` });
+        }
+      } catch (e) {
+        acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}" → error: ${e.message}` });
+      }
+    }
+    // Agregar los resultados de la búsqueda al texto visible
+    if (resultadosWebAcumulados) {
+      textoLimpio += resultadosWebAcumulados;
     }
 
     // Procesar NPM_INSTALL (crear/actualizar package.json)
