@@ -233,25 +233,28 @@ function abrirArchivo(nombre) {
 
   if (!estado.monaco) return;
 
-  // Crear o reutilizar modelo de Monaco
-  let model = estado.monacoModels[nombre];
-  if (!model) {
-    const lang = obtenerLenguajeMonaco(nombre);
-    model = monaco.editor.createModel(estado.archivos[nombre], lang);
-    model.onDidChangeContent(() => {
-      estado.archivos[nombre] = model.getValue();
-      // Auto-guardar con debounce
-      clearTimeout(estado.debounceGuardar);
-      estado.debounceGuardar = setTimeout(guardarArchivos, 1500);
-    });
-    estado.monacoModels[nombre] = model;
-  } else {
-    // Si el contenido cambió externamente (por la IA), actualizar el modelo
-    if (model.getValue() !== estado.archivos[nombre]) {
-      model.setValue(estado.archivos[nombre]);
+  // Si es Monaco real (tiene createModel)
+  if (typeof monaco !== 'undefined' && estado.monacoModels && estado.monaco.setModel) {
+    let model = estado.monacoModels[nombre];
+    if (!model) {
+      const lang = obtenerLenguajeMonaco(nombre);
+      model = monaco.editor.createModel(estado.archivos[nombre], lang);
+      model.onDidChangeContent(() => {
+        estado.archivos[nombre] = model.getValue();
+        clearTimeout(estado.debounceGuardar);
+        estado.debounceGuardar = setTimeout(guardarArchivos, 1500);
+      });
+      estado.monacoModels[nombre] = model;
+    } else {
+      if (model.getValue() !== estado.archivos[nombre]) {
+        model.setValue(estado.archivos[nombre]);
+      }
     }
+    estado.monaco.setModel(model);
+  } else {
+    // Fallback textarea
+    estado.monaco.setValue(estado.archivos[nombre]);
   }
-  estado.monaco.setModel(model);
 }
 
 function obtenerLenguajeMonaco(nombre) {
@@ -294,48 +297,104 @@ function renderTabs() {
 }
 
 // ============================================================
-// Monaco Editor (cargado via AMD loader, no require común)
+// Monaco Editor (con fallback a textarea si CDN falla)
 // ============================================================
 async function initMonaco() {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
+    // Verificar si el loader de Monaco está disponible
     if (typeof require === 'undefined' || typeof require.config !== 'function') {
-      reject(new Error('Monaco AMD loader no está cargado. Verificá la conexión a internet.'));
+      console.warn('Monaco AMD loader no disponible, usando textarea como fallback');
+      initTextareaFallback();
+      resolve();
       return;
     }
-    require.config({
-      paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' },
-    });
-    require(['vs/editor/editor.main'], () => {
-      // Tema dark personalizado (combina con df-night)
-      monaco.editor.defineTheme('verbo-dark', {
-        base: 'vs-dark',
-        inherit: true,
-        rules: [],
-        colors: {
-          'editor.background': '#0f0f1a',
-          'editor.lineHighlightBackground': '#1a1a2e',
-          'editorLineNumber.foreground': '#4a4a65',
-          'editorLineNumber.activeForeground': '#a855f7',
-          'editor.selectionBackground': '#2a2a45',
-          'editorCursor.foreground': '#a855f7',
-        },
-      });
-      monaco.editor.setTheme('verbo-dark');
 
-      estado.monaco = monaco.editor.create(document.getElementById('vcMonaco'), {
-        automaticLayout: true,
-        fontSize: 13,
-        fontFamily: 'SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace',
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        padding: { top: 12, bottom: 12 },
-        tabSize: 2,
-        wordWrap: 'on',
-        theme: 'verbo-dark',
+    try {
+      require.config({
+        paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' },
       });
 
+      // Timeout: si Monaco no carga en 15 segundos, usar fallback
+      const timeout = setTimeout(() => {
+        console.warn('Monaco tardó demasiado, usando textarea como fallback');
+        if (!estado.monaco) {
+          initTextareaFallback();
+          resolve();
+        }
+      }, 15000);
+
+      require(['vs/editor/editor.main'], () => {
+        clearTimeout(timeout);
+        // Tema dark personalizado (combina con df-night)
+        monaco.editor.defineTheme('verbo-dark', {
+          base: 'vs-dark',
+          inherit: true,
+          rules: [],
+          colors: {
+            'editor.background': '#1B1E29',
+            'editor.lineHighlightBackground': '#242836',
+            'editorLineNumber.foreground': '#4a4a65',
+            'editorLineNumber.activeForeground': '#E08A5B',
+            'editor.selectionBackground': '#383D50',
+            'editorCursor.foreground': '#E08A5B',
+          },
+        });
+        monaco.editor.defineTheme('verbo-light', {
+          base: 'vs',
+          inherit: true,
+          rules: [],
+          colors: {
+            'editor.background': '#FAF6EF',
+            'editor.lineHighlightBackground': '#F0E9DC',
+            'editorLineNumber.foreground': '#6B6155',
+            'editorLineNumber.activeForeground': '#C9663A',
+            'editor.selectionBackground': '#E9C8B4',
+            'editorCursor.foreground': '#C9663A',
+          },
+        });
+
+        // Elegir tema según localStorage
+        const tema = localStorage.getItem('verboAiTema') || 'default';
+        monaco.editor.setTheme(tema === 'df-night' ? 'verbo-dark' : 'verbo-light');
+
+        estado.monaco = monaco.editor.create(document.getElementById('vcMonaco'), {
+          automaticLayout: true,
+          fontSize: 13,
+          fontFamily: 'SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace',
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          padding: { top: 12, bottom: 12 },
+          tabSize: 2,
+          wordWrap: 'on',
+          theme: tema === 'df-night' ? 'verbo-dark' : 'verbo-light',
+        });
+
+        resolve();
+      });
+    } catch (e) {
+      console.warn('Error inicializando Monaco:', e.message, '- usando fallback');
+      initTextareaFallback();
       resolve();
-    });
+    }
+  });
+}
+
+// Fallback: textarea simple si Monaco no carga
+function initTextareaFallback() {
+  const container = document.getElementById('vcMonaco');
+  container.innerHTML = '<textarea id="vcTextareaFallback" style="width:100%;height:100%;border:none;outline:none;padding:12px;font-family:monospace;font-size:13px;resize:none;background:var(--vc-bg);color:var(--vc-text);"></textarea>';
+  const textarea = document.getElementById('vcTextareaFallback');
+  estado.monaco = {
+    setValue: (v) => { textarea.value = v; },
+    getValue: () => textarea.value,
+    setModel: () => {},
+  };
+  textarea.addEventListener('input', () => {
+    if (estado.archivoActual) {
+      estado.archivos[estado.archivoActual] = textarea.value;
+      clearTimeout(estado.debounceGuardar);
+      estado.debounceGuardar = setTimeout(guardarArchivos, 1500);
+    }
   });
 }
 
