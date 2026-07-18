@@ -338,7 +338,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     model: model,
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
     temperature: 0.7,
-    max_tokens: 8192,
+    max_tokens: 16384,
     stream: false,
   };
 
@@ -2811,7 +2811,7 @@ Sea conciso. Máximo 5 pasos.`;
                 ...chatHistorial,
               ],
               temperature: 0.7,
-              max_tokens: 4096,
+              max_tokens: 16384,
               stream: false,
             }),
           }, () => {});
