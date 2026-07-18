@@ -710,7 +710,16 @@ async function enviarChat() {
           planPre.textContent = evt.plan;
         } else if (evt.type === 'chunk') {
           textoRespuesta += evt.text;
-          msgDiv.innerHTML = formatearMarkdownConColapsado(textoRespuesta);
+          // Mostrar línea por línea: solo mostrar hasta el último salto de línea completo
+          // Las líneas incompletas se guardan y se muestran cuando se completen
+          const ultimaLinea = textoRespuesta.lastIndexOf('\n');
+          if (ultimaLinea >= 0) {
+            const textoVisible = textoRespuesta.slice(0, ultimaLinea + 1);
+            const resto = textoRespuesta.slice(ultimaLinea + 1);
+            msgDiv.innerHTML = formatearMarkdownConColapsado(textoVisible) + (resto ? '<span class="vc-typing-cursor">▋</span>' : '');
+          } else {
+            msgDiv.innerHTML = '<span class="vc-typing-cursor">▋</span>';
+          }
           scrollChatAbajo();
         } else if (evt.type === 'action') {
           renderAccion(evt.accion);
@@ -719,6 +728,9 @@ async function enviarChat() {
           proyectoActualizado = evt.proyectoActualizado;
           archivosActualizados = evt.archivos;
           if (evt.plan) planRecibido = evt.plan;
+          // Mostrar texto completo al terminar (incluye última línea)
+          msgDiv.innerHTML = formatearMarkdownConColapsado(textoRespuesta);
+          scrollChatAbajo();
         } else if (evt.type === 'error') {
           throw new Error(evt.message);
         }

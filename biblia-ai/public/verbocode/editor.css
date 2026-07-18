@@ -639,6 +639,20 @@
   border-radius: 6px;
   overflow: hidden;
 }
+
+/* Cursor parpadeante para efecto de escritura */
+.vc-typing-cursor {
+  display: inline-block;
+  color: var(--vc-accent);
+  animation: vc-blink 0.8s steps(2) infinite;
+  font-family: var(--vc-font-mono);
+  font-size: 13px;
+  margin-left: 2px;
+}
+@keyframes vc-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
 .vc-code-header {
   display: flex;
   align-items: center;
