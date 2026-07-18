@@ -185,6 +185,39 @@ const MODELOS_DISPONIBLES = {
     imagenAlto: POLLINATIONS_PRO_HEIGHT,
     imagenEnhance: true,
   },
+  NewserDesigner: {
+    nombre: 'NewserDesigner',
+    descripcion: 'Especializado en diseño de imagenes y arte digital. Genera imagenes en alta calidad con multiples modelos (flux, dalle-3, sdxl, etc). Ideal para creadores de contenido, diseñadores y artistas.',
+    modeloTexto: GROQ_MODEL_TEXTO,
+    modeloVision: GROQ_MODEL_VISION,
+    modeloOpenRouter: 'meta-llama/llama-3.3-70b-instruct:free',
+    modeloOpenRouterVision: 'google/gemma-4-26b-a4b-it:free',
+    costoCreditos: 3,
+    rateLimitMax: 8,
+    rateLimitMaxWeb: 12,
+    maxTokens: 2048,
+    badge: 'designer',
+    disponible: true,
+    imagenModelo: 'flux',           // modelo principal de Pollinations
+    imagenAncho: 1536,
+    imagenAlto: 1536,
+    imagenEnhance: true,
+    imagenMultiModelo: true,        // probara flux, dalle-3, sdxl en cascada
+  },
+  NewserHTML: {
+    nombre: 'NewserHTML',
+    descripcion: 'Especializado en diseño web y HTML/CSS/JS. Genera sitios web completos, landing pages, componentes UI y templates responsivos. Conoce Tailwind, Bootstrap, animaciones y mejores practicas de UX.',
+    modeloTexto: GROQ_MODEL_TEXTO,
+    modeloVision: GROQ_MODEL_VISION,
+    modeloOpenRouter: 'qwen/qwen3-coder:free',  // Qwen3-Coder es el mejor para codigo
+    modeloOpenRouterVision: 'google/gemma-4-26b-a4b-it:free',
+    costoCreditos: 4,
+    rateLimitMax: 6,
+    rateLimitMaxWeb: 8,
+    maxTokens: 8192,                // mas tokens porque el HTML/CSS es largo
+    badge: 'html',
+    disponible: true,
+  },
 };
 const MODELO_DEFAULT = 'NewserLite';
 
@@ -1779,6 +1812,10 @@ app.post('/api/v1/chat', async (req, res) => {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_ADVANCED_15_EXTRA;
   } else if (configModelo.nombre === 'NewserPro') {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_PRO_EXTRA;
+  } else if (configModelo.nombre === 'NewserDesigner') {
+    systemPrompt = systemPrompt + SYSTEM_PROMPT_DESIGNER_EXTRA;
+  } else if (configModelo.nombre === 'NewserHTML') {
+    systemPrompt = systemPrompt + SYSTEM_PROMPT_HTML_EXTRA;
   }
 
   let razonamientoPrevioApi = '';
@@ -1808,16 +1845,18 @@ app.post('/api/v1/chat', async (req, res) => {
 
   const intencionImagenApi = detectarGeneracionImagen(mensaje);
   if (intencionImagenApi.esGeneracion) {
-    if (configModelo.nombre !== 'NewserAdvanced' && configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPro') {
+    const modelosConImagen = ['NewserAdvanced', 'NewserAdvanced1.5', 'NewserPro', 'NewserDesigner'];
+    if (!modelosConImagen.includes(configModelo.nombre)) {
       return res.status(400).json({
         ok: false,
-        error: 'La generacion de imagenes solo esta disponible con NewserAdvanced, NewserAdvanced1.5 o NewserPro. Mandá "modelo":"NewserAdvanced", "NewserAdvanced1.5" o "NewserPro" en el body para usarla.',
+        error: 'La generacion de imagenes solo esta disponible con NewserAdvanced, NewserAdvanced1.5, NewserPro o NewserDesigner. Cambiá de modelo para usarla.',
       });
     }
 
     const tokenActual = buscarTokenPorValor(valorToken);
     const esDetallada = configModelo.nombre === 'NewserAdvanced1.5';
     const esPro = configModelo.nombre === 'NewserPro';
+    const esDesigner = configModelo.nombre === 'NewserDesigner';
 
     if (esDetallada) {
       const controlImg15 = verificarLimiteImagen15(tokenActual ? `token:${tokenActual.id}` : null);
@@ -1834,12 +1873,13 @@ app.post('/api/v1/chat', async (req, res) => {
       });
     }
 
+    const usarConfigImagen = esPro || esDesigner;
     const resultado = await generarImagenPollinations(intencionImagenApi.prompt, undefined, {
       detallada: esDetallada,
-      modeloOverride: esPro ? configModelo.imagenModelo : null,
-      anchoOverride: esPro ? configModelo.imagenAncho : null,
-      altoOverride: esPro ? configModelo.imagenAlto : null,
-      enhanceOverride: esPro ? configModelo.imagenEnhance : null,
+      modeloOverride: usarConfigImagen ? configModelo.imagenModelo : null,
+      anchoOverride: usarConfigImagen ? configModelo.imagenAncho : null,
+      altoOverride: usarConfigImagen ? configModelo.imagenAlto : null,
+      enhanceOverride: usarConfigImagen ? configModelo.imagenEnhance : null,
     });
     if (!resultado || !resultado.img) {
       console.error('[api/v1/chat] generacion de imagen fallo:', resultado ? resultado.error : 'sin resultado');
@@ -1887,42 +1927,22 @@ app.post('/api/v1/chat', async (req, res) => {
 
   try {
     // ============================================================
-    // CHAT PRINCIPAL (/api/v1/chat) — Pollinations + OpenRouter + g4f
+    // CHAT PRINCIPAL (/api/v1/chat) — Cascada por modelo + fallbacks
     // ============================================================
-    // Orden de prioridad (todos gratis, sin Groq):
-    //   1. Pollinations texto (UNLIMITED sin auth, segun ClawLabsAI/free-ai-models)
-    //   2. OpenRouter Free (50 req/day sin key; modelos de ClawLabs dinamico)
-    //   3. g4f GLM-4 (puente opcional)
-    //   4. Error claro
+    // Cada modelo usa SU modeloOpenRouter configurado primero (identidad).
+    // Si falla, fallbacks en orden: OpenRouter ClawLabs dinamico -> g4f -> Pollinations.
+    // NUNCA usa Groq.
     let texto = '';
     let modeloUsadoReal = configModelo.modeloTexto;
     let glmUsado = false;
 
     // ============================================================
-    // CAPA 1: Pollinations texto (UNLIMITED sin auth)
-    // ============================================================
-    if (!glmUsado && POLLINATIONS_TEXT_ENABLED) {
-      const mensajesParaPoll = mensajesParaModelo.filter((m) => m.role !== 'system');
-      const resultadoPoll = await llamarPollinationsTexto(mensajesParaPoll, systemPrompt, {
-        maxTokens: configModelo.maxTokens,
-      });
-      if (resultadoPoll.ok) {
-        texto = stripThinkTags(resultadoPoll.texto);
-        modeloUsadoReal = resultadoPoll.modelo;
-        glmUsado = true;
-        console.log(`[api/v1/chat] Pollinations respondio para ${configModelo.nombre}`);
-      } else {
-        console.warn(`[api/v1/chat] Pollinations fallo (${resultadoPoll.error}), fallback a OpenRouter.`);
-      }
-    }
-
-    // ============================================================
-    // CAPA 2: OpenRouter Free (modelos de ClawLabsAI/free-ai-models)
+    // CAPA 1: OpenRouter Free con el modelo configurado del modelo
+    // (cada modelo de Verbo AI tiene SU modeloOpenRouter asignado)
     // ============================================================
     if (!glmUsado && configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
       const mensajesParaOR = mensajesParaModelo.filter((m) => m.role !== 'system');
-      // El primer modelo es el configurado; los fallbacks se obtienen dinamicamente
-      // de la lista de ClawLabsAI para evitar IDs que ya no existan.
+      // Fallbacks dinamicos de ClawLabsAI (por si el modelo principal se cae)
       const modeloDinamicoTexto = await obtenerModeloClawLabs('texto');
       const modeloDinamicoRapido = await obtenerModeloClawLabs('rapido');
       const modelosOR = [
@@ -1940,16 +1960,15 @@ app.post('/api/v1/chat', async (req, res) => {
           glmUsado = true;
           break;
         }
-        // Si es 429 (rate limit), no probar más modelos de OpenRouter
         if (resultadoOR.error && resultadoOR.error.includes('429')) break;
       }
       if (!glmUsado) {
-        console.warn(`[api/v1/chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f.`);
+        console.warn(`[api/v1/chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f/Pollinations.`);
       }
     }
 
     // ============================================================
-    // CAPA 3: g4f GLM-4 (puente opcional)
+    // CAPA 2: g4f GLM-4 (puente opcional)
     // ============================================================
     if (!glmUsado && GPT4FREE_ENABLED) {
       const mensajesParaGlm = mensajesParaModelo.filter((m) => m.role !== 'system');
@@ -1961,13 +1980,26 @@ app.post('/api/v1/chat', async (req, res) => {
       }
     }
 
-    // Si todos los proveedores gratis fallaron, devolver error claro.
-    // Groq fue eliminado definitivamente como fallback.
+    // ============================================================
+    // CAPA 3: Pollinations texto (UNLIMITED sin auth, ultimo recurso)
+    // ============================================================
+    if (!glmUsado && POLLINATIONS_TEXT_ENABLED) {
+      const mensajesParaPoll = mensajesParaModelo.filter((m) => m.role !== 'system');
+      const resultadoPoll = await llamarPollinationsTexto(mensajesParaPoll, systemPrompt, {
+        maxTokens: configModelo.maxTokens,
+      });
+      if (resultadoPoll.ok) {
+        texto = stripThinkTags(resultadoPoll.texto);
+        modeloUsadoReal = resultadoPoll.modelo;
+        glmUsado = true;
+      }
+    }
+
     if (!glmUsado) {
-      console.error(`[api/v1/chat] Todos los proveedores gratis (Pollinations + OpenRouter + g4f) fallaron para ${configModelo.nombre}.`);
+      console.error(`[api/v1/chat] Todos los proveedores gratis (OpenRouter + g4f + Pollinations) fallaron para ${configModelo.nombre}.`);
       return res.status(502).json({
         ok: false,
-        error: 'No se pudo conectar con ningun modelo gratuito (Pollinations + OpenRouter + g4f). Intenta de nuevo en unos minutos.',
+        error: 'No se pudo conectar con ningun modelo gratuito (OpenRouter + g4f + Pollinations). Intenta de nuevo en unos minutos.',
       });
     }
 
@@ -2815,14 +2847,7 @@ Sea conciso. Máximo 5 pasos.`;
 
       const planMessages = [{ role: 'user', content: `Pedido del usuario: ${mensaje}\n\nArchivos actuales: ${Object.keys(proyecto.archivos).join(', ') || 'vacío'}` }];
 
-      // Plan: Pollinations primero (unlimited), OpenRouter segundo, g4f tercero
-      if (!planAccion && POLLINATIONS_TEXT_ENABLED) {
-        const resultadoPollPlan = await llamarPollinationsTexto(planMessages, planSystemPrompt, { maxTokens: 600 });
-        if (resultadoPollPlan.ok) {
-          planAccion = stripThinkTags(resultadoPollPlan.texto);
-        }
-      }
-
+      // Plan: OpenRouter (modelo configurado) primero, g4f segundo, Pollinations tercero
       if (!planAccion && OPENROUTER_FREE_ENABLED) {
         const modeloDinamicoTexto = await obtenerModeloClawLabs('texto');
         const modelosOR = [
@@ -2840,20 +2865,23 @@ Sea conciso. Máximo 5 pasos.`;
         }
       }
 
-      if (!planAccion) {
-        // Groq eliminado — intentar g4f como fallback para el plan
-        if (GPT4FREE_ENABLED) {
-          const resultadoGlmPlan = await llamarGlm4Bridge(planMessages, planSystemPrompt);
-          if (resultadoGlmPlan.ok) {
-            planAccion = stripThinkTags(resultadoGlmPlan.texto);
-          }
+      if (!planAccion && GPT4FREE_ENABLED) {
+        const resultadoGlmPlan = await llamarGlm4Bridge(planMessages, planSystemPrompt);
+        if (resultadoGlmPlan.ok) {
+          planAccion = stripThinkTags(resultadoGlmPlan.texto);
         }
       }
 
-      // Si ni OpenRouter ni g4f pudieron generar el plan, seguir sin plan
-      // (no es bloqueante, el codigo se genera igual)
+      // Si ni OpenRouter ni g4f pudieron generar el plan, usar Pollinations (unlimited)
+      if (!planAccion && POLLINATIONS_TEXT_ENABLED) {
+        const resultadoPollPlan = await llamarPollinationsTexto(planMessages, planSystemPrompt, { maxTokens: 600 });
+        if (resultadoPollPlan.ok) {
+          planAccion = stripThinkTags(resultadoPollPlan.texto);
+        }
+      }
+
       if (!planAccion) {
-        console.warn('[verbocode] Plan fallo: OpenRouter y g4f no respondieron. Continuando sin plan.');
+        console.warn('[verbocode] Plan fallo: OpenRouter, g4f y Pollinations no respondieron. Continuando sin plan.');
       }
 
       // ENVIAR PLAN INMEDIATAMENTE al cliente
@@ -2866,25 +2894,12 @@ Sea conciso. Máximo 5 pasos.`;
 
     enviarSSE({ type: 'status', text: 'Desarrollando código...' });
 
-    // Llamar al modelo de texto — cascada de fallbacks (Pollinations -> OpenRouter -> g4f)
+    // Llamar al modelo de texto — cascada: modelo configurado -> ClawLabs -> g4f -> Pollinations
     let textoRespuesta = '';
     let modeloUsado = configModelo.modeloTexto;
 
-    // 1. Pollinations texto (UNLIMITED sin auth, segun ClawLabsAI)
-    if (!textoRespuesta && POLLINATIONS_TEXT_ENABLED) {
-      const resultadoPoll = await llamarPollinationsTexto(chatHistorial.slice(-5), systemPrompt, {
-        maxTokens: 16384,
-      });
-      if (resultadoPoll.ok) {
-        textoRespuesta = stripThinkTags(resultadoPoll.texto);
-        modeloUsado = resultadoPoll.modelo;
-        console.log(`[verbocode] Pollinations respondio para ${modeloPedido}`);
-      } else {
-        console.warn(`[verbocode] Pollinations fallo (${resultadoPoll.error}), fallback a OpenRouter.`);
-      }
-    }
-
-    // 2. OpenRouter Free (modelos de ClawLabsAI/free-ai-models dinamico)
+    // 1. OpenRouter Free con el modelo configurado del modelo (identidad)
+    //    NewserPro usa nemotron-3-ultra, NewserAdmin usa qwen3-coder, etc.
     if (!textoRespuesta && configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
       const modeloDinamicoTexto = await obtenerModeloClawLabs('texto');
       const modeloDinamicoRapido = await obtenerModeloClawLabs('rapido');
@@ -2904,11 +2919,11 @@ Sea conciso. Máximo 5 pasos.`;
         }
       }
       if (!textoRespuesta) {
-        console.warn(`[verbocode] OpenRouter fallo para ${modeloPedido}, fallback a g4f.`);
+        console.warn(`[verbocode] OpenRouter fallo para ${modeloPedido}, fallback a g4f/Pollinations.`);
       }
     }
 
-    // 3. g4f GLM-4 (puente opcional)
+    // 2. g4f GLM-4 (puente opcional)
     if (!textoRespuesta && GPT4FREE_ENABLED && GPT4FREE_URL) {
       const resultadoGlm = await llamarGlm4Bridge(chatHistorial.slice(-5), systemPrompt);
       if (resultadoGlm.ok) {
@@ -2917,11 +2932,23 @@ Sea conciso. Máximo 5 pasos.`;
       }
     }
 
+    // 3. Pollinations texto (UNLIMITED sin auth, ultimo recurso)
+    if (!textoRespuesta && POLLINATIONS_TEXT_ENABLED) {
+      const resultadoPoll = await llamarPollinationsTexto(chatHistorial.slice(-5), systemPrompt, {
+        maxTokens: 16384,
+      });
+      if (resultadoPoll.ok) {
+        textoRespuesta = stripThinkTags(resultadoPoll.texto);
+        modeloUsado = resultadoPoll.modelo;
+        console.log(`[verbocode] Pollinations respondio (fallback) para ${modeloPedido}`);
+      }
+    }
+
     // Si todos los proveedores gratis fallaron, devolver error.
     if (!textoRespuesta) {
-      console.error(`[verbocode] TODOS los proveedores gratis (Pollinations + OpenRouter + g4f) fallaron para ${modeloPedido}.`);
+      console.error(`[verbocode] TODOS los proveedores gratis (OpenRouter + g4f + Pollinations) fallaron para ${modeloPedido}.`);
       return res.status(502).json({
-        error: 'No se pudo conectar con ningun modelo gratuito (Pollinations + OpenRouter + g4f). Intenta de nuevo en unos minutos.',
+        error: 'No se pudo conectar con ningun modelo gratuito (OpenRouter + g4f + Pollinations). Intenta de nuevo en unos minutos.',
       });
     }
 
@@ -3442,6 +3469,74 @@ Esto consulta JSONPlaceholder (API REST publica de prueba) y agrega el JSON real
 Estas etiquetas [[CODE::...]] y [[APIDATA::...]] son invisibles para el usuario, se procesan aparte por
 el sistema. Nunca las menciones ni las escribas a la mitad del texto. Podes combinar varias herramientas
 en la misma respuesta (WEB, CODE, APIDATA), cada una en su propia linea al final.`;
+
+const SYSTEM_PROMPT_DESIGNER_EXTRA = `
+
+HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserDesigner):
+Sos un especialista en diseño de imagenes y arte digital. Tu mision es ayudar al usuario a crear las mejores
+imagenes posibles. Cuando el usuario quiera generar una imagen:
+
+1. ESCUCHA el pedido del usuario
+2. MEJORA el prompt: agregá detalles artisticos, estilo, iluminacion, composicion, paleta de colores,
+   atmósfera, calidad (4k, 8k, ultra-detailed), estilo artistico (realista, anime, oleo, acuarela, etc.)
+3. Sugerile al usuario 2-3 variantes del prompt para que elija (estilos distintos)
+4. Cuando el usuario confirme, le decis "Generame [prompt mejorado]" y el sistema genera la imagen
+
+Si el usuario ya mando "Generame X", no escribas nada, dejá que el sistema genere la imagen directamente.
+
+CONOCIMIENTO DE MODELOS DE IMAGEN:
+- flux: realista, fotografico, alta calidad
+- flux-realism: hiperrealista
+- flux-anime: estilo anime/manga
+- flux-3d: render 3D
+- dalle-3: artistico, ilustraciones
+- sdxl: versatil, buenas para ilustraciones
+- stable-diffusion: clasico, configurable
+
+Sabe recomendar el modelo correcto segun el tipo de imagen que el usuario quiera.
+Si te preguntan que modelos podes usar, listalos: flux, flux-realism, flux-anime, flux-3d, dalle-3, sdxl,
+stable-diffusion. Todos disponibles via Pollinations (sin auth, unlimited).
+
+NO use las etiquetas [[CODE::]], [[APIDATA::]] - este modelo es SOLO para diseño de imagenes.
+NO tiene acceso a CLIMA. Si te preguntan por el clima, sugerile cambiar a NewserAdvanced.`;
+
+const SYSTEM_PROMPT_HTML_EXTRA = `
+
+HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserHTML):
+Sos un experto en diseño web y desarrollo frontend. Tu especialidad es generar sitios web completos,
+landing pages, componentes UI, y templates HTML/CSS/JS de calidad profesional.
+
+CUANDO GENERES CODIGO HTML/CSS/JS, sigue estas reglas:
+
+1. SIEMPRE usa HTML5 semantico (<header>, <nav>, <main>, <section>, <article>, <footer>)
+2. CSS moderno: usa Flexbox y Grid Layout, nunca tablas para layout
+3. Responsive design: media queries para mobile, tablet, desktop
+4. Accesibilidad: atributos aria-, alt en imagenes, labels en forms
+5. Performance: CSS critico inline, lazy loading de imagenes, sin librerias innecesarias
+6. UX: animaciones sutiles (transiciones CSS), hover states, focus states
+7. SEO: meta tags, Open Graph, structured data cuando aplique
+
+FRAMEWORKS QUE CONOCES:
+- Tailwind CSS (preferido para proyectos rapidos)
+- Bootstrap 5 (para proyectos tradicionales)
+- Alpine.js (interactividad ligera)
+- Vanilla JS (sin dependencias)
+
+FORMATO DE RESPUESTA:
+Cuando el usuario te pida un sitio/componente, escribi el codigo COMPLETO en un solo bloque.
+No dividas en partes. Si el usuario pide "landing page completa", entrega HTML+CSS+JS listo para abrir.
+
+EJEMPLOS DE PEDIDOS QUE PODES MANEJAR:
+- "Landing page para una app de fitness"
+- "Portfolio personal responsivo"
+- "Componente de tarjeta de producto con hover"
+- "Navbar responsive con menu hamburguesa"
+- "Formulario de contacto con validacion"
+- "Dashboard admin con sidebar"
+- "Pagina de precios con 3 planes"
+
+USA LAS ETIQUETAS [[CODE::...]] y [[APIDATA::...]] igual que otros modelos si necesita ejecutar codigo.
+NO tiene CLIMA. Si te preguntan por el clima, sugerile cambiar a NewserAdvanced.`;
 
 const SYSTEM_PROMPT_CATOLICO = `${SYSTEM_PROMPT}
 
@@ -4403,6 +4498,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
     const esDetalladaWeb = configModelo.nombre === 'NewserAdvanced1.5';
     const esProWeb = configModelo.nombre === 'NewserPro';
+    const esDesignerWeb = configModelo.nombre === 'NewserDesigner';
+    const usarConfigImagenWeb = esProWeb || esDesignerWeb;
     if (esDetalladaWeb) {
       const usuarioActualImg15 = obtenerUsuarioActual(req);
       const controlImg15Web = verificarLimiteImagen15(usuarioActualImg15 ? `web:${usuarioActualImg15}` : null);
@@ -4474,10 +4571,10 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       try {
         resultadoImg = await generarImagenPollinations(intencionImagen.prompt, undefined, {
           detallada: esDetalladaWeb,
-          modeloOverride: esProWeb ? configModelo.imagenModelo : null,
-          anchoOverride: esProWeb ? configModelo.imagenAncho : null,
-          altoOverride: esProWeb ? configModelo.imagenAlto : null,
-          enhanceOverride: esProWeb ? configModelo.imagenEnhance : null,
+          modeloOverride: usarConfigImagenWeb ? configModelo.imagenModelo : null,
+          anchoOverride: usarConfigImagenWeb ? configModelo.imagenAncho : null,
+          altoOverride: usarConfigImagenWeb ? configModelo.imagenAlto : null,
+          enhanceOverride: usarConfigImagenWeb ? configModelo.imagenEnhance : null,
         });
       } finally {
         clearInterval(heartbeat);
@@ -4576,6 +4673,10 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_ADVANCED_15_EXTRA;
     } else if (configModelo.nombre === 'NewserPro') {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_PRO_EXTRA;
+    } else if (configModelo.nombre === 'NewserDesigner') {
+      systemPrompt = systemPrompt + SYSTEM_PROMPT_DESIGNER_EXTRA;
+    } else if (configModelo.nombre === 'NewserHTML') {
+      systemPrompt = systemPrompt + SYSTEM_PROMPT_HTML_EXTRA;
     }
 
     if (imagenes.length) {
@@ -4614,40 +4715,15 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     ];
 
     // ============================================================
-    // CHAT WEB STREAMING (/api/chat) — Pollinations + OpenRouter + g4f
+    // CHAT WEB STREAMING (/api/chat) — Modelo configurado + fallbacks
     // ============================================================
-    // Orden (todos gratis, sin Groq):
-    //   1. Pollinations texto (UNLIMITED sin auth, segun ClawLabsAI)
-    //   2. OpenRouter Free (modelos de ClawLabsAI dinamico)
-    //   3. g4f GLM-4 (puente opcional)
-    //   4. Error claro
+    // Cada modelo usa SU modeloOpenRouter configurado primero (identidad).
+    // Fallbacks: OpenRouter ClawLabs dinamico -> g4f -> Pollinations (unlimited).
+    // NUNCA usa Groq.
     let glmTextoPreGenerado = null;
 
     // ============================================================
-    // CAPA 1: Pollinations texto (UNLIMITED sin auth)
-    // ============================================================
-    if (!glmTextoPreGenerado && POLLINATIONS_TEXT_ENABLED && !imagenes.length) {
-      enviar({ type: 'investigando', query: `Procesando con ${configModelo.nombre}...` });
-      enviar({ type: 'investigando_sitio', sitio: `Pollinations (unlimited)` });
-      const mensajesParaPoll = [
-        ...construirHistorialParaModelo(historial),
-        { role: 'user', content: contenidoUsuario },
-      ];
-      const resultadoPoll = await llamarPollinationsTexto(mensajesParaPoll, systemPrompt, {
-        signal: controladorGroq.signal,
-        maxTokens: configModelo.maxTokens,
-      });
-      enviar({ type: 'investigando_fin' });
-      if (resultadoPoll.ok && !clienteDesconectado) {
-        glmTextoPreGenerado = stripThinkTags(resultadoPoll.texto);
-        console.log(`[chat] Pollinations respondio para ${configModelo.nombre}`);
-      } else if (!clienteDesconectado) {
-        console.warn(`[chat] Pollinations fallo (${resultadoPoll.error}), fallback a OpenRouter.`);
-      }
-    }
-
-    // ============================================================
-    // CAPA 2: OpenRouter Free (modelos de ClawLabsAI/free-ai-models)
+    // CAPA 1: OpenRouter Free con el modelo configurado del modelo
     // ============================================================
     if (!glmTextoPreGenerado && configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && !imagenes.length) {
       enviar({ type: 'investigando', query: `Procesando con ${configModelo.nombre}...` });
@@ -4677,11 +4753,11 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
       enviar({ type: 'investigando_fin' });
       if (!glmTextoPreGenerado) {
-        console.warn(`[chat] OpenRouter fallo para ${configModelo.nombre}${rateLimited ? ' (rate limit)' : ''}, fallback a g4f.`);
+        console.warn(`[chat] OpenRouter fallo para ${configModelo.nombre}${rateLimited ? ' (rate limit)' : ''}, fallback a g4f/Pollinations.`);
       }
     }
 
-    // CAPA 3: g4f GLM-4 (puente opcional)
+    // CAPA 2: g4f GLM-4 (puente opcional)
     if (!glmTextoPreGenerado && GPT4FREE_ENABLED && !imagenes.length) {
       const mensajesParaGlm = [
         ...construirHistorialParaModelo(historial),
@@ -4693,6 +4769,24 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
     }
 
+    // CAPA 3: Pollinations texto (UNLIMITED sin auth, ultimo recurso)
+    if (!glmTextoPreGenerado && POLLINATIONS_TEXT_ENABLED && !imagenes.length) {
+      enviar({ type: 'investigando', query: `Procesando con ${configModelo.nombre} (unlimited)...` });
+      enviar({ type: 'investigando_sitio', sitio: `Pollinations (unlimited)` });
+      const mensajesParaPoll = [
+        ...construirHistorialParaModelo(historial),
+        { role: 'user', content: contenidoUsuario },
+      ];
+      const resultadoPoll = await llamarPollinationsTexto(mensajesParaPoll, systemPrompt, {
+        signal: controladorGroq.signal,
+        maxTokens: configModelo.maxTokens,
+      });
+      enviar({ type: 'investigando_fin' });
+      if (resultadoPoll.ok && !clienteDesconectado) {
+        glmTextoPreGenerado = stripThinkTags(resultadoPoll.texto);
+      }
+    }
+
     let reader = null;
     let decoder = null;
     let textoCompleto = glmTextoPreGenerado || '';
@@ -4700,10 +4794,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     let emitido = 0;
 
     if (!glmTextoPreGenerado) {
-      // ============================================================
-      // Si llegamos aca, todos los proveedores gratis fallaron.
       // Excepcion: si hay imagenes, intentamos vision con OpenRouter free.
-      // ============================================================
       if (imagenes.length) {
         const modeloVisionOR = configModelo.modeloOpenRouterVision || (await obtenerModeloClawLabs('vision')) || 'nvidia/nemotron-nano-12b-v2-vl:free';
         const mensajesVision = [
@@ -4719,8 +4810,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         }
       }
       if (!glmTextoPreGenerado) {
-        console.error(`[chat] Todos los proveedores gratis (Pollinations + OpenRouter + g4f) fallaron para ${configModelo.nombre}.`);
-        enviar({ type: 'error', message: 'No se pudo conectar con ningun modelo gratuito (Pollinations + OpenRouter + g4f). Intenta de nuevo en unos minutos.' });
+        console.error(`[chat] Todos los proveedores gratis (OpenRouter + g4f + Pollinations) fallaron para ${configModelo.nombre}.`);
+        enviar({ type: 'error', message: 'No se pudo conectar con ningun modelo gratuito (OpenRouter + g4f + Pollinations). Intenta de nuevo en unos minutos.' });
         return res.end();
       }
       // GLM-4 / vision respondio: emitir como stream simulado
