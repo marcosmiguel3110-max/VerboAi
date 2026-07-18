@@ -416,11 +416,12 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
 async function llamarPollinationsTexto(messages, systemPrompt, opciones = {}) {
   if (!POLLINATIONS_TEXT_ENABLED) return { ok: false, error: 'Pollinations texto deshabilitado (POLLINATIONS_TEXT_ENABLED_PRO=false)' };
 
-  // Modelos a probar en orden. El primero que responde gana.
-  // Segun ClawLabsAI/free-ai-models: todos estos son unlimited sin auth en Pollinations.
+  // Solo openai-fast funciona en Pollinations anonimo (probado 2026-07-18).
+  // Los IDs pollinations/gemini-2.0-flash y pollinations/openai-large del tracker
+  // ClawLabsAI requieren autenticacion (tier 'nectar') o ya no existen.
   const modelosAProbar = opciones.modelo
     ? [opciones.modelo]
-    : [POLLINATIONS_TEXT_MODEL, 'openai-fast', 'gpt-4o', 'gemini-2.0-flash', 'mistral'];
+    : ['openai-fast', POLLINATIONS_TEXT_MODEL, 'openai'];
 
   for (const modeloPoll of modelosAProbar) {
     const headers = { 'Content-Type': 'application/json' };
@@ -1927,22 +1928,38 @@ app.post('/api/v1/chat', async (req, res) => {
 
   try {
     // ============================================================
-    // CHAT PRINCIPAL (/api/v1/chat) — Cascada por modelo + fallbacks
+    // CHAT PRINCIPAL (/api/v1/chat) — Pollinations primero (unlimited)
     // ============================================================
-    // Cada modelo usa SU modeloOpenRouter configurado primero (identidad).
-    // Si falla, fallbacks en orden: OpenRouter ClawLabs dinamico -> g4f -> Pollinations.
-    // NUNCA usa Groq.
+    // Pollinations openai-fast es UNLIMITED sin auth (probado).
+    // OpenRouter Free requiere API key ahora (50 req/day con key free).
+    // Cascada: Pollinations -> OpenRouter (con key) -> g4f -> error.
     let texto = '';
     let modeloUsadoReal = configModelo.modeloTexto;
     let glmUsado = false;
 
     // ============================================================
-    // CAPA 1: OpenRouter Free con el modelo configurado del modelo
-    // (cada modelo de Verbo AI tiene SU modeloOpenRouter asignado)
+    // CAPA 1: Pollinations texto (UNLIMITED sin auth, SIEMPRE PRIMERO)
     // ============================================================
-    if (!glmUsado && configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
+    if (!glmUsado && POLLINATIONS_TEXT_ENABLED) {
+      const mensajesParaPoll = mensajesParaModelo.filter((m) => m.role !== 'system');
+      const resultadoPoll = await llamarPollinationsTexto(mensajesParaPoll, systemPrompt, {
+        maxTokens: configModelo.maxTokens,
+      });
+      if (resultadoPoll.ok) {
+        texto = stripThinkTags(resultadoPoll.texto);
+        modeloUsadoReal = resultadoPoll.modelo;
+        glmUsado = true;
+        console.log(`[api/v1/chat] Pollinations respondio para ${configModelo.nombre}`);
+      } else {
+        console.warn(`[api/v1/chat] Pollinations fallo (${resultadoPoll.error}), fallback a OpenRouter.`);
+      }
+    }
+
+    // ============================================================
+    // CAPA 2: OpenRouter Free (con API key) — solo si Pollinations fallo
+    // ============================================================
+    if (!glmUsado && configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && OPENROUTER_API_KEY) {
       const mensajesParaOR = mensajesParaModelo.filter((m) => m.role !== 'system');
-      // Fallbacks dinamicos de ClawLabsAI (por si el modelo principal se cae)
       const modeloDinamicoTexto = await obtenerModeloClawLabs('texto');
       const modeloDinamicoRapido = await obtenerModeloClawLabs('rapido');
       const modelosOR = [
@@ -1963,12 +1980,12 @@ app.post('/api/v1/chat', async (req, res) => {
         if (resultadoOR.error && resultadoOR.error.includes('429')) break;
       }
       if (!glmUsado) {
-        console.warn(`[api/v1/chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f/Pollinations.`);
+        console.warn(`[api/v1/chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f.`);
       }
     }
 
     // ============================================================
-    // CAPA 2: g4f GLM-4 (puente opcional)
+    // CAPA 3: g4f GLM-4 (puente opcional, ultimo recurso)
     // ============================================================
     if (!glmUsado && GPT4FREE_ENABLED) {
       const mensajesParaGlm = mensajesParaModelo.filter((m) => m.role !== 'system');
@@ -1980,26 +1997,11 @@ app.post('/api/v1/chat', async (req, res) => {
       }
     }
 
-    // ============================================================
-    // CAPA 3: Pollinations texto (UNLIMITED sin auth, ultimo recurso)
-    // ============================================================
-    if (!glmUsado && POLLINATIONS_TEXT_ENABLED) {
-      const mensajesParaPoll = mensajesParaModelo.filter((m) => m.role !== 'system');
-      const resultadoPoll = await llamarPollinationsTexto(mensajesParaPoll, systemPrompt, {
-        maxTokens: configModelo.maxTokens,
-      });
-      if (resultadoPoll.ok) {
-        texto = stripThinkTags(resultadoPoll.texto);
-        modeloUsadoReal = resultadoPoll.modelo;
-        glmUsado = true;
-      }
-    }
-
     if (!glmUsado) {
-      console.error(`[api/v1/chat] Todos los proveedores gratis (OpenRouter + g4f + Pollinations) fallaron para ${configModelo.nombre}.`);
+      console.error(`[api/v1/chat] Todos los proveedores (Pollinations + OpenRouter + g4f) fallaron para ${configModelo.nombre}.`);
       return res.status(502).json({
         ok: false,
-        error: 'No se pudo conectar con ningun modelo gratuito (OpenRouter + g4f + Pollinations). Intenta de nuevo en unos minutos.',
+        error: 'No se pudo conectar con ningun proveedor. Intenta de nuevo en unos minutos.',
       });
     }
 
