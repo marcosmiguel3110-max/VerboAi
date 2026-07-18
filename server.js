@@ -2429,8 +2429,38 @@ function leerProyectoVerboCode(id, usuario) {
 
 function guardarProyectoVerboCode(proyecto) {
   proyecto.actualizadoEn = new Date().toISOString();
-  fs.writeFileSync(path.join(VERBOCODE_DIR, `${proyecto.id}.json`), JSON.stringify(proyecto, null, 2));
+  try {
+    fs.writeFileSync(path.join(VERBOCODE_DIR, `${proyecto.id}.json`), JSON.stringify(proyecto, null, 2));
+    // Guardar también en MongoDB para que persista al reiniciar Render
+    guardarEnMongoBackground('verbocode-' + proyecto.id, proyecto);
+  } catch (e) {
+    console.error('[verbocode] Error guardando proyecto:', e.message);
+  }
 }
+
+// Cargar proyectos desde MongoDB al arrancar (para que persistan al reiniciar)
+async function cargarProyectosVerboCodeDesdeMongo() {
+  try {
+    if (!mongoDb.estaConectado()) return;
+    const docs = await mongoDb.leerTodos('verbocode');
+    if (!docs || docs.length === 0) return;
+    for (const doc of docs) {
+      if (!doc._id.startsWith('verbocode-')) continue;
+      const proyecto = doc.valor;
+      if (proyecto && proyecto.id) {
+        const archivoLocal = path.join(VERBOCODE_DIR, `${proyecto.id}.json`);
+        if (!fs.existsSync(archivoLocal)) {
+          fs.writeFileSync(archivoLocal, JSON.stringify(proyecto, null, 2));
+          console.log(`[verbocode] Proyecto restaurado desde MongoDB: ${proyecto.id}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[verbocode] No se pudieron cargar proyectos desde MongoDB:', e.message);
+  }
+}
+// Ejecutar al arrancar (después de que Mongo conecte)
+setTimeout(cargarProyectosVerboCodeDesdeMongo, 5000);
 
 // Middleware: requiere admin
 function requiereAdminVerboCode(req, res, next) {
@@ -2649,6 +2679,65 @@ Proyecto: ${proyecto.nombre}`;
     }
 
     systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, modeloPedido);
+
+    // ============================================================
+    // PASO 0: GENERAR PLAN (antes de responder)
+    // La IA primero crea un plan de acción que se muestra en el chat
+    // como un mensaje especial debajo de la burbuja del assistant.
+    // ============================================================
+    let planAccion = '';
+    try {
+      const planSystemPrompt = `Sos ${modeloPedido} de Verbo AI. NUNCA digas ser otro modelo. Estás en MODO VERBO CODE. El usuario te pidió algo. Tu trabajo es crear un PLAN DE ACCIÓN breve (máximo 5 pasos) de qué vas a hacer para resolverlo. No escribas código, solo el plan. Formato:
+PASO 1: ...
+PASO 2: ...
+etc.
+
+Sea conciso. Máximo 5 pasos.`;
+
+      const planMessages = [{ role: 'user', content: `Pedido del usuario: ${mensaje}\n\nArchivos actuales: ${Object.keys(proyecto.archivos).join(', ') || 'vacío'}` }];
+
+      // Usar OpenRouter para el plan (rápido)
+      if (OPENROUTER_FREE_ENABLED) {
+        const modelosOR = [
+          configModelo.modeloOpenRouter,
+          'nvidia/nemotron-3-ultra-550b-a55b:free',
+          'meta-llama/llama-3.3-70b-instruct:free',
+          'openai/gpt-oss-20b:free',
+        ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+        for (const modeloOR of modelosOR) {
+          const resultadoPlan = await llamarOpenRouterFree(planMessages, planSystemPrompt, modeloOR);
+          if (resultadoPlan.ok) {
+            planAccion = stripThinkTags(resultadoPlan.texto);
+            break;
+          }
+        }
+      }
+
+      // Si OpenRouter falló, usar Groq
+      if (!planAccion) {
+        const respPlan = await llamarGroqConReintentos({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'openai/gpt-oss-20b',
+            messages: [
+              { role: 'system', content: planSystemPrompt },
+              ...planMessages,
+            ],
+            temperature: 0.3,
+            max_tokens: 300,
+            stream: false,
+          }),
+        }, () => {});
+        if (respPlan && respPlan.ok) {
+          const dataPlan = await respPlan.json();
+          planAccion = stripThinkTags((dataPlan.choices?.[0]?.message?.content) || '');
+        }
+      }
+    } catch (e) {
+      console.warn('[verbocode] Plan fallo:', e.message);
+    }
 
     // Llamar al modelo de texto — cascada de fallbacks
     let textoRespuesta = '';
@@ -2967,10 +3056,11 @@ Proyecto: ${proyecto.nombre}`;
     res.json({
       ok: true,
       respuesta: textoLimpio,
+      plan: planAccion || null,
       acciones,
       proyectoActualizado,
       archivos: proyectoActualizado ? proyecto.archivos : undefined,
-      modeloUsado: modeloDisplay,  // 'VerboAITeams' en vez del nombre técnico
+      modeloUsado: modeloDisplay,
       razonamiento: razonamientoPrevio || null,
     });
   } catch (e) {
