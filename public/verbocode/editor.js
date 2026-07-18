@@ -613,8 +613,17 @@ function configurarChatInput() {
 async function enviarChat() {
   if (estado.chatEnProgreso) return;
   const input = document.getElementById('vcChatInput');
+  const btnEnviar = document.getElementById('btnEnviarChat');
   const texto = input.value.trim();
   if (!texto) return;
+
+  // Función helper para rehabilitar el input SIEMPRE
+  const rehabilitarInput = () => {
+    try { input.disabled = false; } catch(e) {}
+    try { btnEnviar.disabled = false; } catch(e) {}
+    estado.chatEnProgreso = false;
+    try { input.focus(); } catch(e) {}
+  };
 
   // Render mensaje del usuario
   const msgUser = { role: 'user', content: texto, fecha: new Date().toISOString() };
@@ -624,7 +633,7 @@ async function enviarChat() {
 
   input.value = '';
   input.disabled = true;
-  document.getElementById('btnEnviarChat').disabled = true;
+  btnEnviar.disabled = true;
   estado.chatEnProgreso = true;
 
   // Indicador de "pensando"
@@ -636,6 +645,10 @@ async function enviarChat() {
   scrollChatAbajo();
 
   try {
+    // Timeout del lado del cliente: 90 segundos
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
+
     const r = await fetch(`/api/verbocode/chat/${estado.proyectoId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -643,41 +656,48 @@ async function enviarChat() {
         mensaje: texto,
         modelo: estado.modeloSeleccionado,
       }),
+      signal: controller.signal,
     });
 
-    thinkingEl.remove();
+    clearTimeout(timeoutId);
+
+    if (thinkingEl.parentNode) thinkingEl.remove();
 
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
-      throw new Error(e.error || 'Error en la petición');
+      throw new Error(e.error || `Error ${r.status} en la petición`);
     }
 
     const data = await r.json();
-    // Render respuesta de la IA — incluir el modelo usado
+    // Render respuesta de la IA
     const msgAssistant = {
       role: 'assistant',
       content: data.respuesta,
       fecha: new Date().toISOString(),
-      modelo: data.modeloUsado || estado.modeloSeleccionado,
+      modelo: data.modeloUsado || 'VerboAITeams',
     };
     estado.proyecto.chat.push(msgAssistant);
     renderMensaje(msgAssistant);
 
-    // Render acciones (archivos creados/editados, imágenes, etc)
+    // Render acciones
     if (data.acciones && data.acciones.length > 0) {
-      data.acciones.forEach(accion => {
-        renderAccion(accion);
-      });
+      data.acciones.forEach(accion => renderAccion(accion));
     }
 
-    // Si la IA modificó archivos, recargar
-    if (data.proyectoActualizado) {
-      estado.archivos = data.archivos || estado.archivos;
+    // Si la IA modificó archivos, actualizar
+    if (data.proyectoActualizado && data.archivos) {
+      estado.archivos = data.archivos;
       // Actualizar el editor si el archivo actual fue modificado
-      if (estado.archivoActual && estado.monacoModels[estado.archivoActual]) {
+      if (estado.archivoActual) {
         const nuevoContenido = estado.archivos[estado.archivoActual];
-        if (estado.monacoModels[estado.archivoActual].getValue() !== nuevoContenido) {
-          estado.monacoModels[estado.archivoActual].setValue(nuevoContenido);
+        if (nuevoContenido !== undefined) {
+          if (typeof monaco !== 'undefined' && estado.monacoModels && estado.monacoModels[estado.archivoActual]) {
+            if (estado.monacoModels[estado.archivoActual].getValue() !== nuevoContenido) {
+              estado.monacoModels[estado.archivoActual].setValue(nuevoContenido);
+            }
+          } else if (estado.monaco) {
+            estado.monaco.setValue(nuevoContenido);
+          }
         }
       }
       renderArchivos();
@@ -686,15 +706,13 @@ async function enviarChat() {
     // Guardar chat
     await guardarArchivos();
   } catch (e) {
-    thinkingEl.remove();
-    mostrarToast(e.message, 'error');
-    const msgError = { role: 'assistant', content: '❌ Error: ' + e.message, fecha: new Date().toISOString() };
+    if (thinkingEl.parentNode) thinkingEl.remove();
+    const errorMsg = e.name === 'AbortError' ? 'Timeout: el servidor tardó demasiado en responder.' : e.message;
+    mostrarToast(errorMsg, 'error');
+    const msgError = { role: 'assistant', content: 'Error: ' + errorMsg + '\n\nIntentá de nuevo, ya podés escribir.', fecha: new Date().toISOString() };
     renderMensaje(msgError);
   } finally {
-    input.disabled = false;
-    document.getElementById('btnEnviarChat').disabled = false;
-    estado.chatEnProgreso = false;
-    input.focus();
+    rehabilitarInput();
   }
 }
 

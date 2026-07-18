@@ -153,6 +153,26 @@ const MODELOS_DISPONIBLES = {
     imagenAlto: POLLINATIONS_PRO_HEIGHT,
     imagenEnhance: true,
   },
+  NewserAdmin: {
+    nombre: 'NewserAdmin',
+    descripcion: 'Exclusivo admin. Modelo mas potente para codigo. Usa Qwen3-Coder-480B (480 billones de parametros, MoE 35B activos). Especializado en programacion, agentic coding y desarrollo.',
+    modeloTexto: GROQ_MODEL_PRO_TEXTO,
+    modeloTextoRazonamiento: GROQ_MODEL_PRO_RAZONAMIENTO,
+    modeloVision: GROQ_MODEL_VISION,
+    costoCreditos: 0,
+    rateLimitMax: 3,
+    rateLimitMaxWeb: 5,
+    maxTokens: 4096,
+    badge: 'admin',
+    disponible: true,
+    soloAdmin: true,
+    modeloOpenRouter: 'qwen/qwen3-coder:free',
+    modeloG4F: 'qwen-3-coder-480b-a35b',
+    imagenModelo: POLLINATIONS_PRO_MODEL,
+    imagenAncho: POLLINATIONS_PRO_WIDTH,
+    imagenAlto: POLLINATIONS_PRO_HEIGHT,
+    imagenEnhance: true,
+  },
 };
 const MODELO_DEFAULT = 'NewserLite';
 
@@ -272,6 +292,71 @@ function mensajeErrorAmigableIA(status) {
   if (status === 401 || status === 403) return 'Hubo un problema de autenticacion con el servicio de IA. Avisale al administrador.';
   if (status >= 500) return 'El servicio de IA no esta disponible en este momento. Intenta de nuevo en unos minutos.';
   return 'Error al conectar con el modelo. Intenta de nuevo en unos minutos.';
+}
+
+// ============================================================
+// CAPA OPENROUTER FREE — modelos gratis sin API key
+// ============================================================
+// Fuente: https://github.com/ClawLabsAI/free-ai-models
+// OpenRouter ofrece varios modelos con tier ":free" que NO requieren
+// API key para usarse (rate limit generoso: 20 req/min).
+//
+// Modelos disponibles gratis:
+//   - qwen/qwen3-coder:free          → Qwen3-Coder-480B-A35B (codigo)
+//   - nvidia/nemotron-3-ultra-550b-a55b:free → Nemotron 550B
+//   - meta-llama/llama-3.3-70b-instruct:free → Llama 3.3 70B
+//   - openai/gpt-oss-20b:free        → GPT-OSS 20B
+//   - nousresearch/hermes-3-llama-3.1-405b:free → Hermes 405B
+const OPENROUTER_FREE_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_FREE_ENABLED = (process.env.OPENROUTER_FREE_ENABLED || 'true').toLowerCase() === 'true';
+const OPENROUTER_FREE_TIMEOUT = parseInt(process.env.OPENROUTER_FREE_TIMEOUT || '60000', 10);
+// API key opcional de OpenRouter (te da mas rate limit si la tenes)
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+
+// Llama a OpenRouter con un modelo free (sin API key requerida para tier :free)
+async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}) {
+  if (!OPENROUTER_FREE_ENABLED) return { ok: false, error: 'OpenRouter free deshabilitado' };
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (OPENROUTER_API_KEY) {
+    headers['Authorization'] = `Bearer ${OPENROUTER_API_KEY}`;
+  }
+  // HTTP-Referer y X-Title ayudan a OpenRouter a identificar la app (opcional)
+  headers['HTTP-Referer'] = 'https://verboai.duckdns.org';
+  headers['X-Title'] = 'Verbo AI';
+
+  const body = {
+    model: model,
+    messages: [{ role: 'system', content: systemPrompt }, ...messages],
+    temperature: 0.7,
+    max_tokens: 4096,
+    stream: false,
+  };
+
+  try {
+    const resp = await axios.post(OPENROUTER_FREE_URL, body, {
+      timeout: OPENROUTER_FREE_TIMEOUT,
+      headers,
+      signal: opciones.signal,
+      validateStatus: () => true,
+    });
+    if (resp.status < 200 || resp.status >= 300) {
+      const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
+      console.error(`[openrouter-free] HTTP ${resp.status}: ${detalle}`);
+      return { ok: false, error: `HTTP ${resp.status}` };
+    }
+    const texto = resp.data?.choices?.[0]?.message?.content || '';
+    if (!texto || !texto.trim()) {
+      console.error('[openrouter-free] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+      return { ok: false, error: 'Respuesta vacia de OpenRouter' };
+    }
+    console.log(`[openrouter-free] OK - ${texto.length} chars por ${model}`);
+    return { ok: true, texto: texto.trim(), modelo: model };
+  } catch (e) {
+    if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return { ok: false, error: 'cancelado' };
+    console.error('[openrouter-free] fallo:', e.message);
+    return { ok: false, error: e.message };
+  }
 }
 
 // ============================================================
@@ -2267,6 +2352,7 @@ if (!fs.existsSync(VERBOCODE_DIR)) fs.mkdirSync(VERBOCODE_DIR, { recursive: true
 const MODELOS_VERBO_CODE = {
   'NewserAdvanced1.5': MODELOS_DISPONIBLES['NewserAdvanced1.5'],
   'NewserPro': MODELOS_DISPONIBLES['NewserPro'],
+  'NewserAdmin': MODELOS_DISPONIBLES['NewserAdmin'],
 };
 
 function leerProyectosVerboCode(usuario) {
@@ -2511,9 +2597,27 @@ Proyecto: ${proyecto.nombre}`;
     let textoRespuesta = '';
     let modeloUsado = configModelo.modeloTexto;
 
-    // 1. Intentar con el puente GPT4Free (g4f) si está habilitado y el modelo es NewserPro
-    if (modeloPedido === 'NewserPro' && GPT4FREE_ENABLED && GPT4FREE_URL) {
-      const resultadoGlm = await llamarGlm4Bridge(chatHistorial.slice(-3), systemPrompt);
+    // 1. Intentar con OpenRouter Free si el modelo tiene modeloOpenRouter configurado
+    //    NewserAdmin usa qwen/qwen3-coder:free (480B parametros, codigo)
+    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
+      const resultadoOR = await llamarOpenRouterFree(chatHistorial.slice(-3), systemPrompt, configModelo.modeloOpenRouter);
+      if (resultadoOR.ok) {
+        textoRespuesta = stripThinkTags(resultadoOR.texto);
+        modeloUsado = resultadoOR.modelo;
+      } else {
+        console.warn(`[verbocode] OpenRouter fallo (${resultadoOR.error}), fallback a g4f/Groq.`);
+      }
+    }
+
+    // 2. Intentar con el puente GPT4Free (g4f) si está habilitado
+    //    NewserAdmin usa qwen-3-coder-480b-a35b, NewserPro usa deepseek-r1
+    if (!textoRespuesta && GPT4FREE_ENABLED && GPT4FREE_URL) {
+      const modeloG4F = configModelo.modeloG4F;
+      const mensajesParaGlm = chatHistorial.slice(-3);
+      const resultadoGlm = (modeloG4F || modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin')
+        ? await llamarGlm4Bridge(mensajesParaGlm, systemPrompt)
+        : { ok: false, error: 'no aplica' };
+
       if (resultadoGlm.ok) {
         textoRespuesta = stripThinkTags(resultadoGlm.texto);
         modeloUsado = resultadoGlm.modelo;
@@ -2530,10 +2634,13 @@ Proyecto: ${proyecto.nombre}`;
         configModelo.modeloTexto,           // gpt-oss-120b o qwen3-32b (lo configurado)
         'qwen/qwen3-32b',                    // siempre funciona
         'openai/gpt-oss-20b',                // el de NewserLite, siempre funciona
+        'llama-3.3-70b-versatile',           // otro fallback más
       ].filter((v, i, a) => v && a.indexOf(v) === i); // sin duplicados
 
+      let ultimoError = '';
       for (const modeloGroq of modelosGroq) {
         try {
+          console.log(`[verbocode] Probando modelo: ${modeloGroq}`);
           const respuestaGroq = await llamarGroqConReintentos({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2544,23 +2651,41 @@ Proyecto: ${proyecto.nombre}`;
                 ...chatHistorial,
               ],
               temperature: 0.7,
-              max_tokens: configModelo.maxTokens,
+              max_tokens: configModelo.maxTokens || 3072,
               stream: false,
             }),
           }, () => {});
+
           if (respuestaGroq && respuestaGroq.ok) {
             const data = await respuestaGroq.json();
-            textoRespuesta = stripThinkTags((data.choices?.[0]?.message?.content) || '');
-            modeloUsado = modeloGroq;
-            break; // salimos del loop, ya respondió
+            const content = data.choices?.[0]?.message?.content || '';
+            if (content.trim()) {
+              textoRespuesta = stripThinkTags(content);
+              modeloUsado = modeloGroq;
+              console.log(`[verbocode] OK con modelo: ${modeloGroq}`);
+              break;
+            } else {
+              ultimoError = `${modeloGroq}: respuesta vacía`;
+              console.warn(`[verbocode] ${ultimoError}`);
+            }
+          } else {
+            const status = respuestaGroq ? respuestaGroq.status : 0;
+            ultimoError = `${modeloGroq}: HTTP ${status}`;
+            console.warn(`[verbocode] ${ultimoError}`);
+            // Si es 401 o 403, probablemente la API key no tiene acceso a ese modelo
+            // pero igual probamos el siguiente
           }
         } catch (e) {
+          ultimoError = `${modeloGroq}: ${e.message}`;
           console.warn(`[verbocode] modelo ${modeloGroq} fallo: ${e.message}`);
         }
       }
 
       if (!textoRespuesta) {
-        return res.status(502).json({ error: 'No se pudo conectar con ningún modelo. Intenta de nuevo en unos minutos.' });
+        console.error(`[verbocode] TODOS los modelos fallaron. Último error: ${ultimoError}`);
+        return res.status(502).json({
+          error: `No se pudo conectar con ningún modelo (último error: ${ultimoError}). Verificá tu GROQ_API_KEY en Render.`,
+        });
       }
     }
 
