@@ -679,6 +679,7 @@ async function enviarChat() {
       content: data.respuesta,
       fecha: new Date().toISOString(),
       modelo: data.modeloUsado || 'VerboAITeams',
+      plan: data.plan || null,
     };
     estado.proyecto.chat.push(msgAssistant);
     renderMensaje(msgAssistant);
@@ -735,8 +736,20 @@ function renderMensaje(m) {
     div.appendChild(meta);
   }
 
+  // Si tiene plan, mostrarlo debajo de la burbuja como caja especial
+  if (m.role === 'assistant' && m.plan) {
+    const planDiv = document.createElement('div');
+    planDiv.className = 'vc-msg-plan';
+    planDiv.innerHTML = '<div class="vc-plan-header"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke-linecap="round" stroke-linejoin="round"/></svg> PLAN DE ACCIÓN</div><pre>' + escapeHtmlPlan(m.plan) + '</pre>';
+    div.appendChild(planDiv);
+  }
+
   cont.appendChild(div);
   scrollChatAbajo();
+}
+
+function escapeHtmlPlan(texto) {
+  return texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function renderAccion(accion) {

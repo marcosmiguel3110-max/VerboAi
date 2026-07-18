@@ -599,6 +599,39 @@
   font-style: italic;
 }
 
+/* Plan de acción — caja debajo de la burbuja del assistant */
+.vc-msg-plan {
+  margin-top: 8px;
+  background: var(--vc-bg-secondary);
+  border: 1px solid var(--vc-border);
+  border-left: 3px solid var(--vc-accent);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.vc-plan-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vc-accent);
+  background: var(--vc-accent-light);
+  font-family: var(--vc-font-mono);
+}
+.vc-msg-plan pre {
+  margin: 0;
+  padding: 8px 10px;
+  font-family: var(--vc-font-mono);
+  font-size: 11px;
+  color: var(--vc-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
 /* ============================================================
    Modal preview
    ============================================================ */
