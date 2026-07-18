@@ -153,6 +153,25 @@ const MODELOS_DISPONIBLES = {
     imagenAlto: POLLINATIONS_PRO_HEIGHT,
     imagenEnhance: true,
   },
+  NewserAdmin: {
+    nombre: 'NewserAdmin',
+    descripcion: 'Exclusivo admin. Modelo mas potente para codigo. Usa Qwen3-Coder-480B (480 billones de parametros, MoE 35B activos). Especializado en programacion, agentic coding y desarrollo.',
+    modeloTexto: GROQ_MODEL_PRO_TEXTO,
+    modeloTextoRazonamiento: GROQ_MODEL_PRO_RAZONAMIENTO,
+    modeloVision: GROQ_MODEL_VISION,
+    costoCreditos: 0,
+    rateLimitMax: 3,
+    rateLimitMaxWeb: 5,
+    maxTokens: 4096,
+    badge: 'admin',
+    disponible: true,
+    soloAdmin: true,
+    modeloG4F: 'qwen-3-coder-480b-a35b',
+    imagenModelo: POLLINATIONS_PRO_MODEL,
+    imagenAncho: POLLINATIONS_PRO_WIDTH,
+    imagenAlto: POLLINATIONS_PRO_HEIGHT,
+    imagenEnhance: true,
+  },
 };
 const MODELO_DEFAULT = 'NewserLite';
 
@@ -2267,6 +2286,7 @@ if (!fs.existsSync(VERBOCODE_DIR)) fs.mkdirSync(VERBOCODE_DIR, { recursive: true
 const MODELOS_VERBO_CODE = {
   'NewserAdvanced1.5': MODELOS_DISPONIBLES['NewserAdvanced1.5'],
   'NewserPro': MODELOS_DISPONIBLES['NewserPro'],
+  'NewserAdmin': MODELOS_DISPONIBLES['NewserAdmin'],
 };
 
 function leerProyectosVerboCode(usuario) {
@@ -2511,9 +2531,20 @@ Proyecto: ${proyecto.nombre}`;
     let textoRespuesta = '';
     let modeloUsado = configModelo.modeloTexto;
 
-    // 1. Intentar con el puente GPT4Free (g4f) si está habilitado y el modelo es NewserPro
-    if (modeloPedido === 'NewserPro' && GPT4FREE_ENABLED && GPT4FREE_URL) {
-      const resultadoGlm = await llamarGlm4Bridge(chatHistorial.slice(-3), systemPrompt);
+    // 1. Intentar con el puente GPT4Free (g4f) si está habilitado
+    //    NewserAdmin usa qwen-3-coder-480b-a35b, NewserPro usa deepseek-r1
+    if (GPT4FREE_ENABLED && GPT4FREE_URL) {
+      const modeloG4F = configModelo.modeloG4F || (modeloPedido === 'NewserPro' ? null : null);
+      // Si el modelo tiene un modeloG4F configurado (ej: NewserAdmin → qwen-3-coder-480b-a35b),
+      // pedirle al puente que use ese modelo específico.
+      const mensajesParaGlm = chatHistorial.slice(-3);
+      // Si hay modeloG4F, mandarlo como el model en el body del puente
+      const resultadoGlm = modeloG4F
+        ? await llamarGlm4Bridge(mensajesParaGlm, systemPrompt)
+        : (modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin'
+          ? await llamarGlm4Bridge(mensajesParaGlm, systemPrompt)
+          : { ok: false, error: 'no aplica' });
+
       if (resultadoGlm.ok) {
         textoRespuesta = stripThinkTags(resultadoGlm.texto);
         modeloUsado = resultadoGlm.modelo;
