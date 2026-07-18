@@ -1,0 +1,404 @@
+/* ============================================================
+   Verbo Code — Editor page styles
+   ============================================================ */
+
+.vc-editor-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Header del editor */
+.vc-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background: var(--vc-bg-secondary);
+  border-bottom: 1px solid var(--vc-border);
+  flex-shrink: 0;
+}
+
+.vc-editor-titulo { display: flex; align-items: center; gap: 12px; }
+
+.vc-editor-titulo-input {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--vc-text);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 6px;
+  outline: none;
+  min-width: 200px;
+  transition: all 0.2s;
+}
+.vc-editor-titulo-input:hover:not(:disabled) { background: var(--vc-bg-tertiary); }
+.vc-editor-titulo-input:focus:not(:disabled) { border-color: var(--vc-accent); background: var(--vc-bg-tertiary); }
+.vc-editor-titulo-input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Layout principal: sidebar | editor | chat */
+.vc-editor-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 220px 1fr 380px;
+  overflow: hidden;
+}
+
+/* ============================================================
+   Sidebar (modelos + archivos)
+   ============================================================ */
+.vc-sidebar {
+  background: var(--vc-bg-secondary);
+  border-right: 1px solid var(--vc-border);
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.vc-sidebar-section { display: flex; flex-direction: column; gap: 8px; }
+
+.vc-sidebar-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--vc-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.vc-icon-btn {
+  width: 24px; height: 24px;
+  border-radius: 5px;
+  color: var(--vc-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.vc-icon-btn:hover { background: var(--vc-bg-tertiary); color: var(--vc-text); }
+
+/* Lista de modelos */
+.vc-modelos-list { display: flex; flex-direction: column; gap: 4px; }
+
+.vc-modelo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+  font-size: 13px;
+}
+.vc-modelo-item:hover { background: var(--vc-bg-tertiary); }
+.vc-modelo-item.activo {
+  background: var(--vc-accent-light);
+  border-color: var(--vc-accent);
+  color: var(--vc-accent);
+  font-weight: 500;
+}
+
+.vc-modelo-badge {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.vc-modelo-badge.pro { background: var(--vc-accent); color: white; }
+.vc-modelo-badge.uno-punto-cinco { background: #16a34a; color: white; }
+
+/* Lista de archivos */
+.vc-archivos-list { display: flex; flex-direction: column; gap: 2px; }
+
+.vc-archivo-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--vc-text-secondary);
+  transition: all 0.15s;
+  position: relative;
+}
+.vc-archivo-item:hover { background: var(--vc-bg-tertiary); color: var(--vc-text); }
+.vc-archivo-item.activo { background: var(--vc-accent-light); color: var(--vc-accent); }
+
+.vc-archivo-item .vc-archivo-nombre {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--vc-font-mono);
+  font-size: 12px;
+}
+
+.vc-archivo-delete {
+  opacity: 0;
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vc-text-muted);
+}
+.vc-archivo-item:hover .vc-archivo-delete { opacity: 1; }
+.vc-archivo-delete:hover { background: rgba(220,38,38,0.15); color: var(--vc-danger); }
+
+/* ============================================================
+   Editor (Monaco)
+   ============================================================ */
+.vc-editor-main {
+  display: flex;
+  flex-direction: column;
+  background: var(--vc-bg);
+  overflow: hidden;
+}
+
+.vc-editor-tabs {
+  display: flex;
+  background: var(--vc-bg-secondary);
+  border-bottom: 1px solid var(--vc-border);
+  overflow-x: auto;
+  flex-shrink: 0;
+  min-height: 36px;
+}
+
+.vc-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--vc-bg-secondary);
+  color: var(--vc-text-secondary);
+  font-size: 12px;
+  font-family: var(--vc-font-mono);
+  border-right: 1px solid var(--vc-border);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.vc-tab:hover { background: var(--vc-bg-tertiary); }
+.vc-tab.activo {
+  background: var(--vc-bg);
+  color: var(--vc-text);
+  border-bottom: 2px solid var(--vc-accent);
+}
+
+.vc-tab-close {
+  width: 16px; height: 16px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+}
+.vc-tab-close:hover { background: var(--vc-bg-tertiary); opacity: 1; }
+
+.vc-monaco-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ============================================================
+   Chat IA
+   ============================================================ */
+.vc-chat {
+  background: var(--vc-bg-secondary);
+  border-left: 1px solid var(--vc-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.vc-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--vc-border);
+  flex-shrink: 0;
+}
+.vc-chat-header h3 { font-size: 14px; font-weight: 600; }
+
+.vc-chat-mensajes {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vc-chat-bienvenida {
+  background: var(--vc-bg-tertiary);
+  border-radius: 10px;
+  padding: 16px;
+  font-size: 13px;
+  color: var(--vc-text-secondary);
+  line-height: 1.6;
+}
+.vc-chat-bienvenida ul { list-style: none; padding: 8px 0; }
+.vc-chat-bienvenida li { padding: 2px 0; }
+.vc-chat-bienvenida p { margin-bottom: 6px; }
+.vc-chat-bienvenida p:last-child { margin-top: 10px; font-weight: 500; color: var(--vc-text); }
+
+.vc-msg {
+  max-width: 92%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+.vc-msg.user {
+  align-self: flex-end;
+  background: var(--vc-accent);
+  color: white;
+}
+.vc-msg.assistant {
+  align-self: flex-start;
+  background: var(--vc-bg-tertiary);
+  color: var(--vc-text);
+}
+.vc-msg.assistant pre {
+  background: var(--vc-bg);
+  border: 1px solid var(--vc-border);
+  border-radius: 6px;
+  padding: 10px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-family: var(--vc-font-mono);
+  font-size: 12px;
+}
+.vc-msg.assistant code {
+  font-family: var(--vc-font-mono);
+  background: var(--vc-bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.vc-msg.system {
+  align-self: center;
+  background: transparent;
+  color: var(--vc-text-muted);
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+}
+
+.vc-msg-accion {
+  align-self: flex-start;
+  background: var(--vc-accent-light);
+  border-left: 3px solid var(--vc-accent);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--vc-accent);
+  font-family: var(--vc-font-mono);
+}
+
+.vc-msg-thinking {
+  align-self: flex-start;
+  background: transparent;
+  color: var(--vc-text-muted);
+  font-size: 12px;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vc-chat-input-wrap {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--vc-border);
+  flex-shrink: 0;
+}
+
+.vc-chat-input {
+  flex: 1;
+  padding: 10px 12px;
+  background: var(--vc-bg);
+  border: 1px solid var(--vc-border);
+  border-radius: 8px;
+  color: var(--vc-text);
+  font-size: 13px;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+.vc-chat-input:focus { border-color: var(--vc-accent); }
+.vc-chat-input::placeholder { color: var(--vc-text-muted); }
+
+.vc-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Loading small */
+.vc-loading-small {
+  padding: 12px;
+  text-align: center;
+  color: var(--vc-text-muted);
+  font-size: 12px;
+}
+
+/* ============================================================
+   Modal preview
+   ============================================================ */
+.vc-modal-preview {
+  max-width: 90vw !important;
+  width: 90vw !important;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 !important;
+}
+
+.vc-modal-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--vc-border);
+}
+
+.vc-preview-frame {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: white;
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 1100px) {
+  .vc-editor-layout {
+    grid-template-columns: 180px 1fr 320px;
+  }
+}
+
+@media (max-width: 900px) {
+  .vc-editor-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+  .vc-sidebar, .vc-chat {
+    max-height: 30vh;
+    border: none;
+    border-bottom: 1px solid var(--vc-border);
+  }
+  .vc-chat { border-bottom: none; border-top: 1px solid var(--vc-border); }
+}

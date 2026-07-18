@@ -1,0 +1,296 @@
+/* ============================================================
+   Verbo Code — Shared styles (df-night compatible)
+   ============================================================ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --vc-bg: #ffffff;
+  --vc-bg-secondary: #f7f7f8;
+  --vc-bg-tertiary: #ececf1;
+  --vc-border: #e5e5e8;
+  --vc-text: #1a1a1a;
+  --vc-text-secondary: #6b6b75;
+  --vc-text-muted: #9999a3;
+  --vc-accent: #8033e0;
+  --vc-accent-hover: #6d28d9;
+  --vc-accent-light: rgba(128, 51, 224, 0.1);
+  --vc-success: #16a34a;
+  --vc-danger: #dc2626;
+  --vc-warning: #d97706;
+  --vc-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  --vc-shadow-lg: 0 12px 32px rgba(0,0,0,0.15);
+  --vc-radius: 12px;
+  --vc-radius-sm: 8px;
+  --vc-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  --vc-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+/* ============================================================
+   TEMA df-night (dark mode de Verbo AI)
+   ============================================================ */
+html.tema-night body.vc-page,
+html.tema-night .vc-page {
+  --vc-bg: #0f0f1a;
+  --vc-bg-secondary: #1a1a2e;
+  --vc-bg-tertiary: #252540;
+  --vc-border: #2a2a45;
+  --vc-text: #e4e4ed;
+  --vc-text-secondary: #a0a0b5;
+  --vc-text-muted: #6b6b85;
+  --vc-accent: #a855f7;
+  --vc-accent-hover: #c084fc;
+  --vc-accent-light: rgba(168, 85, 247, 0.15);
+  --vc-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  --vc-shadow-lg: 0 12px 32px rgba(0,0,0,0.6);
+  background: var(--vc-bg);
+  color: var(--vc-text);
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+body.vc-page {
+  font-family: var(--vc-font);
+  background: var(--vc-bg);
+  color: var(--vc-text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, textarea { font-family: inherit; }
+.oculto { display: none !important; }
+
+/* ============================================================
+   Header
+   ============================================================ */
+.vc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--vc-bg-secondary);
+  border-bottom: 1px solid var(--vc-border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.vc-header-left { display: flex; align-items: center; gap: 16px; }
+
+.vc-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  color: var(--vc-text-secondary);
+  transition: all 0.2s;
+}
+.vc-back-btn:hover { background: var(--vc-bg-tertiary); color: var(--vc-text); }
+
+.vc-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--vc-accent);
+}
+
+.vc-header-right { display: flex; align-items: center; gap: 12px; }
+
+.vc-perfil {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px 6px 6px;
+  background: var(--vc-bg-tertiary);
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.vc-perfil-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--vc-accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   Main container
+   ============================================================ */
+.vc-main {
+  flex: 1;
+  padding: 32px 24px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.vc-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.vc-title { font-size: 24px; font-weight: 600; }
+
+/* ============================================================
+   Botones
+   ============================================================ */
+.vc-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: var(--vc-accent);
+  color: white;
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+.vc-btn-primary:hover:not(:disabled) { background: var(--vc-accent-hover); transform: translateY(-1px); }
+.vc-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.vc-btn-ghost {
+  padding: 10px 18px;
+  background: transparent;
+  color: var(--vc-text-secondary);
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--vc-border);
+  transition: all 0.2s;
+}
+.vc-btn-ghost:hover { background: var(--vc-bg-tertiary); color: var(--vc-text); }
+
+/* ============================================================
+   Loading
+   ============================================================ */
+.vc-loading {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 20px;
+  color: var(--vc-text-muted);
+}
+
+.vc-spinner {
+  width: 32px; height: 32px;
+  border: 3px solid var(--vc-bg-tertiary);
+  border-top-color: var(--vc-accent);
+  border-radius: 50%;
+  animation: vc-spin 0.8s linear infinite;
+}
+@keyframes vc-spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   Empty state
+   ============================================================ */
+.vc-vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 80px 20px;
+  color: var(--vc-text-muted);
+  text-align: center;
+}
+.vc-vacio h2 { color: var(--vc-text); font-size: 20px; }
+.vc-vacio p { font-size: 14px; max-width: 400px; }
+
+/* ============================================================
+   Modal
+   ============================================================ */
+.vc-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.vc-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+}
+
+.vc-modal-content {
+  position: relative;
+  background: var(--vc-bg);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  padding: 28px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: var(--vc-shadow-lg);
+}
+
+.vc-modal-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+.vc-modal-desc { color: var(--vc-text-secondary); font-size: 14px; margin-bottom: 20px; }
+
+.vc-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--vc-bg-secondary);
+  border: 1px solid var(--vc-border);
+  border-radius: 8px;
+  color: var(--vc-text);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.vc-input:focus { border-color: var(--vc-accent); }
+.vc-input::placeholder { color: var(--vc-text-muted); }
+
+.vc-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+/* ============================================================
+   Toast
+   ============================================================ */
+.vc-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 2000;
+  padding: 12px 20px;
+  background: var(--vc-text);
+  color: var(--vc-bg);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: var(--vc-shadow-lg);
+  animation: vc-slide-in 0.3s ease;
+}
+.vc-toast.error { background: var(--vc-danger); color: white; }
+.vc-toast.success { background: var(--vc-success); color: white; }
+
+@keyframes vc-slide-in {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
