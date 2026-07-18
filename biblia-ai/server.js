@@ -777,7 +777,7 @@ app.get('/c/:id', (req, res) => {
 });
 
 const EMAILS_AUTORIZADOS_API = new Set(
-  (process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com')
+  (process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com,FloppaAdminstrador@gmail.com')
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
@@ -787,7 +787,7 @@ const EMAILS_AUTORIZADOS_API = new Set(
 // "Codes"). Por defecto usa los mismos emails que EMAILS_AUTORIZADOS_API;
 // para separarlos agrega la variable de entorno ADMIN_EMAILS en Render.
 const ADMIN_EMAILS = new Set(
-  (process.env.ADMIN_EMAILS || process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com')
+  (process.env.ADMIN_EMAILS || process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com,FloppaAdminstrador@gmail.com')
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
@@ -2639,23 +2639,33 @@ REGLAS CRÍTICAS:
    g) Si encontrás un error, CORREGILO ANTES de entregar el archivo
    h) Usá [[TEST::javascript::codigo]] para probar fragmentos si tenés dudas
 
-5. CORRECCIÓN DE CÓDIGO: Cuando el usuario te pida corregir, arreglar o debuggear:
+5. PENSAMIENTO CRÍTICO Y AUTOCRÍTICA: Después de escribir cada archivo, preguntate:
+   - "¿Este código funciona si lo prueba un usuario real?"
+   - "¿Hay casos edge donde falla? (campos vacíos, clicks rápidos, mobile, etc)"
+   - "¿Se ve bien visualmente o necesita más estilos?"
+   - "¿La UX es intuitiva o el usuario se va a confundir?"
+   - "¿Performance: hay memory leaks, loops infinitos, re-renders innecesarios?"
+   - "¿Accesibilidad: se puede usar con teclado? Tiene aria-labels?"
+   Si la respuesta a alguna es "no" o "no sé", MEJORÁ el código antes de entregarlo.
+   No entregues código que no estés seguro que funciona al 100%.
+
+6. CORRECCIÓN DE CÓDIGO: Cuando el usuario te pida corregir, arreglar o debuggear:
    - Analizá el código línea por línea
    - Identificá los errores
    - Usá FILE_EDIT o LINE_EDIT
    - Explicá qué cambiaste y por qué
 
-6. REFACTORIZACIÓN: Mejorá la estructura sin cambiar funcionalidad. Separá funciones largas.
+7. REFACTORIZACIÓN: Mejorá la estructura sin cambiar funcionalidad. Separá funciones largas.
 
-7. ANÁLISIS DE CÓDIGO: Leé todos los archivos, identificá bugs, performance, código duplicado. Sugerí mejoras concretas.
+8. ANÁLISIS DE CÓDIGO: Leé todos los archivos, identificá bugs, performance, código duplicado. Sugerí mejoras concretas.
 
-8. NPM PACKAGES: Usá [[NPM_INSTALL::paquete]] y cargá desde https://esm.sh/paquete en el HTML.
+9. NPM PACKAGES: Usá [[NPM_INSTALL::paquete]] y cargá desde https://esm.sh/paquete en el HTML.
 
-9. El contenido del archivo va DESPUÉS de :: sin comillas, sin markdown, código plano.
+10. El contenido del archivo va DESPUÉS de :: sin comillas, sin markdown, código plano.
 
-10. Para Minecraft: Bedrock crea manifest.json (format_version: 2), Java crea pack.mcmeta o fabric.mod.json.
+11. Para Minecraft: Bedrock crea manifest.json (format_version: 2), Java crea pack.mcmeta o fabric.mod.json.
 
-11. VERIFICACIÓN DE UI/UX: Antes de entregar, evaluá mentalmente:
+12. VERIFICACIÓN DE UI/UX: Antes de entregar, evaluá mentalmente:
     - ¿Se ve bien en mobile? (responsive)
     - ¿Los colores tienen buen contraste?
     - ¿Los botones son clickeables fácilmente?
@@ -2663,7 +2673,7 @@ REGLAS CRÍTICAS:
     - ¿Hay feedback visual (hover, active, transitions)?
     Si algo no está bien, MEJORALO antes de entregar.
 
-12. ITERACIÓN: Si el usuario dice que algo no funciona, NO le des el mismo código otra vez. Analizá el problema real, identificá el error específico, y mandá la corrección con LINE_EDIT o FILE_EDIT.
+13. ITERACIÓN: Si el usuario dice que algo no funciona, NO le des el mismo código otra vez. Analizá el problema real, identificá el error específico, y mandá la corrección con LINE_EDIT o FILE_EDIT.
 
 Archivos actuales:
 ${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => `- ${n}`).join('\n') : '(vacío)'}

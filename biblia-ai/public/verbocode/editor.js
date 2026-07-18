@@ -781,6 +781,8 @@ async function enviarChat() {
           // Mostrar texto completo al terminar (incluye última línea)
           msgDiv.innerHTML = formatearMarkdownConColapsado(textoRespuesta);
           scrollChatAbajo();
+          // Salir del while inmediatamente después de done
+          break;
         } else if (evt.type === 'error') {
           throw new Error(evt.message);
         }
