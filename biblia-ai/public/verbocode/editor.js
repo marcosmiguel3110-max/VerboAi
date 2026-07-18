@@ -638,6 +638,12 @@ async function enviarChat() {
   btnEnviar.disabled = true;
   estado.chatEnProgreso = true;
 
+  // Limpiar elementos de peticiones anteriores que pudieron quedar
+  const thinkingViejo = document.getElementById('thinkingIndicator');
+  if (thinkingViejo && thinkingViejo.parentNode) thinkingViejo.remove();
+  const invViejo = document.getElementById('investigandoIndicator');
+  if (invViejo && invViejo.parentNode) invViejo.remove();
+
   const thinkingEl = document.createElement('div');
   thinkingEl.className = 'vc-msg-thinking';
   thinkingEl.id = 'thinkingIndicator';
@@ -724,7 +730,9 @@ async function enviarChat() {
         } else if (evt.type === 'action') {
           renderAccion(evt.accion);
         } else if (evt.type === 'investigando') {
-          // Mostrar indicador de investigación (igual que el chat principal)
+          // Limpiar indicador anterior si quedó sin cerrar
+          const invViejo = document.getElementById('investigandoIndicator');
+          if (invViejo && invViejo.parentNode) invViejo.remove();
           if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
           const invDiv = document.createElement('div');
           invDiv.className = 'vc-msg-thinking';

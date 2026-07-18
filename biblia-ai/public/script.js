@@ -2116,6 +2116,8 @@ elForm.addEventListener('submit', async (ev) => {
         } else if (evt.type === 'notebook') {
           mostrarCuaderno(evt.referencia, evt.texto);
         } else if (evt.type === 'investigando') {
+          // Limpiar frame anterior si quedó sin cerrar
+          if (frameInvestigando) { frameInvestigando.finalizar(); frameInvestigando = null; }
           frameInvestigando = crearFrameInvestigando(evt.query);
         } else if (evt.type === 'investigando_sitio') {
           if (frameInvestigando) frameInvestigando.actualizarSitio(evt.sitio);
