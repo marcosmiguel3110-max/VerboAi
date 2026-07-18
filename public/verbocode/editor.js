@@ -295,23 +295,27 @@ function abrirArchivo(nombre) {
 
   if (!estado.monaco) return;
 
-  // Si es Monaco real (tiene createModel)
-  if (typeof monaco !== 'undefined' && estado.monacoModels && estado.monaco.setModel) {
-    let model = estado.monacoModels[nombre];
-    if (!model) {
-      const lang = obtenerLenguajeMonaco(nombre);
-      model = monaco.editor.createModel(estado.archivos[nombre], lang);
-      model.onDidChangeContent(() => {
-        estado.archivos[nombre] = model.getValue();
-        clearTimeout(estado.debounceGuardar);
-        estado.debounceGuardar = setTimeout(guardarArchivos, 1500);
-      });
-      estado.monacoModels[nombre] = model;
-    } else {
-      if (model.getValue() !== estado.archivos[nombre]) {
-        model.setValue(estado.archivos[nombre]);
-      }
+  // Si es Monaco real (tiene createModel y setModel)
+  if (typeof monaco !== 'undefined' && estado.monaco.setModel) {
+    // Siempre crear un modelo nuevo con el contenido actualizado.
+    // Esto evita el bug de "no se puede abrir segundo archivo" que pasaba
+    // cuando el modelo cacheado tenia contenido viejo y no se actualizaba.
+    const lang = obtenerLenguajeMonaco(nombre);
+    const contenido = estado.archivos[nombre];
+
+    // Dispose del modelo viejo si existe (libera memoria)
+    if (estado.monacoModels[nombre]) {
+      estado.monacoModels[nombre].dispose();
     }
+
+    // Crear modelo nuevo con el contenido actual
+    const model = monaco.editor.createModel(contenido, lang);
+    model.onDidChangeContent(() => {
+      estado.archivos[nombre] = model.getValue();
+      clearTimeout(estado.debounceGuardar);
+      estado.debounceGuardar = setTimeout(guardarArchivos, 1500);
+    });
+    estado.monacoModels[nombre] = model;
     estado.monaco.setModel(model);
   } else {
     // Fallback textarea
