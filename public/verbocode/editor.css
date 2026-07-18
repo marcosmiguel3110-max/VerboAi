@@ -1,5 +1,6 @@
 /* ============================================================
-   Verbo Code — Editor page styles
+   Verbo Code — Editor page (estilo Claude AI / Windsurf)
+   Limpio, minimalista, IDE moderno. Botones chicos.
    ============================================================ */
 
 .vc-editor-page {
@@ -9,73 +10,149 @@
   overflow: hidden;
 }
 
-/* Header del editor */
+/* ============================================================
+   Header — chico, minimalista (estilo Claude)
+   ============================================================ */
 .vc-editor-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 20px;
+  padding: 8px 14px;
   background: var(--vc-bg-secondary);
   border-bottom: 1px solid var(--vc-border);
   flex-shrink: 0;
+  height: 44px;
 }
 
-.vc-editor-titulo { display: flex; align-items: center; gap: 12px; }
+.vc-header-left { display: flex; align-items: center; gap: 10px; }
+
+.vc-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  color: var(--vc-text-muted);
+  transition: all 0.15s;
+}
+.vc-back-btn:hover { background: var(--vc-bg-tertiary); color: var(--vc-text); }
+
+.vc-editor-titulo { display: flex; align-items: center; gap: 8px; }
 
 .vc-editor-titulo-input {
   background: transparent;
   border: 1px solid transparent;
   color: var(--vc-text);
-  font-size: 16px;
-  font-weight: 600;
-  padding: 6px 10px;
-  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 5px;
   outline: none;
-  min-width: 200px;
-  transition: all 0.2s;
+  min-width: 150px;
+  max-width: 280px;
+  transition: all 0.15s;
 }
 .vc-editor-titulo-input:hover:not(:disabled) { background: var(--vc-bg-tertiary); }
 .vc-editor-titulo-input:focus:not(:disabled) { border-color: var(--vc-accent); background: var(--vc-bg-tertiary); }
 .vc-editor-titulo-input:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* Layout principal: sidebar | editor | chat */
+.vc-header-right { display: flex; align-items: center; gap: 6px; }
+
+/* Botones del header — CHICOS estilo IDE */
+.vc-btn-icon-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--vc-text-secondary);
+  font-weight: 500;
+  font-size: 12px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+.vc-btn-icon-header:hover {
+  background: var(--vc-bg-tertiary);
+  color: var(--vc-text);
+  border-color: var(--vc-border);
+}
+.vc-btn-icon-header.primary {
+  background: var(--vc-accent);
+  color: white;
+  border-color: var(--vc-accent);
+}
+.vc-btn-icon-header.primary:hover {
+  background: var(--vc-accent-hover);
+  filter: brightness(1.08);
+}
+
+/* Mantener .vc-btn-ghost y .vc-btn-primary por compatibilidad (chicos también) */
+.vc-editor-header .vc-btn-ghost,
+.vc-editor-header .vc-btn-primary {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 5px;
+}
+
+.vc-perfil-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--vc-accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   Layout: sidebar | editor | chat (estilo Windsurf)
+   ============================================================ */
 .vc-editor-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 220px 1fr 380px;
+  grid-template-columns: 200px 1fr 360px;
   overflow: hidden;
 }
 
 /* ============================================================
-   Sidebar (modelos + archivos) — hereda fondo de Verbo AI
+   Sidebar — angosto, con secciones tipo VSCode
    ============================================================ */
 .vc-sidebar {
   background: var(--vc-bg-secondary);
   border-right: 1px solid var(--vc-border);
   overflow-y: auto;
-  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  padding: 0;
 }
 
-.vc-sidebar-section { display: flex; flex-direction: column; gap: 8px; }
+.vc-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--vc-border);
+}
+.vc-sidebar-section:last-child { border-bottom: none; flex: 1; }
 
 .vc-sidebar-title {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
   color: var(--vc-text-muted);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 4px;
+  padding: 0 12px 6px 12px;
 }
 
 .vc-icon-btn {
-  width: 24px; height: 24px;
-  border-radius: 5px;
+  width: 20px; height: 20px;
+  border-radius: 4px;
   color: var(--vc-text-muted);
   display: flex;
   align-items: center;
@@ -84,76 +161,75 @@
 }
 .vc-icon-btn:hover { background: var(--vc-bg-tertiary); color: var(--vc-text); }
 
-/* Lista de modelos */
-.vc-modelos-list { display: flex; flex-direction: column; gap: 4px; }
+/* ============================================================
+   Modelos — items compactos tipo Windsurf
+   ============================================================ */
+.vc-modelos-list { display: flex; flex-direction: column; padding: 0 6px; gap: 2px; }
 
 .vc-modelo-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.1s;
   border: 1px solid transparent;
-  font-size: 13px;
-  color: var(--vc-text);
+  font-size: 12px;
+  color: var(--vc-text-secondary);
 }
-.vc-modelo-item:hover { background: var(--vc-bg-tertiary); }
+.vc-modelo-item:hover { background: var(--vc-bg-tertiary); color: var(--vc-text); }
 .vc-modelo-item.activo {
   background: var(--vc-accent-light);
-  border-color: var(--vc-accent);
   color: var(--vc-accent);
   font-weight: 500;
 }
 
 .vc-modelo-badge {
-  font-size: 9px;
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-size: 8px;
+  padding: 1px 4px;
+  border-radius: 3px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
+  margin-left: auto;
 }
 .vc-modelo-badge.pro { background: var(--vc-accent); color: white; }
 .vc-modelo-badge.uno-punto-cinco { background: #16a34a; color: white; }
 
 /* ============================================================
-   Lista de archivos — estilo code block de la IA
-   Caja con header (nombre del archivo) + contenido, igual que
-   los bloques de código que genera la IA en el chat.
+   Archivos — estilo árbol de archivos de VSCode/Windsurf
+   Compactos, sin bordes grandes, solo hover sutil
    ============================================================ */
 .vc-archivos-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  padding: 0 6px;
+  gap: 1px;
 }
 
 .vc-archivo-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
   color: var(--vc-text-secondary);
-  transition: all 0.15s;
+  transition: all 0.1s;
   position: relative;
-  border: 1px solid var(--vc-border);
-  background: var(--vc-bg);
-  font-family: var(--vc-font-mono);
+  border: none;
+  background: transparent;
+  font-family: var(--vc-font);
 }
 .vc-archivo-item:hover {
   background: var(--vc-bg-tertiary);
   color: var(--vc-text);
-  border-color: var(--vc-accent);
 }
 .vc-archivo-item.activo {
   background: var(--vc-accent-light);
   color: var(--vc-accent);
-  border-color: var(--vc-accent);
-  border-left: 3px solid var(--vc-accent);
 }
 
 .vc-archivo-item .vc-archivo-icono {
@@ -162,8 +238,8 @@
   align-items: center;
   justify-content: center;
   color: var(--vc-text-muted);
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 .vc-archivo-item.activo .vc-archivo-icono {
   color: var(--vc-accent);
@@ -174,26 +250,26 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--vc-font-mono);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
+  font-family: var(--vc-font);
 }
 
 .vc-archivo-delete {
   opacity: 0;
-  width: 20px; height: 20px;
-  border-radius: 4px;
+  width: 16px; height: 16px;
+  border-radius: 3px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--vc-text-muted);
   flex-shrink: 0;
 }
-.vc-archivo-item:hover .vc-archivo-delete { opacity: 1; }
-.vc-archivo-delete:hover { background: rgba(220,38,38,0.15); color: var(--vc-danger); }
+.vc-archivo-item:hover .vc-archivo-delete { opacity: 0.6; }
+.vc-archivo-delete:hover { background: rgba(220,38,38,0.15); color: var(--vc-danger) !important; opacity: 1 !important; }
 
 /* ============================================================
-   Editor (Monaco)
+   Editor (Monaco) — sin padding extra, full bleed
    ============================================================ */
 .vc-editor-main {
   display: flex;
@@ -208,22 +284,24 @@
   border-bottom: 1px solid var(--vc-border);
   overflow-x: auto;
   flex-shrink: 0;
-  min-height: 36px;
+  min-height: 32px;
 }
 
+/* Tabs estilo VSCode — chicos, con X clara */
 .vc-tab {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
+  gap: 5px;
+  padding: 5px 8px 5px 12px;
   background: var(--vc-bg-secondary);
-  color: var(--vc-text-secondary);
-  font-size: 12px;
+  color: var(--vc-text-muted);
+  font-size: 11px;
   font-family: var(--vc-font-mono);
   border-right: 1px solid var(--vc-border);
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.15s;
+  transition: all 0.1s;
+  height: 32px;
 }
 .vc-tab:hover { background: var(--vc-bg-tertiary); color: var(--vc-text); }
 .vc-tab.activo {
@@ -232,20 +310,23 @@
   border-bottom: 2px solid var(--vc-accent);
 }
 
-.vc-tab-nombre {
-  font-weight: 500;
-}
+.vc-tab-nombre { font-weight: 500; }
 
 .vc-tab-close {
-  width: 18px; height: 18px;
-  border-radius: 4px;
+  width: 14px; height: 14px;
+  border-radius: 3px;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.5;
-  transition: all 0.15s;
+  opacity: 0.4;
+  transition: all 0.1s;
+  margin-left: 2px;
 }
-.vc-tab-close:hover { background: var(--vc-bg-tertiary); opacity: 1; color: var(--vc-danger); }
+.vc-tab-close:hover {
+  background: rgba(220,38,38,0.2);
+  opacity: 1;
+  color: var(--vc-danger);
+}
 
 .vc-monaco-container {
   flex: 1;
@@ -254,10 +335,10 @@
 }
 
 /* ============================================================
-   Chat IA
+   Chat IA — estilo Claude (limpio, sin cajas pesadas)
    ============================================================ */
 .vc-chat {
-  background: var(--vc-bg-secondary);
+  background: var(--vc-bg);
   border-left: 1px solid var(--vc-border);
   display: flex;
   flex-direction: column;
@@ -268,54 +349,68 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--vc-border);
   flex-shrink: 0;
+  background: var(--vc-bg);
 }
-.vc-chat-header h3 { font-size: 14px; font-weight: 600; }
+.vc-chat-header h3 { font-size: 12px; font-weight: 600; color: var(--vc-text); text-transform: uppercase; letter-spacing: 0.5px; }
 
 .vc-chat-mensajes {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 16px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .vc-chat-bienvenida {
-  background: var(--vc-bg-tertiary);
-  border-radius: 10px;
-  padding: 16px;
+  background: transparent;
+  border: none;
+  padding: 0;
   font-size: 13px;
   color: var(--vc-text-secondary);
-  line-height: 1.6;
+  line-height: 1.7;
 }
 .vc-chat-bienvenida ul { list-style: none; padding: 8px 0; }
-.vc-chat-bienvenida li { padding: 2px 0; }
-.vc-chat-bienvenida p { margin-bottom: 6px; }
-.vc-chat-bienvenida p:last-child { margin-top: 10px; font-weight: 500; color: var(--vc-text); }
+.vc-chat-bienvenida li {
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vc-chat-bienvenida li svg { color: var(--vc-accent); flex-shrink: 0; }
+.vc-chat-bienvenida p { margin-bottom: 4px; }
+.vc-chat-bienvenida p:last-child {
+  margin-top: 12px;
+  font-weight: 500;
+  color: var(--vc-text);
+  font-size: 14px;
+}
 
+/* Mensajes — estilo Claude (sin burbujas pesadas, solo texto claro) */
 .vc-msg {
-  max-width: 92%;
-  padding: 10px 14px;
-  border-radius: 12px;
+  max-width: 95%;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.6;
   word-wrap: break-word;
 }
 .vc-msg.user {
   align-self: flex-end;
   background: var(--vc-accent);
   color: white;
+  padding: 8px 12px;
+  border-radius: 14px 14px 2px 14px;
 }
 .vc-msg.assistant {
   align-self: flex-start;
-  background: var(--vc-bg-tertiary);
+  background: transparent;
   color: var(--vc-text);
+  padding: 0;
 }
 .vc-msg.assistant pre {
-  background: var(--vc-bg);
+  background: var(--vc-bg-secondary);
   border: 1px solid var(--vc-border);
   border-radius: 6px;
   padding: 10px 12px;
@@ -333,35 +428,36 @@
 }
 .vc-msg.assistant code {
   font-family: var(--vc-font-mono);
-  background: var(--vc-bg);
+  background: var(--vc-bg-secondary);
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 12px;
   color: var(--vc-accent);
 }
-.vc-msg.system {
-  align-self: center;
-  background: transparent;
+
+.vc-msg-meta {
+  font-size: 10px;
   color: var(--vc-text-muted);
-  font-size: 12px;
-  font-style: italic;
-  text-align: center;
+  margin-top: 4px;
+  font-family: var(--vc-font-mono);
+  opacity: 0.7;
 }
 
+/* Acciones — minimalistas, sin cajas pesadas */
 .vc-msg-accion {
   align-self: flex-start;
-  background: var(--vc-bg-tertiary);
-  border: 1px solid var(--vc-border);
-  border-left: 3px solid var(--vc-accent);
-  padding: 10px 14px;
-  border-radius: 6px;
-  font-size: 12px;
+  background: var(--vc-bg-secondary);
+  border: none;
+  border-left: 2px solid var(--vc-accent);
+  padding: 6px 10px;
+  border-radius: 0 4px 4px 0;
+  font-size: 11px;
   color: var(--vc-text-secondary);
   font-family: var(--vc-font-mono);
   display: flex;
   align-items: center;
-  gap: 8px;
-  max-width: 92%;
+  gap: 6px;
+  max-width: 95%;
 }
 .vc-msg-accion svg {
   color: var(--vc-accent);
@@ -376,25 +472,29 @@
   align-self: flex-start;
   background: transparent;
   color: var(--vc-text-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-style: italic;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  font-family: var(--vc-font);
 }
 
+/* Input del chat — estilo Claude (sin borde pesado) */
 .vc-chat-input-wrap {
   display: flex;
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 10px 12px;
   border-top: 1px solid var(--vc-border);
   flex-shrink: 0;
+  background: var(--vc-bg);
+  align-items: flex-end;
 }
 
 .vc-chat-input {
   flex: 1;
-  padding: 10px 12px;
-  background: var(--vc-bg);
+  padding: 8px 12px;
+  background: var(--vc-bg-secondary);
   border: 1px solid var(--vc-border);
   border-radius: 8px;
   color: var(--vc-text);
@@ -402,19 +502,33 @@
   resize: none;
   outline: none;
   font-family: inherit;
-  transition: border-color 0.2s;
+  transition: border-color 0.15s;
+  max-height: 120px;
+  line-height: 1.5;
 }
 .vc-chat-input:focus { border-color: var(--vc-accent); }
 .vc-chat-input::placeholder { color: var(--vc-text-muted); }
 
-.vc-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Botón enviar — chico, circular estilo Claude */
+#btnEnviarChat {
+  width: 32px; height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#btnEnviarChat svg { width: 14px; height: 14px; }
+
+.vc-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Loading small */
 .vc-loading-small {
-  padding: 12px;
-  text-align: center;
+  padding: 8px 12px;
   color: var(--vc-text-muted);
-  font-size: 12px;
+  font-size: 11px;
+  font-style: italic;
 }
 
 /* ============================================================
@@ -433,7 +547,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--vc-border);
 }
 
@@ -448,9 +562,7 @@
    Responsive
    ============================================================ */
 @media (max-width: 1100px) {
-  .vc-editor-layout {
-    grid-template-columns: 180px 1fr 320px;
-  }
+  .vc-editor-layout { grid-template-columns: 170px 1fr 320px; }
 }
 
 @media (max-width: 900px) {
