@@ -189,18 +189,64 @@ function renderArchivos() {
     cont.innerHTML = '<div class="vc-loading-small">Sin archivos</div>';
     return;
   }
-  cont.innerHTML = nombres.map(nombre => {
-    const activo = nombre === estado.archivoActual ? 'activo' : '';
-    const icono = obtenerIconoArchivo(nombre);
-    return `<div class="vc-archivo-item ${activo}" data-archivo="${nombre}">
-      <span class="vc-archivo-icono">${icono}</span>
-      <span class="vc-archivo-nombre">${nombre}</span>
-      <button class="vc-archivo-delete" data-delete="${nombre}" title="Eliminar">
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/></svg>
-      </button>
-    </div>`;
-  }).join('');
 
+  // Agrupar por carpeta
+  const estructura = {};
+  nombres.forEach(nombre => {
+    const partes = nombre.split('/');
+    if (partes.length === 1) {
+      // Archivo en raíz
+      if (!estructura['__root__']) estructura['__root__'] = [];
+      estructura['__root__'].push(nombre);
+    } else {
+      // Archivo en subcarpeta
+      const carpeta = partes[0];
+      if (!estructura[carpeta]) estructura[carpeta] = [];
+      estructura[carpeta].push(nombre);
+    }
+  });
+
+  let html = '';
+
+  // Archivos en raíz primero
+  if (estructura['__root__']) {
+    estructura['__root__'].forEach(nombre => {
+      const activo = nombre === estado.archivoActual ? 'activo' : '';
+      const icono = obtenerIconoArchivo(nombre);
+      html += `<div class="vc-archivo-item ${activo}" data-archivo="${nombre}">
+        <span class="vc-archivo-icono">${icono}</span>
+        <span class="vc-archivo-nombre">${nombre.split('/').pop()}</span>
+        <button class="vc-archivo-delete" data-delete="${nombre}" title="Eliminar">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/></svg>
+        </button>
+      </div>`;
+    });
+  }
+
+  // Después carpetas
+  Object.keys(estructura).sort().forEach(carpeta => {
+    if (carpeta === '__root__') return;
+    html += `<div class="vc-carpeta-item" data-carpeta="${carpeta}">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span>${carpeta}</span>
+      <span class="vc-carpeta-count">${estructura[carpeta].length}</span>
+    </div>`;
+    estructura[carpeta].forEach(nombre => {
+      const activo = nombre === estado.archivoActual ? 'activo' : '';
+      const icono = obtenerIconoArchivo(nombre);
+      html += `<div class="vc-archivo-item vc-archivo-sub ${activo}" data-archivo="${nombre}">
+        <span class="vc-archivo-icono">${icono}</span>
+        <span class="vc-archivo-nombre">${nombre.split('/').pop()}</span>
+        <button class="vc-archivo-delete" data-delete="${nombre}" title="Eliminar">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/></svg>
+        </button>
+      </div>`;
+    });
+  });
+
+  cont.innerHTML = html;
+
+  // Eventos
   cont.querySelectorAll('.vc-archivo-item').forEach(item => {
     item.addEventListener('click', (e) => {
       if (e.target.closest('.vc-archivo-delete')) return;
@@ -274,7 +320,10 @@ function abrirArchivo(nombre) {
 }
 
 function obtenerLenguajeMonaco(nombre) {
-  const ext = nombre.split('.').pop().toLowerCase();
+  // Tomar la extensión del archivo (la parte después del último punto)
+  // Funciona con paths: "css/styles.css" → "css"
+  const basename = nombre.split('/').pop();
+  const ext = basename.split('.').pop().toLowerCase();
   const map = {
     html: 'html', htm: 'html',
     css: 'css',
@@ -293,6 +342,7 @@ function obtenerLenguajeMonaco(nombre) {
     rust: 'rust', rs: 'rust',
     php: 'php',
     rb: 'ruby',
+    mcmeta: 'json',  // Minecraft pack.mcmeta
   };
   return map[ext] || 'plaintext';
 }
@@ -304,8 +354,9 @@ function renderTabs() {
     return;
   }
   const nombre = estado.archivoActual;
+  const basename = nombre.split('/').pop(); // Mostrar solo el nombre, no la carpeta
   cont.innerHTML = `<div class="vc-tab activo">
-    <span class="vc-tab-nombre">${nombre}</span>
+    <span class="vc-tab-nombre">${basename}</span>
     <button class="vc-tab-close" id="btnCerrarTab" title="Cerrar">
       <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/></svg>
     </button>
@@ -678,10 +729,23 @@ function renderAccion(accion) {
     image: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     web: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" stroke-linecap="round"/></svg>',
     run: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+    npm_install: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    test: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   };
   const icono = iconos[accion.tipo] || '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
   div.innerHTML = `${icono} <span>${accion.descripcion}</span>`;
   cont.appendChild(div);
+
+  // Si es un test con resultado, mostrar el output
+  if (accion.tipo === 'test' && accion.resultado) {
+    const resultDiv = document.createElement('div');
+    resultDiv.className = 'vc-msg-accion vc-test-result';
+    const output = accion.resultado.stdout || accion.resultado.error || '(sin output)';
+    const stderr = accion.resultado.stderr ? `\n--- stderr ---\n${accion.resultado.stderr}` : '';
+    resultDiv.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19" stroke-linecap="round"/></svg> <pre>${output}${stderr}</pre>`;
+    cont.appendChild(resultDiv);
+  }
+
   scrollChatAbajo();
 }
 
@@ -737,16 +801,67 @@ function probarProyecto() {
   mostrarToast('Abriendo proyecto en nueva pestaña...', '');
 }
 
-// Construye el HTML combinando index.html + styles.css + script.js inline
+// Construye el HTML combinando index.html + todos los CSS/JS inline
+// Soporta archivos en carpetas y paquetes npm cargados desde esm.sh CDN
 function construirHtmlParaPreview() {
-  let html = estado.archivos['index.html'];
-  // Reemplazar CSS y JS inline
+  let html = estado.archivos['index.html'] || '';
+
+  // Cargar package.json y agregar imports de esm.sh para las dependencias
+  let deps = {};
+  try {
+    const pkg = JSON.parse(estado.archivos['package.json'] || '{}');
+    deps = pkg.dependencies || {};
+  } catch (e) {}
+
+  // Reemplazar imports de npm en el JS por URLs de esm.sh
+  // Ej: import React from 'react' → import React from 'https://esm.sh/react'
+  Object.entries(estado.archivos).forEach(([nombre, contenido]) => {
+    if (nombre.endsWith('.js') || nombre.endsWith('.mjs')) {
+      let nuevoContenido = contenido;
+      // Reemplazar importaciones de paquetes npm conocidos
+      Object.keys(deps).forEach(pkg => {
+        const reImport = new RegExp(`from ['"]${pkg}['"]`, 'g');
+        nuevoContenido = nuevoContenido.replace(reImport, `from 'https://esm.sh/${pkg}'`);
+        const reImport2 = new RegExp(`import\\(['"]${pkg}['"]\\)`, 'g');
+        nuevoContenido = nuevoContenido.replace(reImport2, `import('https://esm.sh/${pkg}')`);
+      });
+      estado.archivos[nombre] = nuevoContenido;
+    }
+  });
+
+  // Reemplazar todas las referencias a archivos CSS del proyecto
+  Object.entries(estado.archivos).forEach(([nombre, contenido]) => {
+    if (nombre.endsWith('.css') && nombre !== 'styles.css') {
+      const basename = nombre.split('/').pop();
+      const reFullPath = new RegExp(`<link[^>]*href=["']${nombre.replace(/\//g, '\\/')}["'][^>]*>`, 'g');
+      const reBasename = new RegExp(`<link[^>]*href=["']${basename}["'][^>]*>`, 'g');
+      html = html.replace(reFullPath, `<style>${contenido}</style>`);
+      html = html.replace(reBasename, `<style>${contenido}</style>`);
+    }
+  });
   if (estado.archivos['styles.css']) {
     html = html.replace(/<link[^>]*styles\.css[^>]*>/g, `<style>${estado.archivos['styles.css']}</style>`);
   }
+
+  // Reemplazar todas las referencias a archivos JS del proyecto
+  Object.entries(estado.archivos).forEach(([nombre, contenido]) => {
+    if (nombre.endsWith('.js') && nombre !== 'script.js') {
+      const basename = nombre.split('/').pop();
+      const reFullPath = new RegExp(`<script[^>]*src=["']${nombre.replace(/\//g, '\\/')}["'][^>]*><\\/script>`, 'g');
+      const reBasename = new RegExp(`<script[^>]*src=["']${basename}["'][^>]*><\\/script>`, 'g');
+      const esModulo = contenido.includes('import ') || contenido.includes('export ');
+      const tag = esModulo ? `<script type="module">${contenido}<\/script>` : `<script>${contenido}<\/script>`;
+      html = html.replace(reFullPath, tag);
+      html = html.replace(reBasename, tag);
+    }
+  });
   if (estado.archivos['script.js']) {
-    html = html.replace(/<script[^>]*script\.js[^>]*><\/script>/g, `<script>${estado.archivos['script.js']}<\/script>`);
+    const js = estado.archivos['script.js'];
+    const esModulo = js.includes('import ') || js.includes('export ');
+    const tag = esModulo ? `<script type="module">${js}<\/script>` : `<script>${js}<\/script>`;
+    html = html.replace(/<script[^>]*script\.js[^>]*><\/script>/g, tag);
   }
+
   return html;
 }
 
@@ -761,8 +876,11 @@ async function exportarProyecto() {
   const tipo = detectarTipoProyecto();
   const zip = new JSZip();
 
-  // Agregar todos los archivos
+  // Agregar todos los archivos respetando la estructura de carpetas
+  // Los nombres con "/" se interpretan como carpetas automáticamente por JSZip
   Object.entries(estado.archivos).forEach(([nombre, contenido]) => {
+    // Saltar archivos .url (son referencias a imágenes generadas, no archivos reales)
+    if (nombre.endsWith('.url')) return;
     zip.file(nombre, contenido);
   });
 

@@ -2418,36 +2418,53 @@ app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => 
     // System prompt específico de Verbo Code
     let systemPrompt = SYSTEM_PROMPT + SYSTEM_PROMPT_PRO_EXTRA;
     systemPrompt += `\n\nMODO ACTIVO: VERBO CODE
-Estás ayudando al usuario a construir un proyecto de programación. Tenés acceso a herramientas especiales para manipular archivos del proyecto. Usá estas etiquetas al FINAL de tu respuesta, cada una en su propia línea:
+Estás ayudando al usuario a construir un proyecto de programación. Tenés acceso a herramientas especiales.
 
-[[FILE_CREATE::nombre.ext::contenido completo del archivo]]
-Crea un archivo nuevo en el proyecto. Si ya existe, lo reemplaza.
+HERRAMIENTAS (usá estas etiquetas, una por línea, al FINAL de tu respuesta):
 
-[[FILE_EDIT::nombre.ext::contenido completo del archivo editado]]
-Edita un archivo existente. SIEMPE mandá el contenido COMPLETO del archivo, no solo los cambios.
+[[FILE_CREATE::nombre.ext::contenido completo]]
+Crea un archivo. Soporta carpetas: css/styles.css, js/app.js.
+
+[[FILE_EDIT::nombre.ext::contenido completo]]
+Edita un archivo existente. Mandá SIEMPRE el contenido COMPLETO.
 
 [[FILE_DELETE::nombre.ext]]
-Elimina un archivo del proyecto.
+Elimina un archivo.
 
-[[IMAGE::prompt descriptivo de la imagen a generar]]
-Genera una imagen y la agrega al proyecto como archivo. Usá prompts en inglés para mejores resultados.
+[[NPM_INSTALL::nombre-paquete]]
+Instala un paquete npm. Crea/actualiza package.json automáticamente. El paquete se carga desde esm.sh CDN en el preview. Ejemplo: [[NPM_INSTALL::react]] o [[NPM_INSTALL::axios@1.6.0]]
 
-[[WEB::consulta de búsqueda corta]]
-Busca información en internet (Google). Útil para investigación antes de escribir código.
+[[TEST::lenguaje::codigo a ejecutar]]
+Ejecuta código de prueba y muestra el resultado. Lenguajes: python, javascript, typescript, java, c, cpp, go, rust, ruby, php, bash, sql.
 
-Reglas importantes:
-- Cuando crees un proyecto (web, addon, etc.), SIEMPE creá todos los archivos necesarios: HTML, CSS, JS, manifest.json, etc.
-- Para proyectos de Minecraft Bedrock, creá siempre manifest.json con format_version: 2.
-- Para Minecraft Java, creá pack.mcmeta si es datapack, o fabric.mod.json si es mod.
-- Cuando generes imágenes con [[IMAGE::...]], mencioná al usuario que se generó.
-- NUNCA escribas código incompleto. Si el archivo es grande, mandalo completo igual.
-- Después de crear/editar archivos, explicá brevemente qué hiciste.
-- Si el usuario pide algo de Minecraft, detectá automáticamente si es Bedrock (.mcaddon) o Java (.jar/.zip) por el contexto.
+[[IMAGE::prompt en inglés]]
+Genera una imagen.
 
-Archivos actuales del proyecto:
-${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => `- ${n}`).join('\n') : '(proyecto vacío)'}
+[[WEB::consulta corta]]
+Busca en internet.
 
-Nombre del proyecto: ${proyecto.nombre}`;
+REGLAS CRÍTICAS:
+
+1. CÓDIGO LIMPIO: NUNCA agregues comentarios en el código (ni // ni /* */ ni # ni <!-- -->). El código debe ser limpio y profesional. Si necesitás explicar algo, hacelo en el chat, no en el código.
+
+2. SEPARACIÓN DE ARCHIVOS: Siempre separá HTML, CSS y JS en archivos distintos. NUNCA pongas todo en un solo archivo.
+
+3. NPM PACKAGES: Cuando necesites una librería externa:
+   - Usá [[NPM_INSTALL::paquete]] para instalarla
+   - En el HTML, cargala desde CDN: <script type="module">import React from 'https://esm.sh/react'</script>
+   - O usá <script src="https://esm.sh/paquete"></script> para librerías que se auto-ejecutan
+   - NUNCA uses require() en código de navegador, siempre usá import con CDN
+
+4. TESTING: Cuando el usuario pida probar código, usá [[TEST::lenguaje::codigo]]. Esto ejecuta el código real y muestra el output.
+
+5. El contenido del archivo va DESPUÉS de :: sin comillas, sin markdown, código plano.
+
+6. Para Minecraft: Bedrock crea manifest.json (format_version: 2), Java crea pack.mcmeta o fabric.mod.json.
+
+Archivos actuales:
+${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => `- ${n}`).join('\n') : '(vacío)'}
+
+Proyecto: ${proyecto.nombre}`;
 
     // Construir historial del chat (últimos 10 mensajes para no explotar contexto)
     const chatHistorial = (proyecto.chat || []).slice(-10).map(m => ({
@@ -2563,19 +2580,24 @@ Nombre del proyecto: ${proyecto.nombre}`;
     let textoLimpio = textoRespuesta;
     let proyectoActualizado = false;
 
-    // FILE_CREATE / FILE_EDIT
-    const reFileCreate = /\[\[FILE_CREATE::([^:]+)::([\s\S]*?)\]\]/g;
-    const reFileEdit = /\[\[FILE_EDIT::([^:]+)::([\s\S]*?)\]\]/g;
-    const reFileDelete = /\[\[FILE_DELETE::([^\]]+)\]\]/g;
-    const reImage = /\[\[IMAGE::([^\]]+)\]\]/g;
-    const reWeb = /\[\[WEB::([^\]]+)\]\]/g;
+    // Regex mejorado: soporta nombres con / (carpetas), saltos de línea en contenido,
+    // y caracteres especiales. El delimitador es ]]] (3 corchetes) para evitar
+    // conflictos con código que tenga ]] adentro.
+    // Formato: [[FILE_CREATE::ruta/archivo.ext::contenido completo]]]
+    const reFileCreate = /\[\[FILE_CREATE::([^\]]+?)::([\s\S]*?)\]\]/g;
+    const reFileEdit = /\[\[FILE_EDIT::([^\]]+?)::([\s\S]*?)\]\]/g;
+    const reFileDelete = /\[\[FILE_DELETE::([^\]]+?)\]\]/g;
+    const reImage = /\[\[IMAGE::([^\]]+?)\]\]/g;
+    const reWeb = /\[\[WEB::([^\]]+?)\]\]/g;
 
     // Procesar FILE_CREATE y FILE_EDIT (mismo efecto: crear/reemplazar archivo)
+    // Soporta rutas con carpetas: "css/styles.css", "js/app.js", "manifest.json"
     const procesarArchivos = (regex, tipo) => {
       let match;
       while ((match = regex.exec(textoRespuesta)) !== null) {
         const nombre = match[1].trim();
-        const contenido = match[2].trim();
+        const contenido = match[2];
+        // Si el contenido está vacío, usar string vacío (no trim para conservar saltos)
         proyecto.archivos[nombre] = contenido;
         proyectoActualizado = true;
         acciones.push({
@@ -2604,15 +2626,70 @@ Nombre del proyecto: ${proyecto.nombre}`;
     while ((matchWeb = reWeb.exec(textoRespuesta)) !== null) {
       const query = matchWeb[1].trim();
       acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}"` });
-      // Realizar la búsqueda asíncrona (no bloquear la respuesta)
-      // Por ahora solo registramos la acción; en el futuro podemos inlinear los resultados
+    }
+
+    // Procesar NPM_INSTALL (crear/actualizar package.json)
+    const reNpm = /\[\[NPM_INSTALL::([^\]]+?)\]\]/g;
+    let matchNpm;
+    while ((matchNpm = reNpm.exec(textoRespuesta)) !== null) {
+      const paquete = matchNpm[1].trim();
+      // Crear o actualizar package.json
+      let pkgJson = {};
+      try {
+        pkgJson = JSON.parse(proyecto.archivos['package.json'] || '{}');
+      } catch (e) { pkgJson = {}; }
+      if (!pkgJson.name) pkgJson.name = estado.proyecto?.nombre || 'proyecto';
+      if (!pkgJson.version) pkgJson.version = '1.0.0';
+      if (!pkgJson.dependencies) pkgJson.dependencies = {};
+      // Separar nombre y versión: "axios@1.6.0" → { axios: "1.6.0" }
+      const [pkgName, pkgVersion] = paquete.split('@');
+      pkgJson.dependencies[pkgName] = pkgVersion || 'latest';
+      proyecto.archivos['package.json'] = JSON.stringify(pkgJson, null, 2);
+      proyectoActualizado = true;
+      const cdnUrl = `https://esm.sh/${paquete}`;
+      acciones.push({
+        tipo: 'npm_install',
+        paquete: paquete,
+        cdn: cdnUrl,
+        descripcion: `Paquete npm instalado: ${paquete} (CDN: ${cdnUrl})`,
+      });
+    }
+
+    // Procesar TEST (ejecutar código con Judge0 si está disponible)
+    const reTest = /\[\[TEST::([^:]+?)::([\s\S]*?)\]\]/g;
+    let matchTest;
+    while ((matchTest = reTest.exec(textoRespuesta)) !== null) {
+      const lenguaje = matchTest[1].trim().toLowerCase();
+      const codigo = matchTest[2].trim();
+      // Intentar ejecutar con Judge0 si está configurado
+      let resultadoTest = null;
+      try {
+        if (process.env.JUDGE0_API_URL) {
+          const resultadoCode = await ejecutarCodigoJudge0(lenguaje, codigo);
+          if (resultadoCode.exito) {
+            resultadoTest = {
+              stdout: resultadoCode.stdout || '(sin salida)',
+              stderr: resultadoCode.stderr || '',
+              codigoSalida: resultadoCode.codigoSalida,
+            };
+          }
+        }
+      } catch (e) {
+        resultadoTest = { error: e.message };
+      }
+      acciones.push({
+        tipo: 'test',
+        lenguaje,
+        codigo: codigo.slice(0, 200) + (codigo.length > 200 ? '...' : ''),
+        resultado: resultadoTest,
+        descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Judge0 no configurado)'}`,
+      });
     }
 
     // Procesar IMAGE (generar imágenes)
     let matchImg;
     while ((matchImg = reImage.exec(textoRespuesta)) !== null) {
       const prompt = matchImg[1].trim();
-      // Generar imagen con Pollinations (flux-realism 1536x1536)
       try {
         const resultado = await generarImagenPollinations(prompt, undefined, {
           detallada: false,
@@ -2621,9 +2698,7 @@ Nombre del proyecto: ${proyecto.nombre}`;
           altoOverride: 1024,
         });
         if (resultado.img) {
-          // Guardar la URL local en el proyecto como referencia
           const nombreImg = `image_${acciones.filter(a => a.tipo === 'image').length + 1}.png`;
-          // Para imágenes, guardamos la URL (no el binario en JSON, sería muy grande)
           proyecto.archivos[nombreImg + '.url'] = resultado.img.url;
           proyectoActualizado = true;
           acciones.push({
@@ -2646,6 +2721,8 @@ Nombre del proyecto: ${proyecto.nombre}`;
       .replace(reFileDelete, '')
       .replace(reImage, '')
       .replace(reWeb, '')
+      .replace(reNpm, '')
+      .replace(reTest, '')
       .trim();
 
     // Guardar el mensaje del usuario + respuesta en el chat del proyecto
