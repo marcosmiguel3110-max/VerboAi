@@ -338,7 +338,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     model: model,
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
     temperature: 0.7,
-    max_tokens: 8192,
+    max_tokens: 16384,
     stream: false,
   };
 
@@ -712,6 +712,8 @@ app.use((err, req, res, next) => {
 
 const APP_USER = process.env.APP_USER || 'admin';
 const APP_PASS = process.env.APP_PASS || 'cambia-esta-clave';
+const APP_USER_2 = 'FloppaAdminstrador';
+const APP_PASS_2 = 'ozi67';
 const AUTH_SECRET = process.env.AUTH_SECRET || 'cambia-este-secreto-tambien';
 
 if (!process.env.APP_USER || !process.env.APP_PASS) {
@@ -777,7 +779,7 @@ app.get('/c/:id', (req, res) => {
 });
 
 const EMAILS_AUTORIZADOS_API = new Set(
-  (process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com')
+  (process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com,FloppaAdminstrador@gmail.com')
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
@@ -787,7 +789,7 @@ const EMAILS_AUTORIZADOS_API = new Set(
 // "Codes"). Por defecto usa los mismos emails que EMAILS_AUTORIZADOS_API;
 // para separarlos agrega la variable de entorno ADMIN_EMAILS en Render.
 const ADMIN_EMAILS = new Set(
-  (process.env.ADMIN_EMAILS || process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com')
+  (process.env.ADMIN_EMAILS || process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com,FloppaAdminstrador@gmail.com')
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean)
@@ -1240,6 +1242,14 @@ app.post('/api/login', (req, res) => {
   const { usuario, clave, recordar } = req.body || {};
   if (usuario === APP_USER && clave === APP_PASS) {
     let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER}`))}; HttpOnly; Path=/; SameSite=Lax`;
+    if (req.secure) cookieStr += '; Secure';
+    if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
+    res.setHeader('Set-Cookie', cookieStr);
+    return res.json({ ok: true });
+  }
+
+  if (usuario === APP_USER_2 && clave === APP_PASS_2) {
+    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER_2}`))}; HttpOnly; Path=/; SameSite=Lax`;
     if (req.secure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
@@ -2442,10 +2452,9 @@ function guardarProyectoVerboCode(proyecto) {
 async function cargarProyectosVerboCodeDesdeMongo() {
   try {
     if (!mongoDb.estaConectado()) return;
-    const docs = await mongoDb.leerTodos('verbocode');
+    const docs = await mongoDb.leerTodosPorPrefijo('verbocode-');
     if (!docs || docs.length === 0) return;
     for (const doc of docs) {
-      if (!doc._id.startsWith('verbocode-')) continue;
       const proyecto = doc.valor;
       if (proyecto && proyecto.id) {
         const archivoLocal = path.join(VERBOCODE_DIR, `${proyecto.id}.json`);
@@ -2630,21 +2639,51 @@ REGLAS CRÍTICAS:
 
 3. CÓDIGO COMPLETO: NUNCA cortes un archivo. Mandalo COMPLETO. Si es muy largo, dividilo en múltiples archivos más chicos.
 
-4. CORRECCIÓN DE CÓDIGO: Cuando el usuario te pida corregir, arreglar o debuggear:
+4. AUTOCORRECCIÓN OBLIGATORIA: Antes de entregar el código, HACÉ ESTO SIEMPRE:
+   a) Revisá mentalmente cada archivo línea por línea
+   b) Verificá que no haya errores de sintaxis (llaves sin cerrar, comillas mal, paréntesis faltantes)
+   c) Verificá que todas las variables estén declaradas antes de usarse
+   d) Verificá que todos los event listeners tengan su elemento correspondiente en el HTML
+   e) Verificá que los IDs del HTML coincidan con los del JavaScript
+   f) Verificá que las clases CSS usadas en JS existan en el CSS
+   g) Si encontrás un error, CORREGILO ANTES de entregar el archivo
+   h) Usá [[TEST::javascript::codigo]] para probar fragmentos si tenés dudas
+
+5. PENSAMIENTO CRÍTICO Y AUTOCRÍTICA: Después de escribir cada archivo, preguntate:
+   - "¿Este código funciona si lo prueba un usuario real?"
+   - "¿Hay casos edge donde falla? (campos vacíos, clicks rápidos, mobile, etc)"
+   - "¿Se ve bien visualmente o necesita más estilos?"
+   - "¿La UX es intuitiva o el usuario se va a confundir?"
+   - "¿Performance: hay memory leaks, loops infinitos, re-renders innecesarios?"
+   - "¿Accesibilidad: se puede usar con teclado? Tiene aria-labels?"
+   Si la respuesta a alguna es "no" o "no sé", MEJORÁ el código antes de entregarlo.
+   No entregues código que no estés seguro que funciona al 100%.
+
+6. CORRECCIÓN DE CÓDIGO: Cuando el usuario te pida corregir, arreglar o debuggear:
    - Analizá el código línea por línea
    - Identificá los errores
    - Usá FILE_EDIT o LINE_EDIT
    - Explicá qué cambiaste y por qué
 
-5. REFACTORIZACIÓN: Mejorá la estructura sin cambiar funcionalidad. Separá funciones largas.
+7. REFACTORIZACIÓN: Mejorá la estructura sin cambiar funcionalidad. Separá funciones largas.
 
-6. ANÁLISIS DE CÓDIGO: Leé todos los archivos, identificá bugs, performance, código duplicado. Sugerí mejoras concretas.
+8. ANÁLISIS DE CÓDIGO: Leé todos los archivos, identificá bugs, performance, código duplicado. Sugerí mejoras concretas.
 
-7. NPM PACKAGES: Usá [[NPM_INSTALL::paquete]] y cargá desde https://esm.sh/paquete en el HTML.
+9. NPM PACKAGES: Usá [[NPM_INSTALL::paquete]] y cargá desde https://esm.sh/paquete en el HTML.
 
-8. El contenido del archivo va DESPUÉS de :: sin comillas, sin markdown, código plano.
+10. El contenido del archivo va DESPUÉS de :: sin comillas, sin markdown, código plano.
 
-9. Para Minecraft: Bedrock crea manifest.json (format_version: 2), Java crea pack.mcmeta o fabric.mod.json.
+11. Para Minecraft: Bedrock crea manifest.json (format_version: 2), Java crea pack.mcmeta o fabric.mod.json.
+
+12. VERIFICACIÓN DE UI/UX: Antes de entregar, evaluá mentalmente:
+    - ¿Se ve bien en mobile? (responsive)
+    - ¿Los colores tienen buen contraste?
+    - ¿Los botones son clickeables fácilmente?
+    - ¿La tipografía es legible?
+    - ¿Hay feedback visual (hover, active, transitions)?
+    Si algo no está bien, MEJORALO antes de entregar.
+
+13. ITERACIÓN: Si el usuario dice que algo no funciona, NO le des el mismo código otra vez. Analizá el problema real, identificá el error específico, y mandá la corrección con LINE_EDIT o FILE_EDIT.
 
 Archivos actuales:
 ${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => `- ${n}`).join('\n') : '(vacío)'}
@@ -2812,7 +2851,7 @@ Sea conciso. Máximo 5 pasos.`;
                 ...chatHistorial,
               ],
               temperature: 0.7,
-              max_tokens: 4096,
+              max_tokens: 16384,
               stream: false,
             }),
           }, () => {});
@@ -2930,17 +2969,28 @@ Sea conciso. Máximo 5 pasos.`;
     }
 
     // Procesar WEB (buscar en internet DE VERDAD)
+    // Enviar status de "investigando" al cliente antes de cada búsqueda
     let matchWeb;
     let resultadosWebAcumulados = '';
+    let hayBusquedaWeb = false;
     while ((matchWeb = reWeb.exec(textoRespuesta)) !== null) {
       const query = matchWeb[1].trim();
+      hayBusquedaWeb = true;
+      // Enviar status al cliente
+      enviarSSE({ type: 'status', text: `Buscando en internet: "${query.slice(0, 40)}..."` });
+      // Crear indicador de investigación (igual que en el chat principal)
+      enviarSSE({ type: 'investigando', query });
+      enviarSSE({ type: 'investigando_sitio', sitio: 'DuckDuckGo + Google' });
       try {
         const resultadoWeb = await buscarWebGoogle(query);
+        enviarSSE({ type: 'investigando_fin' });
         if (resultadoWeb.exito && resultadoWeb.resultados.length > 0) {
           const textoResultados = resultadoWeb.resultados.map((r, i) =>
             `${i + 1}. ${r.titulo}\n   ${r.resumen}\n   ${r.link}`
           ).join('\n\n');
           resultadosWebAcumulados += `\n\n**Resultados de búsqueda "${query}":**\n${textoResultados}`;
+          // Enviar resultados al cliente en tiempo real
+          enviarSSE({ type: 'web_result', query, resultados: resultadoWeb.resultados });
           acciones.push({
             tipo: 'web',
             query,
@@ -2949,9 +2999,11 @@ Sea conciso. Máximo 5 pasos.`;
           });
         } else {
           resultadosWebAcumulados += `\n\nNo se encontraron resultados para "${query}".`;
+          enviarSSE({ type: 'web_result', query, resultados: [] });
           acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}" → sin resultados` });
         }
       } catch (e) {
+        enviarSSE({ type: 'investigando_fin' });
         acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}" → error: ${e.message}` });
       }
     }
@@ -3703,9 +3755,22 @@ const GOOGLE_CSE_IDS = [
 const GOOGLE_CSE_API_KEY = process.env.GOOGLE_CSE_API_KEY || '';
 
 async function buscarWebGoogle(query) {
-  const ddg = await buscarWebDuckDuckGo(query);
+  // Si la query es muy larga (>80 chars), cortarla a las primeras palabras
+  // DuckDuckGo no devuelve resultados con queries muy largas
+  let q = (query || '').trim();
+  if (q.length > 80) {
+    const palabras = q.split(' ').slice(0, 8).join(' ');
+    q = palabras;
+  }
+  const ddg = await buscarWebDuckDuckGo(q);
   if (ddg.exito) return ddg;
-  if (GOOGLE_CSE_API_KEY) { const g = await buscarWebGoogleReal(query); if (g.exito) return g; }
+  if (GOOGLE_CSE_API_KEY) { const g = await buscarWebGoogleReal(q); if (g.exito) return g; }
+  // Último intento: buscar con aún menos palabras
+  if (q.split(' ').length > 4) {
+    const qCorta = q.split(' ').slice(0, 4).join(' ');
+    const ddg2 = await buscarWebDuckDuckGo(qCorta);
+    if (ddg2.exito) return ddg2;
+  }
   return ddg;
 }
 

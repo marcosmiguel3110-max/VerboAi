@@ -632,6 +632,68 @@
   line-height: 1.5;
 }
 
+/* Bloques de código colapsables en el chat */
+.vc-code-block {
+  margin: 8px 0;
+  border: 1px solid var(--vc-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Cursor parpadeante para efecto de escritura */
+.vc-typing-cursor {
+  display: inline-block;
+  color: var(--vc-accent);
+  animation: vc-blink 0.8s steps(2) infinite;
+  font-family: var(--vc-font-mono);
+  font-size: 13px;
+  margin-left: 2px;
+}
+@keyframes vc-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+.vc-code-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--vc-bg-secondary);
+  border-bottom: 1px solid var(--vc-border);
+  cursor: pointer;
+  font-family: var(--vc-font-mono);
+  font-size: 10px;
+  color: var(--vc-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  user-select: none;
+  transition: all 0.15s;
+}
+.vc-code-header:hover {
+  background: var(--vc-bg-tertiary);
+  color: var(--vc-accent);
+}
+.vc-code-header svg {
+  transition: transform 0.2s;
+}
+.vc-code-toggle {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--vc-accent);
+}
+.vc-code-content {
+  margin: 0;
+  padding: 8px 10px;
+  font-family: var(--vc-font-mono);
+  font-size: 11px;
+  color: var(--vc-text);
+  background: var(--vc-bg);
+  overflow-x: auto;
+  line-height: 1.5;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 /* ============================================================
    Modal preview
    ============================================================ */
