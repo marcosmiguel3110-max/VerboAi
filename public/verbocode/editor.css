@@ -521,6 +521,26 @@
 }
 #btnEnviarChat svg { width: 14px; height: 14px; }
 
+/* Botón de imagen — arriba del enviar, estilo Claude */
+.vc-chat-btn-imagen {
+  width: 32px; height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--vc-bg-secondary);
+  color: var(--vc-text-secondary);
+  border: 1px solid var(--vc-border);
+  transition: all 0.15s;
+}
+.vc-chat-btn-imagen:hover {
+  background: var(--vc-bg-tertiary);
+  color: var(--vc-accent);
+  border-color: var(--vc-accent);
+}
+
 .vc-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Loading small */
