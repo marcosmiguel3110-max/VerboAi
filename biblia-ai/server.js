@@ -2530,10 +2530,13 @@ Proyecto: ${proyecto.nombre}`;
         configModelo.modeloTexto,           // gpt-oss-120b o qwen3-32b (lo configurado)
         'qwen/qwen3-32b',                    // siempre funciona
         'openai/gpt-oss-20b',                // el de NewserLite, siempre funciona
+        'llama-3.3-70b-versatile',           // otro fallback más
       ].filter((v, i, a) => v && a.indexOf(v) === i); // sin duplicados
 
+      let ultimoError = '';
       for (const modeloGroq of modelosGroq) {
         try {
+          console.log(`[verbocode] Probando modelo: ${modeloGroq}`);
           const respuestaGroq = await llamarGroqConReintentos({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2544,23 +2547,41 @@ Proyecto: ${proyecto.nombre}`;
                 ...chatHistorial,
               ],
               temperature: 0.7,
-              max_tokens: configModelo.maxTokens,
+              max_tokens: configModelo.maxTokens || 3072,
               stream: false,
             }),
           }, () => {});
+
           if (respuestaGroq && respuestaGroq.ok) {
             const data = await respuestaGroq.json();
-            textoRespuesta = stripThinkTags((data.choices?.[0]?.message?.content) || '');
-            modeloUsado = modeloGroq;
-            break; // salimos del loop, ya respondió
+            const content = data.choices?.[0]?.message?.content || '';
+            if (content.trim()) {
+              textoRespuesta = stripThinkTags(content);
+              modeloUsado = modeloGroq;
+              console.log(`[verbocode] OK con modelo: ${modeloGroq}`);
+              break;
+            } else {
+              ultimoError = `${modeloGroq}: respuesta vacía`;
+              console.warn(`[verbocode] ${ultimoError}`);
+            }
+          } else {
+            const status = respuestaGroq ? respuestaGroq.status : 0;
+            ultimoError = `${modeloGroq}: HTTP ${status}`;
+            console.warn(`[verbocode] ${ultimoError}`);
+            // Si es 401 o 403, probablemente la API key no tiene acceso a ese modelo
+            // pero igual probamos el siguiente
           }
         } catch (e) {
+          ultimoError = `${modeloGroq}: ${e.message}`;
           console.warn(`[verbocode] modelo ${modeloGroq} fallo: ${e.message}`);
         }
       }
 
       if (!textoRespuesta) {
-        return res.status(502).json({ error: 'No se pudo conectar con ningún modelo. Intenta de nuevo en unos minutos.' });
+        console.error(`[verbocode] TODOS los modelos fallaron. Último error: ${ultimoError}`);
+        return res.status(502).json({
+          error: `No se pudo conectar con ningún modelo (último error: ${ultimoError}). Verificá tu GROQ_API_KEY en Render.`,
+        });
       }
     }
 
