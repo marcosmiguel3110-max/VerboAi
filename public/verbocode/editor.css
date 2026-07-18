@@ -47,7 +47,7 @@
 }
 
 /* ============================================================
-   Sidebar (modelos + archivos)
+   Sidebar (modelos + archivos) — hereda fondo de Verbo AI
    ============================================================ */
 .vc-sidebar {
   background: var(--vc-bg-secondary);
@@ -97,6 +97,7 @@
   transition: all 0.15s;
   border: 1px solid transparent;
   font-size: 13px;
+  color: var(--vc-text);
 }
 .vc-modelo-item:hover { background: var(--vc-bg-tertiary); }
 .vc-modelo-item.activo {
@@ -117,32 +118,42 @@
 .vc-modelo-badge.pro { background: var(--vc-accent); color: white; }
 .vc-modelo-badge.uno-punto-cinco { background: #16a34a; color: white; }
 
-/* Lista de archivos — estilo chips de codigo */
-.vc-archivos-list { display: flex; flex-direction: column; gap: 4px; }
+/* ============================================================
+   Lista de archivos — estilo code block de la IA
+   Caja con header (nombre del archivo) + contenido, igual que
+   los bloques de código que genera la IA en el chat.
+   ============================================================ */
+.vc-archivos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 
 .vc-archivo-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
   color: var(--vc-text-secondary);
   transition: all 0.15s;
   position: relative;
-  border: 1px solid transparent;
+  border: 1px solid var(--vc-border);
   background: var(--vc-bg);
+  font-family: var(--vc-font-mono);
 }
 .vc-archivo-item:hover {
   background: var(--vc-bg-tertiary);
   color: var(--vc-text);
-  border-color: var(--vc-border);
+  border-color: var(--vc-accent);
 }
 .vc-archivo-item.activo {
   background: var(--vc-accent-light);
   color: var(--vc-accent);
   border-color: var(--vc-accent);
+  border-left: 3px solid var(--vc-accent);
 }
 
 .vc-archivo-item .vc-archivo-icono {
@@ -151,6 +162,8 @@
   align-items: center;
   justify-content: center;
   color: var(--vc-text-muted);
+  width: 16px;
+  height: 16px;
 }
 .vc-archivo-item.activo .vc-archivo-icono {
   color: var(--vc-accent);
@@ -174,6 +187,7 @@
   align-items: center;
   justify-content: center;
   color: var(--vc-text-muted);
+  flex-shrink: 0;
 }
 .vc-archivo-item:hover .vc-archivo-delete { opacity: 1; }
 .vc-archivo-delete:hover { background: rgba(220,38,38,0.15); color: var(--vc-danger); }
@@ -211,7 +225,7 @@
   white-space: nowrap;
   transition: all 0.15s;
 }
-.vc-tab:hover { background: var(--vc-bg-tertiary); }
+.vc-tab:hover { background: var(--vc-bg-tertiary); color: var(--vc-text); }
 .vc-tab.activo {
   background: var(--vc-bg);
   color: var(--vc-text);
@@ -231,6 +245,7 @@
 .vc-monaco-container {
   flex: 1;
   overflow: hidden;
+  background: var(--vc-bg);
 }
 
 /* ============================================================

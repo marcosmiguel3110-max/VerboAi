@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Editor — Verbo Code</title>
   <link rel="icon" href="/favicon.ico">
+  <!-- Cargar style.css de Verbo AI PRIMERO (tiene los fondos y variables) -->
+  <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/verbocode/shared.css">
   <link rel="stylesheet" href="/verbocode/editor.css">
 </head>
@@ -120,10 +122,10 @@
   <!-- Toast -->
   <div id="vcToast" class="vc-toast oculto"></div>
 
-  <!-- Monaco Editor loader -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+  <!-- Monaco Editor loader (jsdelivr, más confiable que cloudflare) -->
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
   <!-- JSZip para exportar -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="/verbocode/editor.js"></script>
 </body>
 </html>
