@@ -1,20 +1,28 @@
 /* ============================================================
-   Verbo Code — Shared styles (df-night compatible)
+   Verbo Code — Shared styles
+   Usa las mismas variables CSS que Verbo AI (style.css) para
+   heredar los fondos y el tema df-night automaticamente.
    ============================================================ */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ============================================================
+   Variables propias de Verbo Code (mapeadas a Verbo AI)
+   ============================================================ */
 :root {
-  --vc-bg: #ffffff;
-  --vc-bg-secondary: #f7f7f8;
-  --vc-bg-tertiary: #ececf1;
-  --vc-border: #e5e5e8;
-  --vc-text: #1a1a1a;
-  --vc-text-secondary: #6b6b75;
-  --vc-text-muted: #9999a3;
-  --vc-accent: #8033e0;
-  --vc-accent-hover: #6d28d9;
-  --vc-accent-light: rgba(128, 51, 224, 0.1);
+  /* Mapear variables de Verbo AI a las de Verbo Code */
+  --vc-bg: var(--crema, #FAF6EF);
+  --vc-bg-secondary: var(--crema-oscuro, #F0E9DC);
+  --vc-bg-tertiary: var(--papel-cuaderno, #FFFDF6);
+  --vc-border: var(--borde, #E3DACB);
+  --vc-text: var(--texto, #2B2118);
+  --vc-text-secondary: var(--texto-suave, #6B6155);
+  --vc-text-muted: var(--texto-suave, #6B6155);
+  --vc-accent: var(--acento, #C9663A);
+  --vc-accent-hover: var(--acento, #C9663A);
+  --vc-accent-light: var(--acento-suave, #E9C8B4);
+  --vc-burbuja-usuario: var(--burbuja-usuario, #E7DCC9);
+  --vc-burbuja-ia: var(--burbuja-ia, #FFFFFF);
   --vc-success: #16a34a;
   --vc-danger: #dc2626;
   --vc-warning: #d97706;
@@ -27,28 +35,7 @@
 }
 
 /* ============================================================
-   TEMA df-night (dark mode de Verbo AI)
-   ============================================================ */
-html.tema-night body.vc-page,
-html.tema-night .vc-page {
-  --vc-bg: #0f0f1a;
-  --vc-bg-secondary: #1a1a2e;
-  --vc-bg-tertiary: #252540;
-  --vc-border: #2a2a45;
-  --vc-text: #e4e4ed;
-  --vc-text-secondary: #a0a0b5;
-  --vc-text-muted: #6b6b85;
-  --vc-accent: #a855f7;
-  --vc-accent-hover: #c084fc;
-  --vc-accent-light: rgba(168, 85, 247, 0.15);
-  --vc-shadow: 0 4px 12px rgba(0,0,0,0.4);
-  --vc-shadow-lg: 0 12px 32px rgba(0,0,0,0.6);
-  background: var(--vc-bg);
-  color: var(--vc-text);
-}
-
-/* ============================================================
-   Base
+   Base — usa los fondos de Verbo AI
    ============================================================ */
 body.vc-page {
   font-family: var(--vc-font);
@@ -113,6 +100,7 @@ input, textarea { font-family: inherit; }
   border-radius: 100px;
   font-size: 13px;
   font-weight: 500;
+  border: 1px solid var(--vc-border);
 }
 
 .vc-perfil-avatar {
@@ -146,7 +134,7 @@ input, textarea { font-family: inherit; }
   margin-bottom: 24px;
 }
 
-.vc-title { font-size: 24px; font-weight: 600; }
+.vc-title { font-size: 24px; font-weight: 600; color: var(--vc-text); }
 
 /* ============================================================
    Botones
@@ -163,7 +151,7 @@ input, textarea { font-family: inherit; }
   border-radius: 8px;
   transition: all 0.2s;
 }
-.vc-btn-primary:hover:not(:disabled) { background: var(--vc-accent-hover); transform: translateY(-1px); }
+.vc-btn-primary:hover:not(:disabled) { background: var(--vc-accent-hover); filter: brightness(1.08); transform: translateY(-1px); }
 .vc-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .vc-btn-ghost {
@@ -246,7 +234,7 @@ input, textarea { font-family: inherit; }
   box-shadow: var(--vc-shadow-lg);
 }
 
-.vc-modal-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+.vc-modal-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; color: var(--vc-text); }
 .vc-modal-desc { color: var(--vc-text-secondary); font-size: 14px; margin-bottom: 20px; }
 
 .vc-input {
