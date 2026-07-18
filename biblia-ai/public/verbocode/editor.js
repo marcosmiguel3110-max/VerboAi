@@ -36,6 +36,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initMonaco();
   configurarEventos();
   configurarChatInput();
+
+  // Guardar todo antes de cerrar la pestaña
+  window.addEventListener('beforeunload', () => {
+    if (estado.archivoActual && estado.monaco) {
+      estado.archivos[estado.archivoActual] = estado.monaco.getValue();
+      guardarArchivos();
+    }
+  });
+
+  // Guardar cada 30 segundos por las dudas
+  setInterval(() => {
+    if (estado.archivoActual && estado.monaco) {
+      estado.archivos[estado.archivoActual] = estado.monaco.getValue();
+      guardarArchivos();
+    }
+  }, 30000);
 });
 
 function aplicarTema() {
@@ -321,7 +337,7 @@ async function initMonaco() {
   return new Promise((resolve) => {
     // Verificar si el loader de Monaco está disponible
     if (typeof require === 'undefined' || typeof require.config !== 'function') {
-      console.warn('Monaco AMD loader no disponible, usando textarea como fallback');
+      // Silencioso: no mostrar warning en consola para no molestar al usuario
       initTextareaFallback();
       resolve();
       return;
@@ -332,9 +348,8 @@ async function initMonaco() {
         paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' },
       });
 
-      // Timeout: si Monaco no carga en 15 segundos, usar fallback
+      // Timeout: si Monaco no carga en 15 segundos, usar fallback (silencioso)
       const timeout = setTimeout(() => {
-        console.warn('Monaco tardó demasiado, usando textarea como fallback');
         if (!estado.monaco) {
           initTextareaFallback();
           resolve();
@@ -387,10 +402,27 @@ async function initMonaco() {
           theme: tema === 'df-night' ? 'verbo-dark' : 'verbo-light',
         });
 
+        // ====== AUTO-SAVE COMPLETO ======
+        // Guardar cuando cambia el contenido (debounce 1.5s)
+        estado.monaco.onDidChangeModelContent(() => {
+          if (estado.archivoActual) {
+            estado.archivos[estado.archivoActual] = estado.monaco.getValue();
+            clearTimeout(estado.debounceGuardar);
+            estado.debounceGuardar = setTimeout(guardarArchivos, 1500);
+          }
+        });
+        // Guardar al perder foco (por las dudas)
+        estado.monaco.onDidBlurEditorText(() => {
+          if (estado.archivoActual) {
+            estado.archivos[estado.archivoActual] = estado.monaco.getValue();
+            guardarArchivos();
+          }
+        });
+
         resolve();
       });
     } catch (e) {
-      console.warn('Error inicializando Monaco:', e.message, '- usando fallback');
+      // Silencioso
       initTextareaFallback();
       resolve();
     }
@@ -457,6 +489,20 @@ function configurarEventos() {
 
   // Preview
   document.getElementById('btnPreview').addEventListener('click', mostrarPreview);
+
+  // Probar (ejecutar HTML en nueva ventana full-screen)
+  document.getElementById('btnProbar').addEventListener('click', probarProyecto);
+
+  // Botón imagen (generar imagen y agregarla al proyecto)
+  document.getElementById('btnImagenChat').addEventListener('click', () => {
+    const input = document.getElementById('vcChatInput');
+    const prompt = input.value.trim() || 'una imagen hermosa para mi proyecto';
+    input.value = `Generame una imagen de: ${prompt}`;
+    input.focus();
+    mostrarToast('Vas a pedir una imagen. Presioná Enter para enviar.', '');
+  });
+
+  // Cerrar preview
   document.getElementById('btnCerrarPreview').addEventListener('click', () => {
     document.getElementById('modalPreview').classList.add('oculto');
   });
@@ -663,7 +709,7 @@ function scrollChatAbajo() {
 }
 
 // ============================================================
-// Preview
+// Preview (modal) y Probar (nueva ventana full-screen)
 // ============================================================
 function mostrarPreview() {
   if (!estado.archivos['index.html']) {
@@ -671,6 +717,28 @@ function mostrarPreview() {
     return;
   }
   const frame = document.getElementById('vcPreviewFrame');
+  const html = construirHtmlParaPreview();
+  frame.srcdoc = html;
+  document.getElementById('modalPreview').classList.remove('oculto');
+}
+
+function probarProyecto() {
+  if (!estado.archivos['index.html']) {
+    mostrarToast('No hay index.html para probar', 'error');
+    return;
+  }
+  // Abrir en nueva ventana/pestaña con el HTML completo
+  const html = construirHtmlParaPreview();
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  // Limpiar la URL después de 1 minuto (la página ya cargó)
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  mostrarToast('Abriendo proyecto en nueva pestaña...', '');
+}
+
+// Construye el HTML combinando index.html + styles.css + script.js inline
+function construirHtmlParaPreview() {
   let html = estado.archivos['index.html'];
   // Reemplazar CSS y JS inline
   if (estado.archivos['styles.css']) {
@@ -679,8 +747,7 @@ function mostrarPreview() {
   if (estado.archivos['script.js']) {
     html = html.replace(/<script[^>]*script\.js[^>]*><\/script>/g, `<script>${estado.archivos['script.js']}<\/script>`);
   }
-  frame.srcdoc = html;
-  document.getElementById('modalPreview').classList.remove('oculto');
+  return html;
 }
 
 // ============================================================

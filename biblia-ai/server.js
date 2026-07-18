@@ -2547,6 +2547,17 @@ Nombre del proyecto: ${proyecto.nombre}`;
       }
     }
 
+    // Mapear nombres técnicos a nombres amigables para mostrar al usuario.
+    // El usuario no debería ver "openai/gpt-oss-20b" sino "VerboAITeams".
+    const modeloDisplay = (() => {
+      if (modeloUsado.includes('deepseek')) return 'VerboAITeams';
+      if (modeloUsado.includes('qwen')) return 'VerboAITeams';
+      if (modeloUsado.includes('gpt-oss') || modeloUsado.includes('gpt-4')) return 'VerboAITeams';
+      if (modeloUsado.includes('llama')) return 'VerboAITeams';
+      if (modeloUsado.includes('glm')) return 'VerboAITeams';
+      return 'VerboAITeams';
+    })();
+
     // Procesar las herramientas en la respuesta ([[FILE_CREATE::]], [[IMAGE::]], etc)
     const acciones = [];
     let textoLimpio = textoRespuesta;
@@ -2640,7 +2651,7 @@ Nombre del proyecto: ${proyecto.nombre}`;
     // Guardar el mensaje del usuario + respuesta en el chat del proyecto
     if (!proyecto.chat) proyecto.chat = [];
     proyecto.chat.push({ role: 'user', content: mensaje, fecha: new Date().toISOString() });
-    proyecto.chat.push({ role: 'assistant', content: textoLimpio, fecha: new Date().toISOString(), modelo: modeloUsado });
+    proyecto.chat.push({ role: 'assistant', content: textoLimpio, fecha: new Date().toISOString(), modelo: modeloDisplay });
     // Limitar el chat a 50 mensajes para no explotar el storage
     if (proyecto.chat.length > 50) proyecto.chat = proyecto.chat.slice(-50);
     guardarProyectoVerboCode(proyecto);
@@ -2651,7 +2662,7 @@ Nombre del proyecto: ${proyecto.nombre}`;
       acciones,
       proyectoActualizado,
       archivos: proyectoActualizado ? proyecto.archivos : undefined,
-      modeloUsado,
+      modeloUsado: modeloDisplay,  // 'VerboAITeams' en vez del nombre técnico
       razonamiento: razonamientoPrevio || null,
     });
   } catch (e) {
