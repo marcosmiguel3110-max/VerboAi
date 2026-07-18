@@ -192,9 +192,11 @@ def strip_think_tags(texto):
 #
 #   - Saludo / charla casual / pregunta simple → deepseek-v3 (rapido, ~3s)
 #   - Programacion / codigo → deepseek-r1 (razonamiento, mejor para codigo)
+#     (tambien prueba qwen-2.5-coder-32b como fallback para codigo)
+#   - Analisis de archivos / documentos → gpt-4.5 (rate limit, a veces anda)
 #   - Matematicas / logica / analisis → deepseek-r1 (razonamiento profundo)
 #   - Pregunta compleja / larga → deepseek-r1 (razonamiento)
-#   - Default → deepseek-r1 (el mas potente)
+#   - Default → deepseek-v3 (rapido)
 #
 # Esto hace que respuestas rapidas sean rapidas, y respuestas complejas
 # sean de alta calidad.
@@ -241,10 +243,24 @@ def elegir_modelo_inteligente(messages, model_pedido):
     if longitud < 50 and not any(x in texto for x in [
         'explica', 'analiza', 'compara', 'diferencia', 'por que', 'como funciona',
         'paso a paso', 'detalle', 'ejemplo', 'codigo', 'programa', 'funcion',
-        'matematica', 'calcular', 'ecuacion', 'problema',
+        'matematica', 'calcular', 'ecuacion', 'problema', 'archivo', 'documento',
+        'pdf', 'analiza', 'lee', 'resume',
     ]):
         log.info(f'[selector] PREGUNTA SIMPLE detectada → deepseek-v3 (rapido)')
         return 'deepseek-v3'
+
+    # ANALISIS DE ARCHIVOS / DOCUMENTOS → gpt-4.5 (rate limit, a veces anda)
+    patrones_archivo = [
+        r'\b(archivo|file|documento|document|pdf|word|excel|csv|json)\b',
+        r'\b(analiza|analisis|lee|leer|resume|resumen|summary|summarize)\b',
+        r'\b(adjunto|attached|imagen|image|foto|screenshot)\b',
+        r'\b(extrae|extract|datos|data|informacion|information)\b',
+    ]
+    for patron in patrones_archivo:
+        if re.search(patron, texto):
+            log.info(f'[selector] ANALISIS DE ARCHIVO detectado → gpt-4.5 (fallback deepseek-r1)')
+            # gpt-4.5 tiene rate limit, si falla el fallback de llamar_g4f prueba deepseek-r1
+            return 'gpt-4.5'
 
     # PROGRAMACION / CODIGO → deepseek-r1 (mejor para codigo)
     patrones_codigo = [
@@ -320,31 +336,33 @@ def llamar_g4f(messages, model, temperature, max_tokens):
     # Lista de modelos a probar en orden: el pedido primero, luego fallbacks
     # que sabemos que funcionan gratis en g4f hoy.
     #
-    # Modelos probados que SÍ funcionan gratis (sin API key):
+    # Modelos probados que SÍ funcionan gratis AHORA (sin API key):
     #   - deepseek-r1     → razonamiento profundo (estilo OpenAI o1)
     #   - deepseek-v3      → general rápido
-    #   - gpt-4o           → general potente
-    #   - gpt-4o-mini      → fallback clásico
-    #   - o3-mini          → razonamiento de OpenAI
-    #   - r1-1776          → variante de DeepSeek R1
     #
-    # Modelos que tienen RATE LIMIT o requieren auth (a veces andan, a veces no):
-    #   - qwen-3-235b      → rate limit 3 días/12 días (lo dejamos como fallback)
-    #   - gemini-3.1-pro   → requiere auth (lo dejamos como fallback por si acaso)
+    # Modelos con rate limit o auth (a veces andan, a veces no — los dejamos
+    # como fallback para cuando se liberen):
+    #   - gpt-4.5           → rate limit 3 días/12 días (análisis de archivos)
+    #   - o4-mini-high      → rate limit (razonamiento profundo OpenAI)
+    #   - r1-1776           → rate limit (variante de DeepSeek R1)
+    #   - qwen-2.5-coder-32b → requiere auth (programación)
+    #   - o3-mini           → a veces anda (razonamiento OpenAI)
+    #   - gpt-4o            → a veces anda (general potente)
     #
-    # Modelos que NO funcionan gratis (todos los providers piden auth):
+    # Modelos que NO funcionan gratis (todos los providers piden auth siempre):
     #   - llama-3.1-405b, nemotron-3-ultra-550b, glm-5.2,
-    #     qwen-2.5-coder-32b, gpt-4.5, grok-3, kimi-k2, qwq-32b, gpt-oss-120b
+    #     gpt-4.5, grok-3, kimi-k2, qwq-32b, gpt-oss-120b
     modelos_disponibles = [
         modelo_a_usar,
         'deepseek-r1',                         # MAS POTENTE, razonamiento profundo (estilo o1)
-        'qwen-3-235b',                        # Qwen3 235B (rate limit, a veces anda)
-        'gemini-3.1-pro',                     # Gemini 3.1 Pro (requiere auth, a veces anda)
+        'gpt-4.5',                              # analisis de archivos (rate limit, a veces anda)
+        'o4-mini-high',                        # razonamiento profundo OpenAI (rate limit)
+        'r1-1776',                              # variante de DeepSeek R1 (rate limit)
+        'qwen-2.5-coder-32b',                 # programacion (requiere auth, a veces anda)
         'o3-mini',                              # razonamiento de OpenAI
         'gpt-4o',                               # general potente
         'deepseek-v3',                          # fallback rapido de deepseek
         'gpt-4o-mini',                          # fallback clasico, rapido
-        'r1-1776',                              # variante de DeepSeek R1
     ]
     vistos = set()
     modelos_a_probar = []
