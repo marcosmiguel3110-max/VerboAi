@@ -707,13 +707,20 @@ async function enviarChat() {
           planDiv.innerHTML = '<div class="vc-plan-header"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke-linecap="round" stroke-linejoin="round"/></svg> PLAN DE ACCIÓN</div><pre class="vc-plan-content"></pre>';
           document.getElementById('vcChatMensajes').appendChild(planDiv);
           scrollChatAbajo();
+          // Efecto escritura NO BLOQUEANTE (no usa await para no frenar los chunks)
           const planPre = planDiv.querySelector('.vc-plan-content');
-          for (let i = 0; i < evt.plan.length; i += 2) {
-            planPre.textContent = evt.plan.slice(0, i + 2);
+          let planIdx = 0;
+          const planTexto = evt.plan;
+          const planInterval = setInterval(() => {
+            if (planIdx >= planTexto.length) {
+              planPre.textContent = planTexto;
+              clearInterval(planInterval);
+              return;
+            }
+            planIdx += 2;
+            planPre.textContent = planTexto.slice(0, planIdx);
             scrollChatAbajo();
-            await new Promise(rr => setTimeout(rr, 8));
-          }
-          planPre.textContent = evt.plan;
+          }, 8);
         } else if (evt.type === 'chunk') {
           textoRespuesta += evt.text;
           // Mostrar línea por línea: solo mostrar hasta el último salto de línea completo
