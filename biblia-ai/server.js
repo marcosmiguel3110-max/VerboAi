@@ -2418,31 +2418,64 @@ app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => 
     // System prompt específico de Verbo Code
     let systemPrompt = SYSTEM_PROMPT + SYSTEM_PROMPT_PRO_EXTRA;
     systemPrompt += `\n\nMODO ACTIVO: VERBO CODE
-Estás ayudando al usuario a construir un proyecto de programación. Tenés acceso a herramientas especiales para manipular archivos del proyecto. Usá estas etiquetas al FINAL de tu respuesta, cada una en su propia línea:
+Estás ayudando al usuario a construir un proyecto de programación. Tenés acceso a herramientas especiales para manipular archivos del proyecto.
+
+HERRAMIENTAS OBLIGATORIAS (usá SIEMPRE estas etiquetas, una por línea, al FINAL de tu respuesta):
 
 [[FILE_CREATE::nombre.ext::contenido completo del archivo]]
-Crea un archivo nuevo en el proyecto. Si ya existe, lo reemplaza.
+Crea un archivo nuevo. Soporta carpetas con / (ej: css/styles.css, js/app.js).
 
 [[FILE_EDIT::nombre.ext::contenido completo del archivo editado]]
-Edita un archivo existente. SIEMPE mandá el contenido COMPLETO del archivo, no solo los cambios.
+Edita un archivo existente. SIEMPE mandá el contenido COMPLETO.
 
 [[FILE_DELETE::nombre.ext]]
-Elimina un archivo del proyecto.
+Elimina un archivo.
 
-[[IMAGE::prompt descriptivo de la imagen a generar]]
-Genera una imagen y la agrega al proyecto como archivo. Usá prompts en inglés para mejores resultados.
+[[IMAGE::prompt descriptivo en inglés]]
+Genera una imagen y la agrega al proyecto.
 
-[[WEB::consulta de búsqueda corta]]
-Busca información en internet (Google). Útil para investigación antes de escribir código.
+[[WEB::consulta corta]]
+Busca información en internet.
 
-Reglas importantes:
-- Cuando crees un proyecto (web, addon, etc.), SIEMPE creá todos los archivos necesarios: HTML, CSS, JS, manifest.json, etc.
-- Para proyectos de Minecraft Bedrock, creá siempre manifest.json con format_version: 2.
-- Para Minecraft Java, creá pack.mcmeta si es datapack, o fabric.mod.json si es mod.
-- Cuando generes imágenes con [[IMAGE::...]], mencioná al usuario que se generó.
-- NUNCA escribas código incompleto. Si el archivo es grande, mandalo completo igual.
-- Después de crear/editar archivos, explicá brevemente qué hiciste.
-- Si el usuario pide algo de Minecraft, detectá automáticamente si es Bedrock (.mcaddon) o Java (.jar/.zip) por el contexto.
+REGLAS CRÍTICAS PARA CREAR PROYECTOS:
+
+1. NUNCA pongas todo el código en un solo archivo. SIEMPE separá:
+   - HTML en index.html (solo estructura, sin estilos ni scripts inline)
+   - CSS en styles.css (todos los estilos)
+   - JavaScript en script.js (toda la lógica)
+   - Para proyectos grandes, separá en más archivos (header.html, footer.html, etc.)
+
+2. EJEMPLO de respuesta correcta para "creá una landing page":
+   "Voy a crear tu landing page con HTML, CSS y JS separados.
+
+   [[FILE_CREATE::index.html::<!DOCTYPE html>
+   <html>
+   <head>
+     <link rel="stylesheet" href="styles.css">
+   </head>
+   <body>
+     <h1>Mi Landing</h1>
+     <script src="script.js"></script>
+   </body>
+   </html>]]
+
+   [[FILE_CREATE::styles.css::body { font-family: Arial; }
+   h1 { color: blue; }]]
+
+   [[FILE_CREATE::script.js::console.log('Landing cargada');]]"
+
+3. Para proyectos de Minecraft:
+   - Bedrock: SIEMPE creá manifest.json con format_version: 2 + los archivos del behavior pack en la carpeta correcta
+   - Java: creá pack.mcmeta (datapack) o fabric.mod.json (mod) + los archivos necesarios
+
+4. El contenido del archivo va DESPUÉS de los dos puntos (::), sin comillas, sin markdown, código plano.
+   NO uses bloques de código markdown (triple backtick) dentro de las etiquetas.
+
+5. Si el usuario pide modificar algo que ya existe, usá FILE_EDIT con el contenido COMPLETO actualizado.
+
+6. Después de crear/editar archivos, explicá brevemente qué hiciste.
+
+7. Cuando generes imágenes con [[IMAGE::...]], mencioná que se generó y dónde está.
 
 Archivos actuales del proyecto:
 ${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => `- ${n}`).join('\n') : '(proyecto vacío)'}
@@ -2563,19 +2596,24 @@ Nombre del proyecto: ${proyecto.nombre}`;
     let textoLimpio = textoRespuesta;
     let proyectoActualizado = false;
 
-    // FILE_CREATE / FILE_EDIT
-    const reFileCreate = /\[\[FILE_CREATE::([^:]+)::([\s\S]*?)\]\]/g;
-    const reFileEdit = /\[\[FILE_EDIT::([^:]+)::([\s\S]*?)\]\]/g;
-    const reFileDelete = /\[\[FILE_DELETE::([^\]]+)\]\]/g;
-    const reImage = /\[\[IMAGE::([^\]]+)\]\]/g;
-    const reWeb = /\[\[WEB::([^\]]+)\]\]/g;
+    // Regex mejorado: soporta nombres con / (carpetas), saltos de línea en contenido,
+    // y caracteres especiales. El delimitador es ]]] (3 corchetes) para evitar
+    // conflictos con código que tenga ]] adentro.
+    // Formato: [[FILE_CREATE::ruta/archivo.ext::contenido completo]]]
+    const reFileCreate = /\[\[FILE_CREATE::([^\]]+?)::([\s\S]*?)\]\]/g;
+    const reFileEdit = /\[\[FILE_EDIT::([^\]]+?)::([\s\S]*?)\]\]/g;
+    const reFileDelete = /\[\[FILE_DELETE::([^\]]+?)\]\]/g;
+    const reImage = /\[\[IMAGE::([^\]]+?)\]\]/g;
+    const reWeb = /\[\[WEB::([^\]]+?)\]\]/g;
 
     // Procesar FILE_CREATE y FILE_EDIT (mismo efecto: crear/reemplazar archivo)
+    // Soporta rutas con carpetas: "css/styles.css", "js/app.js", "manifest.json"
     const procesarArchivos = (regex, tipo) => {
       let match;
       while ((match = regex.exec(textoRespuesta)) !== null) {
         const nombre = match[1].trim();
-        const contenido = match[2].trim();
+        const contenido = match[2];
+        // Si el contenido está vacío, usar string vacío (no trim para conservar saltos)
         proyecto.archivos[nombre] = contenido;
         proyectoActualizado = true;
         acciones.push({
@@ -2604,15 +2642,12 @@ Nombre del proyecto: ${proyecto.nombre}`;
     while ((matchWeb = reWeb.exec(textoRespuesta)) !== null) {
       const query = matchWeb[1].trim();
       acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}"` });
-      // Realizar la búsqueda asíncrona (no bloquear la respuesta)
-      // Por ahora solo registramos la acción; en el futuro podemos inlinear los resultados
     }
 
     // Procesar IMAGE (generar imágenes)
     let matchImg;
     while ((matchImg = reImage.exec(textoRespuesta)) !== null) {
       const prompt = matchImg[1].trim();
-      // Generar imagen con Pollinations (flux-realism 1536x1536)
       try {
         const resultado = await generarImagenPollinations(prompt, undefined, {
           detallada: false,
@@ -2621,9 +2656,7 @@ Nombre del proyecto: ${proyecto.nombre}`;
           altoOverride: 1024,
         });
         if (resultado.img) {
-          // Guardar la URL local en el proyecto como referencia
           const nombreImg = `image_${acciones.filter(a => a.tipo === 'image').length + 1}.png`;
-          // Para imágenes, guardamos la URL (no el binario en JSON, sería muy grande)
           proyecto.archivos[nombreImg + '.url'] = resultado.img.url;
           proyectoActualizado = true;
           acciones.push({
