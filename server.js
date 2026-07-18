@@ -328,8 +328,14 @@ function esperarMinimo(promesa, ms) {
 async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, enviar = () => {}, opciones = {}) {
   // PRIMERO: Intentar Pollinations texto (sin límites, siempre disponible)
   if (!opciones.signal?.aborted) {
+    console.log('[llamarModeloGratis] Intentando Pollinations texto primero...');
     const rp = await llamarPollinationsTexto(messages, systemPrompt, opciones);
-    if (rp.ok) return { ok: true, texto: rp.texto, modelo: rp.modelo, capa: 'pollinations' };
+    if (rp.ok) {
+      console.log('[llamarModeloGratis] Pollinations texto funcionó OK');
+      return { ok: true, texto: rp.texto, modelo: rp.modelo, capa: 'pollinations' };
+    } else {
+      console.log('[llamarModeloGratis] Pollinations texto falló:', rp.error, '- cayendo a OpenRouter');
+    }
   }
 
   // SEGUNDO: Si Pollinations falló, intentar OpenRouter free
