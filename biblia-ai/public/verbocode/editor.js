@@ -289,11 +289,29 @@ function renderTabs() {
   }
   const nombre = estado.archivoActual;
   cont.innerHTML = `<div class="vc-tab activo">
-    <span>${nombre}</span>
-    <button class="vc-tab-close" title="Cerrar tab">
+    <span class="vc-tab-nombre">${nombre}</span>
+    <button class="vc-tab-close" id="btnCerrarTab" title="Cerrar">
       <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/></svg>
     </button>
   </div>`;
+
+  // Event listener para cerrar tab
+  const btnCerrar = document.getElementById('btnCerrarTab');
+  if (btnCerrar) {
+    btnCerrar.addEventListener('click', (e) => {
+      e.stopPropagation();
+      estado.archivoActual = null;
+      if (estado.monaco) {
+        if (typeof monaco !== 'undefined' && estado.monaco.setModel) {
+          estado.monaco.setModel(monaco.editor.createModel('', 'plaintext'));
+        } else {
+          estado.monaco.setValue('');
+        }
+      }
+      renderArchivos();
+      renderTabs();
+    });
+  }
 }
 
 // ============================================================
