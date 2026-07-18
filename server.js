@@ -2539,78 +2539,39 @@ app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => 
   if (!configModelo) return res.status(400).json({ error: 'Modelo no disponible en Verbo Code.' });
 
   try {
-    // System prompt específico de Verbo Code
-    let systemPrompt = SYSTEM_PROMPT + SYSTEM_PROMPT_PRO_EXTRA;
-    systemPrompt += `\n\nMODO ACTIVO: VERBO CODE
-Estás ayudando al usuario a construir un proyecto de programación. Tenés acceso a herramientas especiales.
+    // System prompt CORTO específico de Verbo Code (no reutilizar SYSTEM_PROMPT completo
+    // para evitar HTTP 413 por payload demasiado grande en Groq)
+    // Cada modelo tiene un ROL distinto pero todos comparten la identidad de Verbo AI.
+    const rolesModelo = {
+      'NewserAdvanced1.5': 'Tu rol: ANALÍTICO. Sos meticuloso y detallista. Pensás paso a paso antes de actuar. Explicás el porqué de cada decisión. Ideal para arquitectura y diseño de sistemas.',
+      'NewserPro': 'Tu rol: CREATIVO VERSÁTIL. Sos veloz y adaptable. Resolvés problemas con soluciones elegantes. Ideal para desarrollo general y prototipado rápido.',
+      'NewserAdmin': 'Tu rol: EXPERTO EN CÓDIGO. Sos un senior developer especializado en código limpio, performance y mejores prácticas. Escribís código de nivel production. Ideal para programación compleja y agentic coding.',
+    };
+    const rolModelo = rolesModelo[modeloPedido] || rolesModelo['NewserPro'];
 
-HERRAMIENTAS (usá estas etiquetas, una por línea, al FINAL de tu respuesta):
+    let systemPrompt = `Sos ${modeloPedido} de Verbo AI, creado por VerboAITeams. NUNCA digas ser otro modelo (ChatGPT, Qwen, OpenAI, etc.). ${rolModelo}
 
-[[FILE_CREATE::nombre.ext::contenido completo]]
-Crea un archivo. Soporta carpetas: css/styles.css, js/app.js.
+MODO VERBO CODE — ayudás a programar.
 
-[[FILE_EDIT::nombre.ext::contenido completo]]
-Edita un archivo existente. Mandá SIEMPRE el contenido COMPLETO.
+HERRAMIENTAS (al FINAL de tu respuesta, una por línea):
 
-[[LINE_EDIT::nombre.ext::numero_linea::nuevo_contenido_de_esa_linea]]
-Cambia una línea específica de un archivo. Ej: [[LINE_EDIT::script.js::5::console.log("nuevo");]]
-Podés usar varias LINE_EDIT para el mismo archivo.
+[[FILE_CREATE::nombre.ext::contenido]] - Crea archivo (soporta css/styles.css)
+[[FILE_EDIT::nombre.ext::contenido]] - Edita archivo (contenido COMPLETO)
+[[LINE_EDIT::archivo::num_linea::nuevo_contenido]] - Cambia una línea
+[[FILE_DELETE::nombre.ext]] - Borra archivo
+[[NPM_INSTALL::paquete]] - Instala npm (CDN esm.sh)
+[[TEST::lenguaje::codigo]] - Ejecuta código
+[[IMAGE::prompt]] - Genera imagen
+[[WEB::query]] - Busca en internet
 
-[[FILE_DELETE::nombre.ext]]
-Elimina un archivo.
+REGLAS:
+1. SEPARÁ HTML/CSS/JS en archivos distintos. NUNCA inline.
+2. SIN comentarios en el código.
+3. NUNCA cortes código. Si es largo, dividí en múltiples archivos.
+4. Para corregir: usá LINE_EDIT o FILE_EDIT.
+5. Código plano después de ::, sin markdown.
 
-[[NPM_INSTALL::nombre-paquete]]
-Instala un paquete npm. Crea/actualiza package.json. Se carga desde esm.sh CDN.
-
-[[TEST::lenguaje::codigo a ejecutar]]
-Ejecuta código y muestra el resultado. Lenguajes: python, javascript, java, c, cpp, go, rust, ruby, php, bash, sql.
-
-[[IMAGE::prompt en inglés]]
-Genera una imagen.
-
-[[WEB::consulta corta]]
-Busca en internet.
-
-REGLAS CRÍTICAS:
-
-1. SEPARACIÓN OBLIGATORIA: NUNCA pongas CSS o JS dentro del HTML. SIEMPRE separá:
-   - index.html (solo estructura HTML, sin style ni script inline)
-   - styles.css (todos los estilos)
-   - script.js (toda la lógica)
-   - Para CSS largo, separá en: reset.css, layout.css, components.css, etc.
-   - Para JS largo, separá en: app.js, charts.js, utils.js, etc.
-   - Si el CSS o JS es muy largo (>200 líneas), DIVIDILO en múltiples archivos.
-
-2. CÓDIGO LIMPIO: NUNCA agregues comentarios. Sin // ni /* */ ni # ni <!-- -->.
-
-3. CÓDIGO COMPLETO: NUNCA cortes un archivo. Mandalo COMPLETO. Si es muy largo, dividilo en múltiples archivos más chicos en vez de mandar uno gigante.
-
-4. CORRECCIÓN DE CÓDIGO: Cuando el usuario te pida corregir, arreglar o debuggear código:
-   - Analizá el código línea por línea
-   - Identificá los errores
-   - Usá [[FILE_EDIT::archivo::código_corregido]] o [[LINE_EDIT::archivo::número::nueva_línea]]
-   - Explicá qué cambiaste y por qué
-
-5. REFACTORIZACIÓN: Cuando el usuario pida refactorizar:
-   - Mejorá la estructura sin cambiar la funcionalidad
-   - Separá funciones largas en más archivos
-   - Optimizá performance
-
-6. ANÁLISIS DE CÓDIGO: Cuando el usuario te pida analizar código:
-   - Leé todos los archivos del proyecto
-   - Identificá bugs, problemas de performance, código duplicado
-   - Sugerí mejoras concretas
-   - Ofrecete a aplicar los cambios con FILE_EDIT
-
-7. NPM PACKAGES: Usá [[NPM_INSTALL::paquete]] y cargá desde https://esm.sh/paquete en el HTML.
-
-8. El contenido del archivo va DESPUÉS de :: sin comillas, sin markdown, código plano.
-
-9. Para Minecraft: Bedrock crea manifest.json (format_version: 2), Java crea pack.mcmeta o fabric.mod.json.
-
-Archivos actuales:
-${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => `- ${n}`).join('\n') : '(vacío)'}
-
+Archivos: ${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => n).join(', ') : 'vacío'}
 Proyecto: ${proyecto.nombre}`;
 
     // Construir historial del chat (últimos 5 mensajes para no explotar contexto)
