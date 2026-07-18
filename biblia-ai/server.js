@@ -166,6 +166,7 @@ const MODELOS_DISPONIBLES = {
     badge: 'admin',
     disponible: true,
     soloAdmin: true,
+    modeloOpenRouter: 'qwen/qwen3-coder:free',
     modeloG4F: 'qwen-3-coder-480b-a35b',
     imagenModelo: POLLINATIONS_PRO_MODEL,
     imagenAncho: POLLINATIONS_PRO_WIDTH,
@@ -291,6 +292,71 @@ function mensajeErrorAmigableIA(status) {
   if (status === 401 || status === 403) return 'Hubo un problema de autenticacion con el servicio de IA. Avisale al administrador.';
   if (status >= 500) return 'El servicio de IA no esta disponible en este momento. Intenta de nuevo en unos minutos.';
   return 'Error al conectar con el modelo. Intenta de nuevo en unos minutos.';
+}
+
+// ============================================================
+// CAPA OPENROUTER FREE — modelos gratis sin API key
+// ============================================================
+// Fuente: https://github.com/ClawLabsAI/free-ai-models
+// OpenRouter ofrece varios modelos con tier ":free" que NO requieren
+// API key para usarse (rate limit generoso: 20 req/min).
+//
+// Modelos disponibles gratis:
+//   - qwen/qwen3-coder:free          → Qwen3-Coder-480B-A35B (codigo)
+//   - nvidia/nemotron-3-ultra-550b-a55b:free → Nemotron 550B
+//   - meta-llama/llama-3.3-70b-instruct:free → Llama 3.3 70B
+//   - openai/gpt-oss-20b:free        → GPT-OSS 20B
+//   - nousresearch/hermes-3-llama-3.1-405b:free → Hermes 405B
+const OPENROUTER_FREE_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_FREE_ENABLED = (process.env.OPENROUTER_FREE_ENABLED || 'true').toLowerCase() === 'true';
+const OPENROUTER_FREE_TIMEOUT = parseInt(process.env.OPENROUTER_FREE_TIMEOUT || '60000', 10);
+// API key opcional de OpenRouter (te da mas rate limit si la tenes)
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+
+// Llama a OpenRouter con un modelo free (sin API key requerida para tier :free)
+async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}) {
+  if (!OPENROUTER_FREE_ENABLED) return { ok: false, error: 'OpenRouter free deshabilitado' };
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (OPENROUTER_API_KEY) {
+    headers['Authorization'] = `Bearer ${OPENROUTER_API_KEY}`;
+  }
+  // HTTP-Referer y X-Title ayudan a OpenRouter a identificar la app (opcional)
+  headers['HTTP-Referer'] = 'https://verboai.duckdns.org';
+  headers['X-Title'] = 'Verbo AI';
+
+  const body = {
+    model: model,
+    messages: [{ role: 'system', content: systemPrompt }, ...messages],
+    temperature: 0.7,
+    max_tokens: 4096,
+    stream: false,
+  };
+
+  try {
+    const resp = await axios.post(OPENROUTER_FREE_URL, body, {
+      timeout: OPENROUTER_FREE_TIMEOUT,
+      headers,
+      signal: opciones.signal,
+      validateStatus: () => true,
+    });
+    if (resp.status < 200 || resp.status >= 300) {
+      const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
+      console.error(`[openrouter-free] HTTP ${resp.status}: ${detalle}`);
+      return { ok: false, error: `HTTP ${resp.status}` };
+    }
+    const texto = resp.data?.choices?.[0]?.message?.content || '';
+    if (!texto || !texto.trim()) {
+      console.error('[openrouter-free] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+      return { ok: false, error: 'Respuesta vacia de OpenRouter' };
+    }
+    console.log(`[openrouter-free] OK - ${texto.length} chars por ${model}`);
+    return { ok: true, texto: texto.trim(), modelo: model };
+  } catch (e) {
+    if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return { ok: false, error: 'cancelado' };
+    console.error('[openrouter-free] fallo:', e.message);
+    return { ok: false, error: e.message };
+  }
 }
 
 // ============================================================
@@ -2531,19 +2597,26 @@ Proyecto: ${proyecto.nombre}`;
     let textoRespuesta = '';
     let modeloUsado = configModelo.modeloTexto;
 
-    // 1. Intentar con el puente GPT4Free (g4f) si está habilitado
+    // 1. Intentar con OpenRouter Free si el modelo tiene modeloOpenRouter configurado
+    //    NewserAdmin usa qwen/qwen3-coder:free (480B parametros, codigo)
+    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
+      const resultadoOR = await llamarOpenRouterFree(chatHistorial.slice(-3), systemPrompt, configModelo.modeloOpenRouter);
+      if (resultadoOR.ok) {
+        textoRespuesta = stripThinkTags(resultadoOR.texto);
+        modeloUsado = resultadoOR.modelo;
+      } else {
+        console.warn(`[verbocode] OpenRouter fallo (${resultadoOR.error}), fallback a g4f/Groq.`);
+      }
+    }
+
+    // 2. Intentar con el puente GPT4Free (g4f) si está habilitado
     //    NewserAdmin usa qwen-3-coder-480b-a35b, NewserPro usa deepseek-r1
-    if (GPT4FREE_ENABLED && GPT4FREE_URL) {
-      const modeloG4F = configModelo.modeloG4F || (modeloPedido === 'NewserPro' ? null : null);
-      // Si el modelo tiene un modeloG4F configurado (ej: NewserAdmin → qwen-3-coder-480b-a35b),
-      // pedirle al puente que use ese modelo específico.
+    if (!textoRespuesta && GPT4FREE_ENABLED && GPT4FREE_URL) {
+      const modeloG4F = configModelo.modeloG4F;
       const mensajesParaGlm = chatHistorial.slice(-3);
-      // Si hay modeloG4F, mandarlo como el model en el body del puente
-      const resultadoGlm = modeloG4F
+      const resultadoGlm = (modeloG4F || modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin')
         ? await llamarGlm4Bridge(mensajesParaGlm, systemPrompt)
-        : (modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin'
-          ? await llamarGlm4Bridge(mensajesParaGlm, systemPrompt)
-          : { ok: false, error: 'no aplica' });
+        : { ok: false, error: 'no aplica' };
 
       if (resultadoGlm.ok) {
         textoRespuesta = stripThinkTags(resultadoGlm.texto);
