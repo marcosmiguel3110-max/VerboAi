@@ -18,26 +18,26 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
-const CLAVES_GROQ = [...new Set([
-  process.env.GROQ_API_KEY,
-  process.env.BTATESTERS_KEY,
-  process.env.GROQ_API_KEY_2,
-  process.env.GROQ_API_KEY_3,
-  process.env.GROQ_API_KEY_4,
-  process.env.GROQ_API_KEY_5,
-].filter(Boolean))];
-const BTATESTERS_KEY = CLAVES_GROQ[0];
-
-const GROQ_MODEL_TEXTO = process.env.GROQ_MODEL || 'openai/gpt-oss-20b';
-const GROQ_MODEL_VISION = process.env.GROQ_MODEL_VISION || 'meta-llama/llama-4-scout-17b-16e-instruct';
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-
-// NewserPro (solo admin): texto + razonamiento + vision. Mismo feature set que
-// NewserAdvanced1.5, pero con otra config de imagen (flux-realism 16:9).
-// NOTA: "Qwen 3.6 27B" no existe en Groq hoy; el modelo Qwen3 mas cercano es qwen3-32b.
-// Si Groq agrega ese modelo (o queres usar otro proveedor), sobrescribilo con GROQ_MODEL_QWEN_PRO.
-const GROQ_MODEL_PRO_TEXTO = process.env.GROQ_MODEL_PRO || process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b';
-const GROQ_MODEL_PRO_RAZONAMIENTO = process.env.GROQ_MODEL_QWEN_PRO || process.env.GROQ_MODEL_QWEN || 'qwen/qwen3-32b';
+// ============================================================
+// CAPA DE MODELOS GRATIS — Groq fue removido por completo.
+// ============================================================
+// Todos los modelos de VerboAI (NewserLite, NewserAdvanced, NewserAdvanced1.5,
+// NewserPro y NewserAdmin) usan EXCLUSIVAMENTE modelos gratuitos, sin API key
+// obligatoria, listados y actualizados a diario por:
+//   https://github.com/ClawLabsAI/free-ai-models  (data/models.json)
+//
+// Cada tier tiene una CASCADA de modelos OpenRouter ":free" (probados en orden,
+// con reintentos ante 429) y, si todos fallan, cae a Pollinations texto
+// (text.pollinations.ai/openai, sin auth, sin limite conocido).
+//
+// Fuente de los IDs de modelo (snapshot del tracker, se puede pisar por env var):
+//   openai/gpt-oss-20b:free, openai/gpt-oss-120b:free
+//   meta-llama/llama-3.3-70b-instruct:free, meta-llama/llama-3.2-3b-instruct:free
+//   nvidia/nemotron-3-super-120b-a12b:free, nvidia/nemotron-3-ultra-550b-a55b:free
+//   nvidia/nemotron-nano-12b-v2-vl:free (vision), nvidia/nemotron-nano-9b-v2:free
+//   qwen/qwen3-coder:free, qwen/qwen3-next-80b-a3b-instruct:free
+//   google/gemma-4-26b-a4b-it:free (vision), google/gemma-4-31b-it:free (vision)
+//   z-ai/glm-4.5-air:free, nousresearch/hermes-3-llama-3.1-405b:free
 
 // Config de Pollinations para NewserPro: flux-realism + enhance + 1536x1536
 // (mismo tamaño que NewserAdvanced1.5).
@@ -72,13 +72,13 @@ const GPT4FREE_API_KEY = process.env.GPT4FREE_API_KEY || ''; // opcional segun e
 // Modelo: openai-fast (GPT-OSS-20B con razonamiento, el mas potente de Pollinations gratis).
 //
 // Si POLLINATIONS_TEXT_ENABLED_PRO=true (default), NewserPro intenta PRIMERO
-// Pollinations texto. Si responde, usa ese. Si falla, cae al puente GLM-4
-// (si esta configurado). Si ambos fallan, cae a GPT-OSS-120B (Groq).
+// OpenRouter free (cascada de modelos), y si todos fallan cae a Pollinations
+// texto. El puente GLM-4 (g4f) es opcional y solo se usa si esta configurado.
 //
 // Orden de prioridad de capas en /api/v1/pro-hybrid y /api/v1/chat:
-//   1. Pollinations texto (openai-fast = GPT-OSS-20B con razonamiento) ← RAPIDO + GRATIS
-//   2. Puente GLM-4 (g4f con gpt-4o-mini / qwen3-235b) ← OPCIONAL
-//   3. GPT-OSS-120B (Groq) ← FALLBACK SIEMPRE DISPONIBLE
+//   1. OpenRouter free — cascada de modelos ":free" (ver MODELOS_DISPONIBLES) ← PRINCIPAL
+//   2. Puente GLM-4 (g4f) ← OPCIONAL, solo si GPT4FREE_ENABLED_PRO=true
+//   3. Pollinations texto (openai-fast) ← FALLBACK SIEMPRE DISPONIBLE, sin auth
 //
 // Ventajas de Pollinations texto sobre el puente:
 //   - Un servicio menos que mantener (no necesita el bridge Python)
@@ -101,10 +101,17 @@ const MODELOS_DISPONIBLES = {
   NewserLite: {
     nombre: 'NewserLite',
     descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.',
-    modeloTexto: GROQ_MODEL_TEXTO,
-    modeloVision: GROQ_MODEL_VISION,
+    // Cascada de texto: se prueba cada modelo en orden hasta que uno responda.
     modeloOpenRouter: 'openai/gpt-oss-20b:free',
+    modelosOpenRouterTexto: [
+      'openai/gpt-oss-20b:free',
+      'meta-llama/llama-3.2-3b-instruct:free',
+      'nvidia/nemotron-nano-9b-v2:free',
+    ],
     modeloOpenRouterVision: 'nvidia/nemotron-nano-12b-v2-vl:free',
+    modelosOpenRouterVision: [
+      'nvidia/nemotron-nano-12b-v2-vl:free',
+    ],
     costoCreditos: 1,
     rateLimitMax: 20,
     rateLimitMaxWeb: 30,
@@ -115,10 +122,17 @@ const MODELOS_DISPONIBLES = {
   NewserAdvanced: {
     nombre: 'NewserAdvanced',
     descripcion: 'Mas potente. Razonamiento profundo. Genera imagenes, busca en la web y consulta el clima.',
-    modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
-    modeloVision: GROQ_MODEL_VISION,
     modeloOpenRouter: 'meta-llama/llama-3.3-70b-instruct:free',
+    modelosOpenRouterTexto: [
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'z-ai/glm-4.5-air:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
+    ],
     modeloOpenRouterVision: 'google/gemma-4-26b-a4b-it:free',
+    modelosOpenRouterVision: [
+      'google/gemma-4-26b-a4b-it:free',
+      'nvidia/nemotron-nano-12b-v2-vl:free',
+    ],
     costoCreditos: 5,
     rateLimitMax: 5,
     rateLimitMaxWeb: 8,
@@ -129,12 +143,22 @@ const MODELOS_DISPONIBLES = {
   'NewserAdvanced1.5': {
     nombre: 'NewserAdvanced1.5',
     descripcion: 'El mas potente. Un razonamiento interno previo aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Tambien genera imagenes con mas detalle (2 modelos de IA), maximo 2 por hora. Rate limits mas estrictos.',
-    modeloTexto: process.env.GROQ_MODEL_AVANCED || 'openai/gpt-oss-120b',
-    modeloTextoRazonamiento: process.env.GROQ_MODEL_QWEN || 'qwen/qwen3-32b',
-    modeloVision: GROQ_MODEL_VISION,
     modeloOpenRouter: 'nvidia/nemotron-3-super-120b-a12b:free',
+    modelosOpenRouterTexto: [
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'openai/gpt-oss-120b:free',
+      'z-ai/glm-4.5-air:free',
+    ],
     modeloOpenRouterRazonamiento: 'qwen/qwen3-next-80b-a3b-instruct:free',
+    modelosOpenRouterRazonamiento: [
+      'qwen/qwen3-next-80b-a3b-instruct:free',
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    ],
     modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
+    modelosOpenRouterVision: [
+      'google/gemma-4-31b-it:free',
+      'nvidia/nemotron-nano-12b-v2-vl:free',
+    ],
     costoCreditos: 10,
     rateLimitMax: 3,
     rateLimitMaxWeb: 4,
@@ -145,11 +169,21 @@ const MODELOS_DISPONIBLES = {
   NewserPro: {
     nombre: 'NewserPro',
     descripcion: 'Exclusivo admin. Razonamiento profundo, ejecuta codigo real, busca en la web y genera imagenes en alta calidad. Mismo feature set que NewserAdvanced1.5.',
-    modeloTexto: GROQ_MODEL_PRO_TEXTO,
-    modeloTextoRazonamiento: GROQ_MODEL_PRO_RAZONAMIENTO,
-    modeloVision: GROQ_MODEL_VISION,
     modeloOpenRouter: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    modelosOpenRouterTexto: [
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'openai/gpt-oss-120b:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+    ],
+    modeloOpenRouterRazonamiento: 'qwen/qwen3-next-80b-a3b-instruct:free',
+    modelosOpenRouterRazonamiento: [
+      'qwen/qwen3-next-80b-a3b-instruct:free',
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    ],
     modeloOpenRouterVision: 'nvidia/nemotron-nano-12b-v2-vl:free',
+    modelosOpenRouterVision: [
+      'nvidia/nemotron-nano-12b-v2-vl:free',
+    ],
     costoCreditos: 0,
     rateLimitMax: 5,
     rateLimitMaxWeb: 6,
@@ -165,11 +199,21 @@ const MODELOS_DISPONIBLES = {
   NewserAdmin: {
     nombre: 'NewserAdmin',
     descripcion: 'Exclusivo admin. Modelo mas potente para codigo. Usa Qwen3-Coder-480B (480 billones de parametros, MoE 35B activos). Especializado en programacion, agentic coding y desarrollo.',
-    modeloTexto: GROQ_MODEL_PRO_TEXTO,
-    modeloTextoRazonamiento: GROQ_MODEL_PRO_RAZONAMIENTO,
-    modeloVision: GROQ_MODEL_VISION,
     modeloOpenRouter: 'qwen/qwen3-coder:free',
+    modelosOpenRouterTexto: [
+      'qwen/qwen3-coder:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'openai/gpt-oss-120b:free',
+    ],
+    modeloOpenRouterRazonamiento: 'qwen/qwen3-next-80b-a3b-instruct:free',
+    modelosOpenRouterRazonamiento: [
+      'qwen/qwen3-next-80b-a3b-instruct:free',
+    ],
     modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
+    modelosOpenRouterVision: [
+      'google/gemma-4-31b-it:free',
+      'nvidia/nemotron-nano-12b-v2-vl:free',
+    ],
     costoCreditos: 0,
     rateLimitMax: 10,
     rateLimitMaxWeb: 15,
@@ -262,44 +306,50 @@ function esperarMinimo(promesa, ms) {
   return Promise.all([promesa, new Promise((resolve) => setTimeout(resolve, ms))]).then(([resultado]) => resultado);
 }
 
-async function llamarGroqConReintentos(opcionesBase, enviar, maxIntentos = 4) {
-  const claves = CLAVES_GROQ.length ? CLAVES_GROQ : [undefined];
-  let ultimaRespuesta = null;
+// ============================================================
+// CAPA UNIFICADA DE MODELOS GRATIS (reemplaza por completo a Groq)
+// ============================================================
+// Prueba, en orden, cada modelo OpenRouter ":free" de la lista (con 2
+// reintentos ante HTTP 429 antes de pasar al siguiente modelo). Si TODA
+// la cascada de OpenRouter falla, hace un ultimo intento con Pollinations
+// texto (text.pollinations.ai/openai, sin API key, sin limite conocido).
+//
+// Devuelve siempre el mismo shape: { ok, texto, modelo, capa } donde
+// capa es 'openrouter' | 'pollinations' | null.
+async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, enviar = () => {}, opciones = {}) {
+  const lista = (Array.isArray(modelos) ? modelos : [modelos]).filter((v, i, a) => v && a.indexOf(v) === i);
+  let ultimoError = null;
 
-  for (const clave of claves) {
-    const headers = { ...(opcionesBase.headers || {}) };
-    delete headers.Authorization;
-    if (clave) headers.Authorization = `Bearer ${clave}`;
-    const opciones = { ...opcionesBase, headers };
-
-    for (let intento = 1; intento <= maxIntentos; intento++) {
-      const r = await fetch(GROQ_URL, opciones);
-
-      if (r.status === 401 || r.status === 402 || r.status === 403) {
-
-        ultimaRespuesta = r;
-        break;
+  for (const modelo of lista) {
+    for (let intento = 1; intento <= 2; intento++) {
+      if (opciones.signal?.aborted) return { ok: false, error: 'cancelado', capa: null };
+      const r = await llamarOpenRouterFree(messages, systemPrompt, modelo, opciones);
+      if (r.ok) return { ok: true, texto: r.texto, modelo: r.modelo, capa: 'openrouter' };
+      ultimoError = r.error;
+      if (r.error === 'cancelado') return { ok: false, error: 'cancelado', capa: null };
+      if (r.error === 'HTTP 429' && intento < 2) {
+        enviar({ type: 'retry', modelo, intento });
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        continue;
       }
-      if (r.status !== 429) return r;
-      if (intento >= maxIntentos) return r;
-
-      let espera = 5;
-      const retryAfter = r.headers.get('retry-after');
-      if (retryAfter && !isNaN(Number(retryAfter))) espera = Math.ceil(Number(retryAfter));
-      else espera = Math.min(20, 4 * intento);
-
-      enviar({ type: 'retry', intento, maxIntentos, espera });
-      await new Promise((resolve) => setTimeout(resolve, espera * 1000));
+      break; // este modelo fallo por otra razon: pasar al siguiente de la cascada
     }
   }
-  return ultimaRespuesta;
+
+  // Fallback final: Pollinations texto (gratis, sin auth, siempre disponible)
+  if (!opciones.signal?.aborted) {
+    const rp = await llamarPollinationsTexto(messages, systemPrompt, opciones);
+    if (rp.ok) return { ok: true, texto: rp.texto, modelo: rp.modelo, capa: 'pollinations' };
+    ultimoError = rp.error || ultimoError;
+  }
+
+  return { ok: false, error: ultimoError || 'Todos los modelos gratis fallaron', capa: null };
 }
 
-function mensajeErrorAmigableIA(status) {
-  if (status === 429) return 'El modelo esta saturado ahora mismo (limite de uso alcanzado). Intenta de nuevo en unos minutos.';
-  if (status === 402) return 'El servicio de IA no tiene creditos disponibles en este momento. Avisale al administrador.';
-  if (status === 401 || status === 403) return 'Hubo un problema de autenticacion con el servicio de IA. Avisale al administrador.';
-  if (status >= 500) return 'El servicio de IA no esta disponible en este momento. Intenta de nuevo en unos minutos.';
+function mensajeErrorAmigableGratis(error) {
+  if (error === 'cancelado') return 'La peticion fue cancelada.';
+  if (typeof error === 'string' && error.startsWith('HTTP 429')) return 'Los modelos gratis estan saturados ahora mismo. Intenta de nuevo en unos minutos.';
+  if (typeof error === 'string' && error.startsWith('HTTP 5')) return 'El servicio de IA no esta disponible en este momento. Intenta de nuevo en unos minutos.';
   return 'Error al conectar con el modelo. Intenta de nuevo en unos minutos.';
 }
 
@@ -1711,33 +1761,25 @@ app.post('/api/v1/chat', async (req, res) => {
   }
 
   let razonamientoPrevioApi = '';
-  if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') && configModelo.modeloTextoRazonamiento) {
+  if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') && configModelo.modelosOpenRouterRazonamiento) {
     try {
-      const respRaz = await llamarGroqConReintentos({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: configModelo.modeloTextoRazonamiento,
-          messages: [
-            { role: 'system', content: 'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta, un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo va a usar despues. Se breve (maximo 120 palabras).' },
-            { role: 'user', content: mensaje },
-          ],
-          temperature: 0.4,
-          max_tokens: 400,
-          stream: false,
-        }),
-      }, () => {});
+      const respRaz = await llamarModeloGratisConReintentos(
+        [{ role: 'user', content: mensaje }],
+        'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta, un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo va a usar despues. Se breve (maximo 120 palabras).',
+        configModelo.modelosOpenRouterRazonamiento,
+        () => {},
+      );
       if (respRaz && respRaz.ok) {
-        const dataRaz = await respRaz.json();
-        razonamientoPrevioApi = stripThinkTags((dataRaz.choices && dataRaz.choices[0] && dataRaz.choices[0].message && dataRaz.choices[0].message.content) || '');
+        razonamientoPrevioApi = stripThinkTags(respRaz.texto);
       }
-    } catch (e) { console.error('[api/v1/chat] fallo el paso de razonamiento con Qwen3-32B:', e.message); }
+    } catch (e) { console.error('[api/v1/chat] fallo el paso de razonamiento:', e.message); }
     if (razonamientoPrevioApi) {
-      systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por Qwen3-32B, no lo repitas literalmente ni lo menciones, usalo solo como guia]:\n${razonamientoPrevioApi}`;
+      systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO, no lo repitas literalmente ni lo menciones, usalo solo como guia]:\n${razonamientoPrevioApi}`;
     }
   }
 
   systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
+
 
   const mensajesParaModelo = [
     { role: 'system', content: systemPrompt },
@@ -1827,21 +1869,17 @@ app.post('/api/v1/chat', async (req, res) => {
     // ============================================================
     // CAPA OPENROUTER FREE — TODOS los modelos usan OpenRouter primero
     // ============================================================
-    // Cada modelo tiene su propio modeloOpenRouter configurado.
-    // Si OpenRouter falla, cae a g4f (NewserPro/Admin) o Groq (resto).
+    // Cascada de modelos gratis: OpenRouter free (varios modelos) y,
+    // si TODOS fallan, Pollinations texto. Groq fue removido por completo.
     let texto = '';
-    let modeloUsadoReal = configModelo.modeloTexto;
+    let modeloUsadoReal = configModelo.modeloOpenRouter;
     let glmUsado = false;
 
-    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
+    if (OPENROUTER_FREE_ENABLED) {
       const mensajesParaOR = mensajesParaModelo.filter((m) => m.role !== 'system');
-      // Cascada: modelo principal + fallbacks
-      const modelosOR = [
-        configModelo.modeloOpenRouter,
-        'nvidia/nemotron-3-ultra-550b-a55b:free',
-        'meta-llama/llama-3.3-70b-instruct:free',
-        'openai/gpt-oss-20b:free',
-      ].filter((v, i, a) => v && a.indexOf(v) === i);
+      const modelosOR = (configModelo.modelosOpenRouterTexto && configModelo.modelosOpenRouterTexto.length)
+        ? configModelo.modelosOpenRouterTexto
+        : [configModelo.modeloOpenRouter];
 
       for (const modeloOR of modelosOR) {
         const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, modeloOR);
@@ -1853,12 +1891,12 @@ app.post('/api/v1/chat', async (req, res) => {
         }
       }
       if (!glmUsado) {
-        console.warn(`[api/v1/chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f/Groq.`);
+        console.warn(`[api/v1/chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f/Pollinations.`);
       }
     }
 
     // ============================================================
-    // CAPA G4F — fallback para NewserPro y NewserAdmin
+    // CAPA G4F — fallback opcional para NewserPro y NewserAdmin
     // ============================================================
     if (!glmUsado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED) {
       const mensajesParaGlm = mensajesParaModelo.filter((m) => m.role !== 'system');
@@ -1870,30 +1908,20 @@ app.post('/api/v1/chat', async (req, res) => {
       }
     }
 
+    // ============================================================
+    // CAPA POLLINATIONS — fallback final, siempre disponible, sin auth
+    // ============================================================
     if (!glmUsado) {
-      const respuestaGroq = await llamarGroqConReintentos({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: configModelo.modeloTexto,
-          messages: mensajesParaModelo,
-          temperature: 0.7,
-          max_tokens: configModelo.maxTokens,
-          stream: false,
-        }),
-      }, () => {});
+      const mensajesParaPoll = mensajesParaModelo.filter((m) => m.role !== 'system');
+      const resultadoPoll = await llamarPollinationsTexto(mensajesParaPoll, systemPrompt);
 
-      if (!respuestaGroq || !respuestaGroq.ok) {
-        const status = respuestaGroq ? respuestaGroq.status : 0;
-        try {
-          const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
-          console.error(`[api/v1/chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
-        } catch (e) {  }
-        return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
+      if (!resultadoPoll.ok) {
+        console.error(`[api/v1/chat] Todos los modelos gratis fallaron:`, resultadoPoll.error);
+        return res.status(502).json({ ok: false, error: mensajeErrorAmigableGratis(resultadoPoll.error) });
       }
 
-      const data = await respuestaGroq.json();
-      texto = stripThinkTags((data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '');
+      texto = stripThinkTags(resultadoPoll.texto);
+      modeloUsadoReal = resultadoPoll.modelo;
     }
 
     let webSearchQueryApi = null;
@@ -2089,7 +2117,7 @@ app.post('/api/v1/chat', async (req, res) => {
       respuesta: textoLimpio,
       modelo: configModelo.nombre,
       modeloUsado: configModelo.nombre,
-      modeloReal: modeloUsadoReal, // groq-120b | glm-4 | etc (info util para saber que capa respondio)
+      modeloReal: modeloUsadoReal, // modelo OpenRouter free | glm-4 | pollinations (info util para saber que capa respondio)
       costoCreditos: costoTotal,
       costoBase: configModelo.costoCreditos,
       costoExtraHerramientas: costoRealHerramientas,
@@ -2158,15 +2186,16 @@ app.get('/api/v1/chats', (req, res) => {
 // ============================================================
 // /api/v1/pro-hybrid — endpoint dedicado al flujo hibrido NewserPro
 // ============================================================
-// Llama al razonamiento previo (Qwen3-32B via Groq) y despues redacta la
-// respuesta final con GLM-4 via puente GPT4Free. Si GLM-4 no responde,
-// cae a GPT-OSS-120B. Requiere token admin (NewserPro es solo admin).
+// Llama al razonamiento previo (cascada OpenRouter free) y despues redacta la
+// respuesta final con OpenRouter free -> GLM-4 (puente GPT4Free, opcional) ->
+// Pollinations texto. Todo gratis, sin Groq. Requiere token admin (NewserPro
+// es solo admin).
 //
 // Body:
 //   { "mensaje": "tu pregunta", "forzarGlm": true|false (default: true) }
 //
 // Respuesta:
-//   { ok, respuesta, razonamiento, modeloReal, capaGlm, capaGroq, ... }
+//   { ok, respuesta, razonamiento, modeloReal, capaOpenRouter, capaGlm, capaPollinations, ... }
 app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => {
   const valorToken = leerBearerToken(req);
   if (!valorToken) return res.status(401).json({ ok: false, error: 'Falta Authorization: Bearer verboai-XXXX' });
@@ -2192,34 +2221,26 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
   const configPro = MODELOS_DISPONIBLES.NewserPro;
 
   // ============================================================
-  // Si hay imagenes, NO usamos el puente GLM-4 (Modelscope no soporta
-  // vision via g4f). En su lugar usamos Llama 4 Scout de Groq (modelo
-  // de vision) directamente, con el razonamiento previo de Qwen3-32B.
+  // Si hay imagenes, usamos un modelo de vision gratis de OpenRouter
+  // (nvidia/nemotron-nano-12b-v2-vl:free) en vez de Groq.
   // ============================================================
   const hayImagenes = imagenes.length > 0;
 
-  // 1) Razonamiento previo con Qwen3-32B (Groq) — solo si no hay imagenes
+  // 1) Razonamiento previo (cascada OpenRouter free) — solo si no hay imagenes
   //    (con imagenes, el razonamiento previo no aporta mucho y demora mas)
   let razonamientoPrevio = '';
-  if (configPro.modeloTextoRazonamiento && !hayImagenes) {
+  let modeloRazonamientoUsado = null;
+  if (configPro.modelosOpenRouterRazonamiento && !hayImagenes) {
     try {
-      const respRaz = await llamarGroqConReintentos({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: configPro.modeloTextoRazonamiento,
-          messages: [
-            { role: 'system', content: 'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso y da un plan breve de respuesta (maximo 120 palabras). No respondas al usuario, esto es un borrador interno.' },
-            { role: 'user', content: mensaje },
-          ],
-          temperature: 0.4,
-          max_tokens: 400,
-          stream: false,
-        }),
-      }, () => {});
+      const respRaz = await llamarModeloGratisConReintentos(
+        [{ role: 'user', content: mensaje }],
+        'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso y da un plan breve de respuesta (maximo 120 palabras). No respondas al usuario, esto es un borrador interno.',
+        configPro.modelosOpenRouterRazonamiento,
+        () => {},
+      );
       if (respRaz && respRaz.ok) {
-        const dataRaz = await respRaz.json();
-        razonamientoPrevio = stripThinkTags((dataRaz.choices?.[0]?.message?.content) || '');
+        razonamientoPrevio = stripThinkTags(respRaz.texto);
+        modeloRazonamientoUsado = respRaz.modelo;
       }
     } catch (e) {
       console.warn('[pro-hybrid] razonamiento previo fallo:', e.message);
@@ -2227,11 +2248,11 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
   }
 
   // 2) Redaccion final:
-  //    - Si hay imagenes: Llama 4 Scout (Groq, vision)
-  //    - Si no hay imagenes: GLM-4 (puente g4f) con fallback a GPT-OSS-120B (Groq)
+  //    - Si hay imagenes: cascada de modelos de vision de OpenRouter free
+  //    - Si no hay imagenes: OpenRouter free (cascada) -> GLM-4 (puente, opcional) -> Pollinations
   let systemPrompt = SYSTEM_PROMPT + SYSTEM_PROMPT_PRO_EXTRA;
   if (razonamientoPrevio) {
-    systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por ${configPro.modeloTextoRazonamiento}, no lo repitas ni menciones, usalo como guia]:\n${razonamientoPrevio}`;
+    systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por ${modeloRazonamientoUsado || 'el modulo de razonamiento'}, no lo repitas ni menciones, usalo como guia]:\n${razonamientoPrevio}`;
   }
   if (hayImagenes) {
     systemPrompt += `\n\nNOTA SOBRE IMAGENES ADJUNTAS: el usuario adjunto ${imagenes.length > 1 ? 'imagenes' : 'una imagen'} en este mensaje. Antes de responder, analizala con maxima atencion y en detalle: fijate bien en TODOS los elementos visibles (texto, numeros, colores, personas, objetos, disposicion, errores, codigo, capturas de pantalla, etc.), no te quedes con una descripcion superficial ni generica. Si el usuario pide una tarea concreta sobre la imagen (resolver algo, identificar un error, transcribir texto, explicar un codigo, comparar cosas, etc.), primero examina la imagen a fondo y recien despues cumplí exactamente lo que se te pide, basandote solo en lo que realmente se ve, sin inventar ni asumir detalles que no esten claramente visibles.`;
@@ -2239,68 +2260,65 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
   systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, 'NewserPro');
 
   let textoFinal = '';
-  let modeloReal = configPro.modeloTexto;
+  let modeloReal = configPro.modeloOpenRouter;
   let capaPollinations = false;
   let capaGlm = false;
-  let capaGroq = false;
+  let capaOpenRouter = false;
   let capaVision = false;
 
   if (hayImagenes) {
     // ============================================================
-    // MODO VISION: usar Llama 4 Scout (Groq) con las imagenes
+    // MODO VISION: cascada de modelos de vision gratis (OpenRouter)
     // ============================================================
     const contenidoUsuario = [
       { type: 'text', text: mensaje || 'Describe estas imagenes en detalle.' },
       ...imagenes.map((img) => ({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.base64}` } })),
     ];
 
-    const respuestaGroq = await llamarGroqConReintentos({
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: GROQ_MODEL_VISION, // Llama 4 Scout 17B
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: contenidoUsuario },
-        ],
-        temperature: 0.7,
-        max_tokens: configPro.maxTokens,
-        stream: false,
-      }),
-    }, () => {});
+    const respVision = await llamarModeloGratisConReintentos(
+      [{ role: 'user', content: contenidoUsuario }],
+      systemPrompt,
+      configPro.modelosOpenRouterVision,
+      () => {},
+    );
 
-    if (!respuestaGroq || !respuestaGroq.ok) {
-      const status = respuestaGroq ? respuestaGroq.status : 0;
-      return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
+    if (!respVision || !respVision.ok) {
+      return res.status(502).json({ ok: false, error: mensajeErrorAmigableGratis(respVision ? respVision.error : null) });
     }
-    const data = await respuestaGroq.json();
-    textoFinal = stripThinkTags((data.choices?.[0]?.message?.content) || '');
-    modeloReal = GROQ_MODEL_VISION;
+    textoFinal = stripThinkTags(respVision.texto);
+    modeloReal = respVision.modelo;
     capaVision = true;
-    capaGroq = true; // Llama 4 Scout es de Groq
+    capaOpenRouter = respVision.capa === 'openrouter';
+    capaPollinations = respVision.capa === 'pollinations';
   } else {
     // ============================================================
     // MODO TEXTO PURO: 3 capas en cascada
-    //   1. Pollinations texto (openai-fast) — rapido, gratis, sin puente
+    //   1. OpenRouter free (varios modelos) — rapido, gratis, sin puente
     //   2. Puente GLM-4 (g4f) — opcional, si esta configurado
-    //   3. GPT-OSS-120B (Groq) — fallback siempre disponible
+    //   3. Pollinations texto (openai-fast) — fallback siempre disponible
     // ============================================================
     const mensajesParaCapaExterna = [{ role: 'user', content: mensaje }];
 
-    // CAPA 1: Pollinations texto (PRINCIPAL)
-    if (!textoFinal && POLLINATIONS_TEXT_ENABLED) {
-      const resultadoPoll = await llamarPollinationsTexto(mensajesParaCapaExterna, systemPrompt);
-      if (resultadoPoll.ok) {
-        textoFinal = stripThinkTags(resultadoPoll.texto);
-        modeloReal = resultadoPoll.modelo;
-        capaPollinations = true;
-        console.log('[pro-hybrid] Pollinations texto respondio OK');
+    // CAPA 1: OpenRouter free (PRINCIPAL)
+    if (!textoFinal && OPENROUTER_FREE_ENABLED) {
+      const resultadoOR = await llamarModeloGratisConReintentos(
+        mensajesParaCapaExterna,
+        systemPrompt,
+        configPro.modelosOpenRouterTexto,
+        () => {},
+      );
+      if (resultadoOR.ok) {
+        textoFinal = stripThinkTags(resultadoOR.texto);
+        modeloReal = resultadoOR.modelo;
+        capaOpenRouter = resultadoOR.capa === 'openrouter';
+        capaPollinations = resultadoOR.capa === 'pollinations';
+        console.log(`[pro-hybrid] ${resultadoOR.capa} respondio OK (${resultadoOR.modelo})`);
       } else {
-        console.warn(`[pro-hybrid] Pollinations texto fallo (${resultadoPoll.error}), intentando GLM-4...`);
+        console.warn(`[pro-hybrid] OpenRouter y Pollinations fallaron (${resultadoOR.error}), intentando GLM-4...`);
       }
     }
 
-    // CAPA 2: Puente GLM-4 (FALLBACK 1)
+    // CAPA 2: Puente GLM-4 (FALLBACK, opcional)
     if (!textoFinal && forzarGlm && GPT4FREE_ENABLED) {
       const resultadoGlm = await llamarGlm4Bridge(mensajesParaCapaExterna, systemPrompt);
       if (resultadoGlm.ok) {
@@ -2309,35 +2327,13 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
         capaGlm = true;
         console.log('[pro-hybrid] GLM-4 (puente) respondio OK');
       } else {
-        console.warn(`[pro-hybrid] GLM-4 fallo (${resultadoGlm.error}), fallback final a ${configPro.modeloTexto}.`);
+        console.warn(`[pro-hybrid] GLM-4 fallo (${resultadoGlm.error}).`);
       }
     }
   }
 
-  if (!textoFinal && !hayImagenes) {
-    const respuestaGroq = await llamarGroqConReintentos({
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: configPro.modeloTexto,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: mensaje },
-        ],
-        temperature: 0.7,
-        max_tokens: configPro.maxTokens,
-        stream: false,
-      }),
-    }, () => {});
-
-    if (!respuestaGroq || !respuestaGroq.ok) {
-      const status = respuestaGroq ? respuestaGroq.status : 0;
-      return res.status(502).json({ ok: false, error: mensajeErrorAmigableIA(status) });
-    }
-    const data = await respuestaGroq.json();
-    textoFinal = stripThinkTags((data.choices?.[0]?.message?.content) || '');
-    modeloReal = configPro.modeloTexto;
-    capaGroq = true;
+  if (!textoFinal) {
+    return res.status(502).json({ ok: false, error: 'No se pudo conectar con ningun modelo gratis en este momento. Intenta de nuevo en unos minutos.' });
   }
 
   // Guardar imagenes al disco para referncia futura (opcional)
@@ -2350,16 +2346,16 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
     modeloReal,
     capaPollinations,
     capaGlm,
-    capaGroq,
+    capaOpenRouter,
     capaVision,
     imagenesAdjuntas: imagenesGuardadasUrls.length,
     pollinationsTextDisponible: POLLINATIONS_TEXT_ENABLED,
     modeloPollinationsText: POLLINATIONS_TEXT_MODEL,
     glmDisponible: GPT4FREE_ENABLED && !!GPT4FREE_URL,
     modeloGlm: GPT4FREE_MODEL,
-    modeloGroqTexto: configPro.modeloTexto,
-    modeloGroqRazonamiento: configPro.modeloTextoRazonamiento,
-    modeloGroqVision: GROQ_MODEL_VISION,
+    modelosOpenRouterTexto: configPro.modelosOpenRouterTexto,
+    modelosOpenRouterRazonamiento: configPro.modelosOpenRouterRazonamiento,
+    modelosOpenRouterVision: configPro.modelosOpenRouterVision,
     creditosRestantes: token.propietario.startsWith('local:') ? -1 : leerCreditosGlobales(token.propietario),
   });
 });
@@ -2700,33 +2696,24 @@ Proyecto: ${proyecto.nombre}`;
     // Agregar el mensaje actual
     chatHistorial.push({ role: 'user', content: mensaje });
 
-    // Razonamiento previo con Qwen3-32B (solo si el modelo es NewserPro o NewserAdvanced1.5)
+    // Razonamiento previo (cascada OpenRouter free, solo si el modelo es NewserPro)
     let razonamientoPrevio = '';
-    if (configModelo.modeloTextoRazonamiento && modeloPedido === 'NewserPro') {
+    if (configModelo.modelosOpenRouterRazonamiento && modeloPedido === 'NewserPro') {
       try {
-        const respRaz = await llamarGroqConReintentos({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: configModelo.modeloTextoRazonamiento,
-            messages: [
-              { role: 'system', content: 'Sos un modulo de razonamiento interno para Verbo Code. Analizá el pedido del usuario paso a paso: qué archivos necesita crear, qué estructura, qué investigación web hace falta. Plan breve (maximo 150 palabras). No respondas al usuario.' },
-              { role: 'user', content: mensaje },
-            ],
-            temperature: 0.4,
-            max_tokens: 500,
-            stream: false,
-          }),
-        }, () => {});
+        const respRaz = await llamarModeloGratisConReintentos(
+          [{ role: 'user', content: mensaje }],
+          'Sos un modulo de razonamiento interno para Verbo Code. Analizá el pedido del usuario paso a paso: qué archivos necesita crear, qué estructura, qué investigación web hace falta. Plan breve (maximo 150 palabras). No respondas al usuario.',
+          configModelo.modelosOpenRouterRazonamiento,
+          () => {},
+        );
         if (respRaz && respRaz.ok) {
-          const dataRaz = await respRaz.json();
-          razonamientoPrevio = stripThinkTags((dataRaz.choices?.[0]?.message?.content) || '');
+          razonamientoPrevio = stripThinkTags(respRaz.texto);
         }
       } catch (e) {
         console.warn('[verbocode] razonamiento previo fallo:', e.message);
       }
       if (razonamientoPrevio) {
-        systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por ${configModelo.modeloTextoRazonamiento}, no lo repitas, usalo como guia]:\n${razonamientoPrevio}`;
+        systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO, no lo repitas, usalo como guia]:\n${razonamientoPrevio}`;
       }
     }
 
@@ -2748,37 +2735,14 @@ Sea conciso. Máximo 5 pasos.`;
 
       const planMessages = [{ role: 'user', content: `Pedido del usuario: ${mensaje}\n\nArchivos actuales: ${Object.keys(proyecto.archivos).join(', ') || 'vacío'}` }];
 
-      if (OPENROUTER_FREE_ENABLED) {
-        const modelosOR = [
-          configModelo.modeloOpenRouter,
-          'nvidia/nemotron-3-ultra-550b-a55b:free',
-          'meta-llama/llama-3.3-70b-instruct:free',
-          'openai/gpt-oss-20b:free',
-        ].filter((v, i, a) => v && a.indexOf(v) === i);
-
-        for (const modeloOR of modelosOR) {
-          const resultadoPlan = await llamarOpenRouterFree(planMessages, planSystemPrompt, modeloOR);
-          if (resultadoPlan.ok) {
-            planAccion = stripThinkTags(resultadoPlan.texto);
-            break;
-          }
-        }
-      }
-
-      if (!planAccion) {
-        const respPlan = await llamarGroqConReintentos({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: 'openai/gpt-oss-20b',
-            messages: [{ role: 'system', content: planSystemPrompt }, ...planMessages],
-            temperature: 0.3, max_tokens: 300, stream: false,
-          }),
-        }, () => {});
-        if (respPlan && respPlan.ok) {
-          const dataPlan = await respPlan.json();
-          planAccion = stripThinkTags((dataPlan.choices?.[0]?.message?.content) || '');
-        }
+      const resultadoPlan = await llamarModeloGratisConReintentos(
+        planMessages,
+        planSystemPrompt,
+        configModelo.modelosOpenRouterTexto,
+        () => {},
+      );
+      if (resultadoPlan.ok) {
+        planAccion = stripThinkTags(resultadoPlan.texto);
       }
 
       // ENVIAR PLAN INMEDIATAMENTE al cliente
@@ -2791,33 +2755,27 @@ Sea conciso. Máximo 5 pasos.`;
 
     enviarSSE({ type: 'status', text: 'Desarrollando código...' });
 
-    // Llamar al modelo de texto — cascada de fallbacks
+    // Llamar al modelo de texto — cascada de fallbacks, sin Groq
     let textoRespuesta = '';
-    let modeloUsado = configModelo.modeloTexto;
+    let modeloUsado = configModelo.modeloOpenRouter;
 
-    // 1. Intentar con OpenRouter Free — TODOS los modelos lo usan primero
-    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
-      const modelosOR = [
-        configModelo.modeloOpenRouter,
-        'nvidia/nemotron-3-ultra-550b-a55b:free',
-        'meta-llama/llama-3.3-70b-instruct:free',
-        'openai/gpt-oss-20b:free',
-      ].filter((v, i, a) => v && a.indexOf(v) === i);
-
-      for (const modeloOR of modelosOR) {
-        const resultadoOR = await llamarOpenRouterFree(chatHistorial.slice(-5), systemPrompt, modeloOR);
-        if (resultadoOR.ok) {
-          textoRespuesta = stripThinkTags(resultadoOR.texto);
-          modeloUsado = resultadoOR.modelo;
-          break;
-        }
-      }
-      if (!textoRespuesta) {
-        console.warn(`[verbocode] OpenRouter fallo para ${modeloPedido}, fallback a g4f/Groq.`);
+    // 1. Cascada de OpenRouter free — TODOS los modelos la usan primero
+    if (OPENROUTER_FREE_ENABLED) {
+      const resultadoOR = await llamarModeloGratisConReintentos(
+        chatHistorial.slice(-5),
+        systemPrompt,
+        configModelo.modelosOpenRouterTexto,
+        () => {},
+      );
+      if (resultadoOR.ok) {
+        textoRespuesta = stripThinkTags(resultadoOR.texto);
+        modeloUsado = resultadoOR.modelo;
+      } else {
+        console.warn(`[verbocode] OpenRouter y Pollinations fallaron para ${modeloPedido}: ${resultadoOR.error}`);
       }
     }
 
-    // 2. Fallback a g4f para NewserPro y NewserAdmin
+    // 2. Fallback a g4f para NewserPro y NewserAdmin (opcional, si esta configurado)
     if (!textoRespuesta && GPT4FREE_ENABLED && GPT4FREE_URL && (modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin')) {
       const resultadoGlm = await llamarGlm4Bridge(chatHistorial.slice(-5), systemPrompt);
       if (resultadoGlm.ok) {
@@ -2826,67 +2784,11 @@ Sea conciso. Máximo 5 pasos.`;
       }
     }
 
-    // 2. Fallback a Groq — probar varios modelos en orden hasta que uno responda
     if (!textoRespuesta) {
-      // Lista de modelos a probar en orden: el configurado primero,
-      // luego fallbacks seguros que sabemos que funcionan en Groq.
-      const modelosGroq = [
-        configModelo.modeloTexto,           // gpt-oss-120b o qwen3-32b (lo configurado)
-        'qwen/qwen3-32b',                    // siempre funciona
-        'openai/gpt-oss-20b',                // el de NewserLite, siempre funciona
-        'llama-3.3-70b-versatile',           // otro fallback más
-      ].filter((v, i, a) => v && a.indexOf(v) === i); // sin duplicados
-
-      let ultimoError = '';
-      for (const modeloGroq of modelosGroq) {
-        try {
-          console.log(`[verbocode] Probando modelo: ${modeloGroq}`);
-          const respuestaGroq = await llamarGroqConReintentos({
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: modeloGroq,
-              messages: [
-                { role: 'system', content: systemPrompt },
-                ...chatHistorial,
-              ],
-              temperature: 0.7,
-              max_tokens: 16384,
-              stream: false,
-            }),
-          }, () => {});
-
-          if (respuestaGroq && respuestaGroq.ok) {
-            const data = await respuestaGroq.json();
-            const content = data.choices?.[0]?.message?.content || '';
-            if (content.trim()) {
-              textoRespuesta = stripThinkTags(content);
-              modeloUsado = modeloGroq;
-              console.log(`[verbocode] OK con modelo: ${modeloGroq}`);
-              break;
-            } else {
-              ultimoError = `${modeloGroq}: respuesta vacía`;
-              console.warn(`[verbocode] ${ultimoError}`);
-            }
-          } else {
-            const status = respuestaGroq ? respuestaGroq.status : 0;
-            ultimoError = `${modeloGroq}: HTTP ${status}`;
-            console.warn(`[verbocode] ${ultimoError}`);
-            // Si es 401 o 403, probablemente la API key no tiene acceso a ese modelo
-            // pero igual probamos el siguiente
-          }
-        } catch (e) {
-          ultimoError = `${modeloGroq}: ${e.message}`;
-          console.warn(`[verbocode] modelo ${modeloGroq} fallo: ${e.message}`);
-        }
-      }
-
-      if (!textoRespuesta) {
-        console.error(`[verbocode] TODOS los modelos fallaron. Último error: ${ultimoError}`);
-        return res.status(502).json({
-          error: `No se pudo conectar con ningún modelo (último error: ${ultimoError}). Verificá tu GROQ_API_KEY en Render.`,
-        });
-      }
+      console.error(`[verbocode] TODOS los modelos gratis fallaron para ${modeloPedido}.`);
+      return res.status(502).json({
+        error: 'No se pudo conectar con ningún modelo gratis en este momento. Intenta de nuevo en unos minutos.',
+      });
     }
 
     // Mapear nombres técnicos a nombres amigables para mostrar al usuario.
@@ -3637,7 +3539,7 @@ async function investigarBiblia(query) {
   }
 }
 
-async function sintetizarInvestigacion(query, wiki, versiculos, webResultados, modeloOverride) {
+async function sintetizarInvestigacion(query, wiki, versiculos, webResultados, modelosOverride) {
   try {
     let contexto = '';
     if (wiki) contexto += `Wikipedia (${wiki.titulo}): ${wiki.extracto}\n\n`;
@@ -3652,38 +3554,26 @@ async function sintetizarInvestigacion(query, wiki, versiculos, webResultados, m
     if (!contexto.trim()) return null;
 
     const esProfunda = !!webResultados;
-    const resp = await llamarGroqConReintentos({
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: modeloOverride || GROQ_MODEL_TEXTO,
-        messages: [
-          {
-            role: 'system',
-            content: esProfunda
-              ? 'Haces investigacion profunda y real, de forma clara y en espanol natural. ' +
-                'Usa UNICAMENTE la informacion entregada en el mensaje del usuario (Wikipedia, texto biblico y ' +
-                'resultados web reales), nunca agregues datos, fechas ni afirmaciones que no esten ahi. ' +
-                'Cruza y compara las distintas fuentes cuando aporte valor, se mas extenso que un resumen ' +
-                'comun (hasta 8 frases), y menciona brevemente de donde salio cada dato, sin sonar tecnico ' +
-                'ni mencionar APIs.'
-              : 'Resumes investigacion biblica real de forma breve, calida y en espanol natural. ' +
-                'Usa UNICAMENTE la informacion entregada en el mensaje del usuario, nunca agregues datos, ' +
-                'fechas ni afirmaciones que no esten ahi. Maximo 4 frases. Menciona brevemente de donde salio ' +
-                '(Wikipedia o el texto biblico), sin sonar tecnico ni mencionar APIs.',
-          },
-          { role: 'user', content: `Tema investigado: "${query}"\n\n${contexto}\n\nEscribe el resumen.` },
-        ],
-        temperature: 0.5,
-        max_tokens: esProfunda ? 600 : 300,
-        stream: false,
-      }),
-    }, () => {});
+    const modelos = (modelosOverride && modelosOverride.length) ? modelosOverride : MODELOS_DISPONIBLES.NewserLite.modelosOpenRouterTexto;
+    const resp = await llamarModeloGratisConReintentos(
+      [{ role: 'user', content: `Tema investigado: "${query}"\n\n${contexto}\n\nEscribe el resumen.` }],
+      esProfunda
+        ? 'Haces investigacion profunda y real, de forma clara y en espanol natural. ' +
+          'Usa UNICAMENTE la informacion entregada en el mensaje del usuario (Wikipedia, texto biblico y ' +
+          'resultados web reales), nunca agregues datos, fechas ni afirmaciones que no esten ahi. ' +
+          'Cruza y compara las distintas fuentes cuando aporte valor, se mas extenso que un resumen ' +
+          'comun (hasta 8 frases), y menciona brevemente de donde salio cada dato, sin sonar tecnico ' +
+          'ni mencionar APIs.'
+        : 'Resumes investigacion biblica real de forma breve, calida y en espanol natural. ' +
+          'Usa UNICAMENTE la informacion entregada en el mensaje del usuario, nunca agregues datos, ' +
+          'fechas ni afirmaciones que no esten ahi. Maximo 4 frases. Menciona brevemente de donde salio ' +
+          '(Wikipedia o el texto biblico), sin sonar tecnico ni mencionar APIs.',
+      modelos,
+      () => {},
+    );
 
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const texto = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-    return texto ? texto.trim() : null;
+    if (!resp || !resp.ok) return null;
+    return stripThinkTags(resp.texto).trim() || null;
   } catch (e) {
     console.error('Error sintetizando investigacion:', e.message);
     return null;
@@ -4504,11 +4394,11 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     try { res.write(JSON.stringify(obj) + '\n'); } catch (e) {  }
   };
 
-  const controladorGroq = new AbortController();
+  const controladorIA = new AbortController();
   res.on('close', () => {
     if (!res.writableEnded) {
       clienteDesconectado = true;
-      controladorGroq.abort();
+      controladorIA.abort();
     }
   });
 
@@ -4532,7 +4422,9 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     if (!chat) chat = crearChat(db, usuarioActual);
     const historial = chat.mensajes;
 
-    const modeloElegido = imagenes.length ? configModelo.modeloVision : configModelo.modeloTexto;
+    // Cascada de modelos gratis: si hay imagenes se usa la lista de vision,
+    // sino la lista de texto (ver MODELOS_DISPONIBLES). Groq fue removido.
+    const modelosElegidos = imagenes.length ? configModelo.modelosOpenRouterVision : configModelo.modelosOpenRouterTexto;
 
     let contenidoUsuario;
     if (imagenes.length) {
@@ -4557,34 +4449,25 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       systemPrompt += `\n\nNOTA SOBRE IMAGENES ADJUNTAS: el usuario adjunto ${imagenes.length > 1 ? 'imagenes' : 'una imagen'} en este mensaje. Antes de responder, analizala con maxima atencion y en detalle: fijate bien en TODOS los elementos visibles (texto, numeros, colores, personas, objetos, disposicion, errores, codigo, capturas de pantalla, etc.), no te quedes con una descripcion superficial ni generica. Si el usuario pide una tarea concreta sobre la imagen (resolver algo, identificar un error, transcribir texto, explicar un codigo, comparar cosas, etc.), primero examina la imagen a fondo y recien despues cumplí exactamente lo que se te pide, basandote solo en lo que realmente se ve, sin inventar ni asumir detalles que no esten claramente visibles.`;
     }
 
-    if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') && configModelo.modeloTextoRazonamiento && !imagenes.length) {
-      enviar({ type: 'investigando', query: 'Razonando con Qwen3-32B...' });
-      enviar({ type: 'investigando_sitio', sitio: 'Modulo de razonamiento (Qwen3-32B)' });
+    if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') && configModelo.modelosOpenRouterRazonamiento && !imagenes.length) {
+      enviar({ type: 'investigando', query: 'Razonando...' });
+      enviar({ type: 'investigando_sitio', sitio: 'Modulo de razonamiento' });
       try {
-        const respRaz = await llamarGroqConReintentos({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: configModelo.modeloTextoRazonamiento,
-            messages: [
-              { role: 'system', content: 'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta: web, code, apidata, cuaderno biblico, imagenes, investigar; y un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo (GPT-OSS-120B) va a usar despues para redactar la respuesta final. Se breve y concreto (maximo 120 palabras).' },
-              { role: 'user', content: mensajeParaModelo || 'Describe estas imagenes.' },
-            ],
-            temperature: 0.4,
-            max_tokens: 400,
-            stream: false,
-          }),
-          signal: controladorGroq.signal,
-        }, () => {});
+        const respRaz = await llamarModeloGratisConReintentos(
+          [{ role: 'user', content: mensajeParaModelo || 'Describe estas imagenes.' }],
+          'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta: web, code, apidata, cuaderno biblico, imagenes, investigar; y un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo va a usar despues para redactar la respuesta final. Se breve y concreto (maximo 120 palabras).',
+          configModelo.modelosOpenRouterRazonamiento,
+          () => {},
+          { signal: controladorIA.signal },
+        );
         if (respRaz && respRaz.ok) {
-          const dataRaz = await respRaz.json();
-          const razonamientoPrevio = stripThinkTags((dataRaz.choices && dataRaz.choices[0] && dataRaz.choices[0].message && dataRaz.choices[0].message.content) || '');
+          const razonamientoPrevio = stripThinkTags(respRaz.texto);
           if (razonamientoPrevio) {
-            systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por Qwen3-32B, no lo repitas literalmente ni lo menciones al usuario, usalo solo como guia para pensar mejor tu respuesta final]:\n${razonamientoPrevio}`;
+            systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO, no lo repitas literalmente ni lo menciones al usuario, usalo solo como guia para pensar mejor tu respuesta final]:\n${razonamientoPrevio}`;
           }
         }
       } catch (e) {
-        console.error('[chat] fallo el paso de razonamiento con Qwen3-32B:', e.message);
+        console.error('[chat] fallo el paso de razonamiento:', e.message);
       }
       enviar({ type: 'investigando_fin' });
     }
@@ -4598,164 +4481,71 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     ];
 
     // ============================================================
-    // CAPA OPENROUTER FREE — TODOS los modelos usan OpenRouter primero
+    // CAPA OPENROUTER FREE (+ Pollinations) — TODOS los modelos, texto y
+    // vision. Groq fue removido por completo.
     // ============================================================
     let glmTextoPreGenerado = null;
-    if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && !imagenes.length) {
+    if (OPENROUTER_FREE_ENABLED) {
       enviar({ type: 'investigando', query: `Procesando con ${configModelo.nombre}...` });
-      enviar({ type: 'investigando_sitio', sitio: `OpenRouter Free` });
+      enviar({ type: 'investigando_sitio', sitio: 'OpenRouter Free' });
 
       const mensajesParaOR = [
         ...construirHistorialParaModelo(historial),
         { role: 'user', content: contenidoUsuario },
       ];
-      const modelosOR = [
-        configModelo.modeloOpenRouter,
-        'nvidia/nemotron-3-ultra-550b-a55b:free',
-        'meta-llama/llama-3.3-70b-instruct:free',
-        'openai/gpt-oss-20b:free',
-      ].filter((v, i, a) => v && a.indexOf(v) === i);
 
-      for (const modeloOR of modelosOR) {
-        const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, modeloOR, { signal: controladorGroq.signal });
-        if (resultadoOR.ok) {
-          glmTextoPreGenerado = stripThinkTags(resultadoOR.texto);
-          break;
-        }
+      const resultadoOR = await llamarModeloGratisConReintentos(
+        mensajesParaOR,
+        systemPrompt,
+        modelosElegidos,
+        enviar,
+        { signal: controladorIA.signal },
+      );
+      if (resultadoOR.ok) {
+        glmTextoPreGenerado = stripThinkTags(resultadoOR.texto);
       }
       enviar({ type: 'investigando_fin' });
       if (!glmTextoPreGenerado) {
-        console.warn(`[chat] OpenRouter fallo para ${configModelo.nombre}, fallback a g4f/Groq.`);
+        console.warn(`[chat] OpenRouter y Pollinations fallaron para ${configModelo.nombre}, probando g4f...`);
       }
     }
 
     // ============================================================
-    // CAPA G4F — fallback para NewserPro y NewserAdmin
+    // CAPA G4F — fallback opcional para NewserPro y NewserAdmin
     // ============================================================
     if (!glmTextoPreGenerado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED && !imagenes.length) {
       const mensajesParaGlm = [
         ...construirHistorialParaModelo(historial),
         { role: 'user', content: contenidoUsuario },
       ];
-      const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt, { signal: controladorGroq.signal });
+      const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt, { signal: controladorIA.signal });
       if (resultadoGlm.ok && !clienteDesconectado) {
         glmTextoPreGenerado = stripThinkTags(resultadoGlm.texto);
       }
     }
 
-    let reader = null;
-    let decoder = null;
     let textoCompleto = glmTextoPreGenerado || '';
-    let bufferSSE = '';
-    let emitido = 0;
 
     if (!glmTextoPreGenerado) {
-      // Flujo normal: streaming con Groq (GPT-OSS-120B o Llama 4 Scout si hay imagenes)
-      const respuestaGroq = await llamarGroqConReintentos({
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: modeloElegido,
-          messages: mensajesParaModelo,
-          temperature: 0.7,
-          max_tokens: configModelo.maxTokens,
-          stream: true,
-        }),
-        signal: controladorGroq.signal,
-      }, enviar);
-
-      if (!respuestaGroq || !respuestaGroq.ok || !respuestaGroq.body) {
-        const status = respuestaGroq ? respuestaGroq.status : 0;
-
-        try {
-          const detalle = respuestaGroq ? await respuestaGroq.clone().text() : '(sin respuesta)';
-          console.error(`[chat] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
-        } catch (e) {  }
-        enviar({ type: 'error', message: mensajeErrorAmigableIA(status) });
-        return res.end();
+      // Todos los modelos gratis fallaron (OpenRouter, Pollinations y g4f).
+      if (!clienteDesconectado) {
+        enviar({ type: 'error', message: 'No se pudo conectar con ningun modelo gratis en este momento. Intenta de nuevo en unos minutos.' });
       }
-
-      reader = respuestaGroq.body.getReader();
-      decoder = new TextDecoder();
-    } else {
-      // GLM-4 respondio: emitir el texto como stream simulado para mantener
-      // la UX de "maquina de escribir". El parseo de etiquetas [[WEB::]],
-      // [[CODE::]], etc. se hace igual que en el flujo de Groq porque esas
-      // etiquetas pueden estar presentes en la respuesta de GLM-4 tambien.
-      await emitirTextoComoStream(glmTextoPreGenerado, enviar, controladorGroq.signal);
-      if (clienteDesconectado) return res.end();
+      return res.end();
     }
 
-    const MARCADORES = ['[[CUADERNO::', '[[BUSCAR::', '[[INVESTIGAR::', '[[DESCARGAR::', '[[IMAGEN::', '[[WEB::', '[[CLIMA::', '[[CODE::', '[[APIDATA::'];
-    function calcularCorte(buffer) {
-      let corte = buffer.length;
-      for (const m of MARCADORES) {
-        const idx = buffer.indexOf(m, emitido);
-        if (idx !== -1) corte = Math.min(corte, idx);
-        for (let i = 1; i < m.length; i++) {
-          if (i > buffer.length) continue;
-          const sufijo = buffer.slice(-i);
-          if (m.startsWith(sufijo)) corte = Math.min(corte, buffer.length - i);
-        }
-      }
-      return Math.max(corte, emitido);
-    }
+    // Emitir el texto como stream simulado para mantener la UX de "maquina
+    // de escribir" (ninguna de las capas gratis hace streaming real token a
+    // token). El parseo de etiquetas [[WEB::]], [[CODE::]], etc. se hace
+    // igual sobre el texto ya completo.
+    await emitirTextoComoStream(glmTextoPreGenerado, enviar, controladorIA.signal);
+    if (clienteDesconectado) return res.end();
 
-    // Solo leemos del reader si NO tenemos texto pre-generado de GLM-4.
-    // Si GLM-4 respondio, ya emitimos el stream simulado arriba y textoCompleto
-    // ya esta seteado, asi que saltamos este while entero.
-    if (!glmTextoPreGenerado && reader && decoder) {
-      let terminado = false;
-      while (!terminado) {
-        let leido;
-        try {
-          leido = await reader.read();
-        } catch (e) {
-
-          if (clienteDesconectado) break;
-          throw e;
-        }
-        const { value, done } = leido;
-        if (done) break;
-        bufferSSE += decoder.decode(value, { stream: true });
-        const lineas = bufferSSE.split('\n');
-        bufferSSE = lineas.pop();
-        for (const linea of lineas) {
-          const l = linea.trim();
-          if (!l.startsWith('data:')) continue;
-          const dataStr = l.slice(5).trim();
-          if (dataStr === '[DONE]') { terminado = true; break; }
-          try {
-            const json = JSON.parse(dataStr);
-            const delta = (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) || '';
-            if (delta) {
-              textoCompleto += delta;
-              // Limpiar <think>...</think> de Qwen3 en tiempo real.
-              // Si el bloque <think> esta abierto (sin cerrar), stripThinkTags
-              // elimina todo desde <think> hasta el final, asi que no se emite
-              // nada del razonamiento interno. Una vez que llega </think>,
-              // se emite solo la respuesta real.
-              const textoLimpio = stripThinkTags(textoCompleto);
-              const corte = calcularCorte(textoLimpio);
-              if (corte > emitido) {
-                enviar({ type: 'chunk', text: textoLimpio.slice(emitido, corte) });
-                emitido = corte;
-              }
-            }
-          } catch (e) {  }
-        }
-      }
-      // Al finalizar el stream, nos aseguramos de que textoCompleto este limpio
-      // para que el resto del parseo de etiquetas [[WEB::]], [[CODE::]], etc.
-      // y el guardado en historial no contengan <think>.
-      textoCompleto = stripThinkTags(textoCompleto);
-    } else if (glmTextoPreGenerado) {
-      // GLM-4 ya emitio el stream simulado; aseguramos que emitido cubra
-      // todo el texto para que el resto del parseo de etiquetas funcione.
-      emitido = glmTextoPreGenerado.length;
-    }
+    // Todas las capas gratis (OpenRouter, Pollinations, g4f) devuelven el
+    // texto completo de una sola vez, no streaming real token a token. Ya
+    // emitimos el stream simulado arriba, asi que "emitido" cubre todo el
+    // texto para que el parseo de etiquetas [[WEB::]], [[CODE::]], etc. funcione.
+    let emitido = glmTextoPreGenerado.length;
 
     let textoVisible = textoCompleto;
     let cuaderno = null;
@@ -4893,7 +4683,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       if (webInvestigacion) webInvestigacion.forEach((r) => fuentes.push({ titulo: r.titulo, url: r.link }));
 
       if (wiki || (versiculos && versiculos.length) || webInvestigacion) {
-        const textoInvestigado = await sintetizarInvestigacion(investigarQuery, wiki, versiculos, webInvestigacion, (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') ? configModelo.modeloTexto : null);
+        const textoInvestigado = await sintetizarInvestigacion(investigarQuery, wiki, versiculos, webInvestigacion, configModelo.modelosOpenRouterTexto);
         if (textoInvestigado) {
           enviar({ type: 'chunk', text: `\n\n${textoInvestigado}` });
           textoVisible = `${textoVisible}\n\n${textoInvestigado}`.trim();
@@ -5132,34 +4922,19 @@ app.listen(PORT, () => {
 });
 
 app.get('/api/test-btatesters', async (req, res) => {
-  if (!CLAVES_GROQ.length) {
-    return res.json({ ok: false, error: 'No hay ninguna clave de API configurada en el servidor.' });
-  }
   try {
-    const respuesta = await llamarGroqConReintentos({
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'openai/gpt-oss-20b',
-        messages: [{ role: 'user', content: 'Hola, responde en una frase corta.' }],
-        max_tokens: 50,
-      }),
-    }, () => {});
+    const respuesta = await llamarModeloGratisConReintentos(
+      [{ role: 'user', content: 'Hola, responde en una frase corta.' }],
+      'Respondes breve y directo.',
+      MODELOS_DISPONIBLES.NewserLite.modelosOpenRouterTexto,
+      () => {},
+    );
 
     if (!respuesta || !respuesta.ok) {
-      const status = respuesta ? respuesta.status : 0;
-      try {
-        const detalle = respuesta ? await respuesta.clone().text() : '(sin respuesta)';
-        console.error(`[test-btatesters] Error del proveedor de IA (status ${status}):`, detalle.slice(0, 500));
-      } catch (e) {  }
-      return res.json({ ok: false, error: mensajeErrorAmigableIA(status) });
+      console.error('[test-btatesters] Todos los modelos gratis fallaron:', respuesta ? respuesta.error : 'sin respuesta');
+      return res.json({ ok: false, error: mensajeErrorAmigableGratis(respuesta ? respuesta.error : null) });
     }
-    const data = await respuesta.json();
-    if (data.choices && data.choices[0]) {
-      res.json({ ok: true, respuesta: data.choices[0].message.content });
-    } else {
-      res.json({ ok: false, error: 'El servicio de IA no devolvio una respuesta valida.' });
-    }
+    res.json({ ok: true, respuesta: respuesta.texto, modelo: respuesta.modelo, capa: respuesta.capa });
   } catch (e) {
     console.error('[test-btatesters] Error:', e.message);
     res.json({ ok: false, error: 'Error al conectar con el servicio de IA.' });

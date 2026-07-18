@@ -1,14 +1,15 @@
 # Despliegue en Render
 
 ## Variables de Entorno
-Configura estas variables en el dashboard de Render:
-- `BTATESTERS_KEY`: Tu clave de API para el modelo de IA (preferido)
-- `GROQ_API_KEY`: (opcional) También acepta esta variable para compatibilidad
-- `GROQ_API_KEY_2`, `GROQ_API_KEY_3`, `GROQ_API_KEY_4`, `GROQ_API_KEY_5`: (opcionales) Claves adicionales de Groq. El servidor las combina todas y rota automaticamente cuando una se queda sin cuota (401/402/403), asi podes juntar varias cuentas sin quedarte sin espacio.
-- `GROQ_MODEL`: (opcional) Modelo de texto, default: openai/gpt-oss-20b
-- `GROQ_MODEL_VISION`: (opcional) Modelo de visión, default: meta-llama/llama-4-scout-17b-16e-instruct
-- `GROQ_MODEL_AVANCED`: (opcional) Modelo de texto para NewserAdvanced y NewserAdvanced1.5, default: openai/gpt-oss-120b
-- `GROQ_MODEL_QWEN`: (opcional) Modelo de razonamiento previo para NewserAdvanced1.5 (se combina con GROQ_MODEL_AVANCED), default: qwen/qwen3-32b
+Configura estas variables en el dashboard de Render (todas son opcionales, la app
+funciona sin ninguna key porque usa exclusivamente modelos gratis de OpenRouter
+free-tier y Pollinations, ver https://github.com/ClawLabsAI/free-ai-models):
+- `OPENROUTER_FREE_ENABLED`: (opcional) Activa/desactiva la cascada de OpenRouter free, default: true
+- `OPENROUTER_API_KEY`: (opcional) Sube el rate limit de OpenRouter (20 req/min sin key)
+- `OPENROUTER_FREE_TIMEOUT`: (opcional) Timeout en ms, default: 60000
+- `POLLINATIONS_TEXT_ENABLED_PRO`: (opcional) Activa el fallback final a Pollinations texto, default: true
+- `POLLINATIONS_TEXT_API_TOKEN`: (opcional) Token gratis de Pollinations para desbloquear modelos "nectar"
+- `GPT4FREE_ENABLED_PRO` / `GPT4FREE_URL`: (opcional) Puente g4f extra, solo para NewserPro/NewserAdmin
 - `MONGODB_URI`: Tu conexión de MongoDB Atlas
 - `MONGODB_DB_NAME`: (opcional) Nombre de la base de datos, default: biblia_ai
 - `EMAIL_USER`: Tu correo de Gmail para enviar códigos de verificación
