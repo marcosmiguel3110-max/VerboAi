@@ -2613,10 +2613,11 @@ ${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map
 
 Proyecto: ${proyecto.nombre}`;
 
-    // Construir historial del chat (últimos 10 mensajes para no explotar contexto)
-    const chatHistorial = (proyecto.chat || []).slice(-10).map(m => ({
+    // Construir historial del chat (últimos 5 mensajes para no explotar contexto)
+    // Si mandamos muchos mensajes + system prompt largo, Groq devuelve 413 (payload too large)
+    const chatHistorial = (proyecto.chat || []).slice(-5).map(m => ({
       role: m.role,
-      content: m.content,
+      content: m.content.slice(0, 2000), // limitar cada mensaje a 2000 chars
     }));
 
     // Agregar el mensaje actual
