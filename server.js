@@ -329,7 +329,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     model: model,
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
     temperature: 0.7,
-    max_tokens: 8192,
+    max_tokens: 16384,
     stream: false,
   };
 
@@ -2552,14 +2552,18 @@ Crea un archivo. Soporta carpetas: css/styles.css, js/app.js.
 [[FILE_EDIT::nombre.ext::contenido completo]]
 Edita un archivo existente. Mandá SIEMPRE el contenido COMPLETO.
 
+[[LINE_EDIT::nombre.ext::numero_linea::nuevo_contenido_de_esa_linea]]
+Cambia una línea específica de un archivo. Ej: [[LINE_EDIT::script.js::5::console.log("nuevo");]]
+Podés usar varias LINE_EDIT para el mismo archivo.
+
 [[FILE_DELETE::nombre.ext]]
 Elimina un archivo.
 
 [[NPM_INSTALL::nombre-paquete]]
-Instala un paquete npm. Crea/actualiza package.json automáticamente. El paquete se carga desde esm.sh CDN en el preview. Ejemplo: [[NPM_INSTALL::react]] o [[NPM_INSTALL::axios@1.6.0]]
+Instala un paquete npm. Crea/actualiza package.json. Se carga desde esm.sh CDN.
 
 [[TEST::lenguaje::codigo a ejecutar]]
-Ejecuta código de prueba y muestra el resultado. Lenguajes: python, javascript, typescript, java, c, cpp, go, rust, ruby, php, bash, sql.
+Ejecuta código y muestra el resultado. Lenguajes: python, javascript, java, c, cpp, go, rust, ruby, php, bash, sql.
 
 [[IMAGE::prompt en inglés]]
 Genera una imagen.
@@ -2569,23 +2573,40 @@ Busca en internet.
 
 REGLAS CRÍTICAS:
 
-1. CÓDIGO LIMPIO: NUNCA agregues comentarios en el código (ni // ni /* */ ni # ni <!-- -->). El código debe ser limpio y profesional. Si necesitás explicar algo, hacelo en el chat, no en el código.
+1. SEPARACIÓN OBLIGATORIA: NUNCA pongas CSS o JS dentro del HTML. SIEMPRE separá:
+   - index.html (solo estructura HTML, sin style ni script inline)
+   - styles.css (todos los estilos)
+   - script.js (toda la lógica)
+   - Para CSS largo, separá en: reset.css, layout.css, components.css, etc.
+   - Para JS largo, separá en: app.js, charts.js, utils.js, etc.
+   - Si el CSS o JS es muy largo (>200 líneas), DIVIDILO en múltiples archivos.
 
-2. SEPARACIÓN DE ARCHIVOS: Siempre separá HTML, CSS y JS en archivos distintos. NUNCA pongas todo en un solo archivo.
+2. CÓDIGO LIMPIO: NUNCA agregues comentarios. Sin // ni /* */ ni # ni <!-- -->.
 
-3. CÓDIGO COMPLETO: NUNCA cortes un archivo. Si el archivo es largo (500+ líneas), mandalo COMPLETO igual. No uses "..." ni "// resto del código". El usuario necesita el archivo entero para que funcione.
+3. CÓDIGO COMPLETO: NUNCA cortes un archivo. Mandalo COMPLETO. Si es muy largo, dividilo en múltiples archivos más chicos en vez de mandar uno gigante.
 
-4. NPM PACKAGES: Cuando necesites una librería externa:
-   - Usá [[NPM_INSTALL::paquete]] para instalarla
-   - En el HTML, cargala desde CDN: <script type="module">import React from 'https://esm.sh/react'</script>
-   - O usá <script src="https://esm.sh/paquete"></script> para librerías que se auto-ejecutan
-   - NUNCA uses require() en código de navegador, siempre usá import con CDN
+4. CORRECCIÓN DE CÓDIGO: Cuando el usuario te pida corregir, arreglar o debuggear código:
+   - Analizá el código línea por línea
+   - Identificá los errores
+   - Usá [[FILE_EDIT::archivo::código_corregido]] o [[LINE_EDIT::archivo::número::nueva_línea]]
+   - Explicá qué cambiaste y por qué
 
-5. TESTING: Cuando el usuario pida probar código, usá [[TEST::lenguaje::codigo]]. Esto ejecuta el código real y muestra el output.
+5. REFACTORIZACIÓN: Cuando el usuario pida refactorizar:
+   - Mejorá la estructura sin cambiar la funcionalidad
+   - Separá funciones largas en más archivos
+   - Optimizá performance
 
-6. El contenido del archivo va DESPUÉS de :: sin comillas, sin markdown, código plano.
+6. ANÁLISIS DE CÓDIGO: Cuando el usuario te pida analizar código:
+   - Leé todos los archivos del proyecto
+   - Identificá bugs, problemas de performance, código duplicado
+   - Sugerí mejoras concretas
+   - Ofrecete a aplicar los cambios con FILE_EDIT
 
-7. Para Minecraft: Bedrock crea manifest.json (format_version: 2), Java crea pack.mcmeta o fabric.mod.json.
+7. NPM PACKAGES: Usá [[NPM_INSTALL::paquete]] y cargá desde https://esm.sh/paquete en el HTML.
+
+8. El contenido del archivo va DESPUÉS de :: sin comillas, sin markdown, código plano.
+
+9. Para Minecraft: Bedrock crea manifest.json (format_version: 2), Java crea pack.mcmeta o fabric.mod.json.
 
 Archivos actuales:
 ${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => `- ${n}`).join('\n') : '(vacío)'}
@@ -2707,7 +2728,7 @@ Proyecto: ${proyecto.nombre}`;
                 ...chatHistorial,
               ],
               temperature: 0.7,
-              max_tokens: 8192,
+              max_tokens: 16384,
               stream: false,
             }),
           }, () => {});
@@ -2791,6 +2812,28 @@ Proyecto: ${proyecto.nombre}`;
     procesarArchivos(reFileCreate, 'file_create');
     procesarArchivos(reFileEdit, 'file_edit');
 
+    // Procesar LINE_EDIT (cambiar una línea específica)
+    const reLineEdit = /\[\[LINE_EDIT::([^\]]+?)::(\d+)::([\s\S]*?)\]\]/g;
+    let matchLine;
+    while ((matchLine = reLineEdit.exec(textoRespuesta)) !== null) {
+      const nombre = matchLine[1].trim();
+      const numLinea = parseInt(matchLine[2].trim(), 10);
+      const nuevoContenido = matchLine[3].replace(/\n$/, ''); // saca el último salto de línea
+      if (proyecto.archivos[nombre] && numLinea > 0) {
+        const lineas = proyecto.archivos[nombre].split('\n');
+        if (numLinea <= lineas.length) {
+          lineas[numLinea - 1] = nuevoContenido;
+          proyecto.archivos[nombre] = lineas.join('\n');
+          proyectoActualizado = true;
+          acciones.push({
+            tipo: 'file_edit',
+            nombre,
+            descripcion: `Línea ${numLinea} editada en: ${nombre}`,
+          });
+        }
+      }
+    }
+
     // Procesar FILE_DELETE
     let matchDel;
     while ((matchDel = reFileDelete.exec(textoRespuesta)) !== null) {
@@ -2802,11 +2845,35 @@ Proyecto: ${proyecto.nombre}`;
       }
     }
 
-    // Procesar WEB (buscar en internet)
+    // Procesar WEB (buscar en internet DE VERDAD)
     let matchWeb;
+    let resultadosWebAcumulados = '';
     while ((matchWeb = reWeb.exec(textoRespuesta)) !== null) {
       const query = matchWeb[1].trim();
-      acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}"` });
+      try {
+        const resultadoWeb = await buscarWebGoogle(query);
+        if (resultadoWeb.exito && resultadoWeb.resultados.length > 0) {
+          const textoResultados = resultadoWeb.resultados.map((r, i) =>
+            `${i + 1}. ${r.titulo}\n   ${r.resumen}\n   ${r.link}`
+          ).join('\n\n');
+          resultadosWebAcumulados += `\n\n**Resultados de búsqueda "${query}":**\n${textoResultados}`;
+          acciones.push({
+            tipo: 'web',
+            query,
+            resultados: resultadoWeb.resultados,
+            descripcion: `Búsqueda web: "${query}" → ${resultadoWeb.resultados.length} resultados`,
+          });
+        } else {
+          resultadosWebAcumulados += `\n\nNo se encontraron resultados para "${query}".`;
+          acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}" → sin resultados` });
+        }
+      } catch (e) {
+        acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}" → error: ${e.message}` });
+      }
+    }
+    // Agregar los resultados de la búsqueda al texto visible
+    if (resultadosWebAcumulados) {
+      textoLimpio += resultadosWebAcumulados;
     }
 
     // Procesar NPM_INSTALL (crear/actualizar package.json)
@@ -2899,6 +2966,7 @@ Proyecto: ${proyecto.nombre}`;
     textoLimpio = textoLimpio
       .replace(reFileCreate, '')
       .replace(reFileEdit, '')
+      .replace(reLineEdit, '')
       .replace(reFileDelete, '')
       .replace(reImage, '')
       .replace(reWeb, '')
