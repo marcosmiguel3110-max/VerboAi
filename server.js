@@ -160,8 +160,8 @@ const MODELOS_DISPONIBLES = {
     modeloTextoRazonamiento: GROQ_MODEL_PRO_RAZONAMIENTO,
     modeloVision: GROQ_MODEL_VISION,
     costoCreditos: 0,
-    rateLimitMax: 3,
-    rateLimitMaxWeb: 5,
+    rateLimitMax: 10,
+    rateLimitMaxWeb: 15,
     maxTokens: 4096,
     badge: 'admin',
     disponible: true,
@@ -1806,16 +1806,43 @@ app.post('/api/v1/chat', async (req, res) => {
 
   try {
     // ============================================================
-    // CAPA GLM-4 (GPT4Free) — opcional, solo NewserPro
+    // CAPA OPENROUTER FREE — NewserAdmin (Qwen3-Coder-480B)
     // ============================================================
-    // Si el modelo es NewserPro y GLM-4 esta habilitado, intentamos primero
-    // la redaccion final con el puente GPT4Free. Si responde, usamos ese
-    // texto. Si falla, cae al flujo normal de Groq (GPT-OSS-120B).
+    // Si el modelo es NewserAdmin y OpenRouter está habilitado, probamos
+    // primero Qwen3-Coder-480B. Si tiene rate limit, probamos Nemotron-550B,
+    // Llama-3.3-70B, etc. Si todos fallan, cae a g4f/Groq.
     let texto = '';
     let modeloUsadoReal = configModelo.modeloTexto;
     let glmUsado = false;
 
-    if (configModelo.nombre === 'NewserPro' && GPT4FREE_ENABLED) {
+    if (configModelo.nombre === 'NewserAdmin' && configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
+      const mensajesParaOR = mensajesParaModelo.filter((m) => m.role !== 'system');
+      const modelosOR = [
+        configModelo.modeloOpenRouter,                    // qwen/qwen3-coder:free
+        'nvidia/nemotron-3-ultra-550b-a55b:free',        // Nemotron 550B
+        'nvidia/nemotron-3-super-120b-a12b:free',        // Nemotron 120B
+        'meta-llama/llama-3.3-70b-instruct:free',        // Llama 3.3 70B
+        'openai/gpt-oss-20b:free',                        // GPT-OSS 20B
+      ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+      for (const modeloOR of modelosOR) {
+        const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, modeloOR);
+        if (resultadoOR.ok) {
+          texto = stripThinkTags(resultadoOR.texto);
+          modeloUsadoReal = resultadoOR.modelo;
+          glmUsado = true;
+          break;
+        }
+      }
+      if (!glmUsado) {
+        console.warn(`[api/v1/chat] Todos los OpenRouter free fallaron para NewserAdmin, fallback a g4f/Groq.`);
+      }
+    }
+
+    // ============================================================
+    // CAPA GLM-4 (GPT4Free) — opcional, solo NewserPro
+    // ============================================================
+    if (!glmUsado && configModelo.nombre === 'NewserPro' && GPT4FREE_ENABLED) {
       const mensajesParaGlm = mensajesParaModelo.filter((m) => m.role !== 'system');
       const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt);
       if (resultadoGlm.ok) {
@@ -1824,6 +1851,17 @@ app.post('/api/v1/chat', async (req, res) => {
         glmUsado = true;
       } else {
         console.warn(`[api/v1/chat] GLM-4 fallo (${resultadoGlm.error}), fallback a ${configModelo.modeloTexto}.`);
+      }
+    }
+
+    // También NewserAdmin puede usar g4f como fallback
+    if (!glmUsado && configModelo.nombre === 'NewserAdmin' && GPT4FREE_ENABLED) {
+      const mensajesParaGlm = mensajesParaModelo.filter((m) => m.role !== 'system');
+      const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt);
+      if (resultadoGlm.ok) {
+        texto = stripThinkTags(resultadoGlm.texto);
+        modeloUsadoReal = resultadoGlm.modelo;
+        glmUsado = true;
       }
     }
 
@@ -2599,13 +2637,29 @@ Proyecto: ${proyecto.nombre}`;
 
     // 1. Intentar con OpenRouter Free si el modelo tiene modeloOpenRouter configurado
     //    NewserAdmin usa qwen/qwen3-coder:free (480B parametros, codigo)
+    //    Si Qwen3-Coder tiene rate limit, prueba Nemotron-550B, Llama-3.3-70B, etc.
     if (configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED) {
-      const resultadoOR = await llamarOpenRouterFree(chatHistorial.slice(-3), systemPrompt, configModelo.modeloOpenRouter);
-      if (resultadoOR.ok) {
-        textoRespuesta = stripThinkTags(resultadoOR.texto);
-        modeloUsado = resultadoOR.modelo;
-      } else {
-        console.warn(`[verbocode] OpenRouter fallo (${resultadoOR.error}), fallback a g4f/Groq.`);
+      // Cascada de modelos free en OpenRouter (de más potente a menos)
+      const modelosOpenRouter = [
+        configModelo.modeloOpenRouter,                    // qwen/qwen3-coder:free (480B)
+        'nvidia/nemotron-3-ultra-550b-a55b:free',        // Nemotron 550B (siempre anda)
+        'nvidia/nemotron-3-super-120b-a12b:free',        // Nemotron 120B
+        'meta-llama/llama-3.3-70b-instruct:free',        // Llama 3.3 70B
+        'openai/gpt-oss-20b:free',                        // GPT-OSS 20B
+      ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+      for (const modeloOR of modelosOpenRouter) {
+        const resultadoOR = await llamarOpenRouterFree(chatHistorial.slice(-3), systemPrompt, modeloOR);
+        if (resultadoOR.ok) {
+          textoRespuesta = stripThinkTags(resultadoOR.texto);
+          modeloUsado = resultadoOR.modelo;
+          break;
+        } else {
+          console.warn(`[verbocode] OpenRouter ${modeloOR} fallo (${resultadoOR.error}), probando siguiente...`);
+        }
+      }
+      if (!textoRespuesta) {
+        console.warn(`[verbocode] Todos los modelos OpenRouter fallaron, fallback a g4f/Groq.`);
       }
     }
 
@@ -4306,15 +4360,44 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     ];
 
     // ============================================================
+    // CAPA OPENROUTER FREE — NewserAdmin (Qwen3-Coder-480B)
+    // ============================================================
+    // Si el modelo es NewserAdmin, probamos primero OpenRouter con cascada
+    // de modelos free. Si todos fallan, cae a g4f/Groq.
+    let glmTextoPreGenerado = null;
+    if (configModelo.nombre === 'NewserAdmin' && configModelo.modeloOpenRouter && OPENROUTER_FREE_ENABLED && !imagenes.length) {
+      enviar({ type: 'investigando', query: `Procesando con Qwen3-Coder-480B...` });
+      enviar({ type: 'investigando_sitio', sitio: `OpenRouter Free (${configModelo.modeloOpenRouter})` });
+
+      const mensajesParaOR = [
+        ...construirHistorialParaModelo(historial),
+        { role: 'user', content: contenidoUsuario },
+      ];
+      const modelosOR = [
+        configModelo.modeloOpenRouter,
+        'nvidia/nemotron-3-ultra-550b-a55b:free',
+        'nvidia/nemotron-3-super-120b-a12b:free',
+        'meta-llama/llama-3.3-70b-instruct:free',
+        'openai/gpt-oss-20b:free',
+      ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+      for (const modeloOR of modelosOR) {
+        const resultadoOR = await llamarOpenRouterFree(mensajesParaOR, systemPrompt, modeloOR, { signal: controladorGroq.signal });
+        if (resultadoOR.ok) {
+          glmTextoPreGenerado = stripThinkTags(resultadoOR.texto);
+          break;
+        }
+      }
+      enviar({ type: 'investigando_fin' });
+      if (!glmTextoPreGenerado) {
+        console.warn(`[chat] Todos los OpenRouter free fallaron para NewserAdmin, fallback a g4f/Groq.`);
+      }
+    }
+
+    // ============================================================
     // CAPA GLM-4 (GPT4Free) — opcional, solo NewserPro
     // ============================================================
-    // Si el modelo es NewserPro, GLM-4 esta habilitado y NO hay imagenes
-    // adjuntas (GLM-4 no entiende imagenes), probamos primero la redaccion
-    // final con el puente GPT4Free. Si responde, emitimos el texto como
-    // stream simulado y saltamos el streaming de Groq. Si falla, cae al
-    // flujo normal (GPT-OSS-120B streaming) automaticamente.
-    let glmTextoPreGenerado = null;
-    if (configModelo.nombre === 'NewserPro' && GPT4FREE_ENABLED && !imagenes.length) {
+    if (!glmTextoPreGenerado && configModelo.nombre === 'NewserPro' && GPT4FREE_ENABLED && !imagenes.length) {
       enviar({ type: 'investigando', query: `Procesando con GLM-4 (${GPT4FREE_MODEL})...` });
       enviar({ type: 'investigando_sitio', sitio: `puente GPT4Free (${GPT4FREE_MODEL})` });
 
@@ -4329,6 +4412,18 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         glmTextoPreGenerado = stripThinkTags(resultadoGlm.texto);
       } else if (!resultadoGlm.ok && resultadoGlm.error !== 'cancelado') {
         console.warn(`[chat] GLM-4 fallo (${resultadoGlm.error}), fallback a GPT-OSS-120B streaming.`);
+      }
+    }
+
+    // También NewserAdmin puede usar g4f como fallback
+    if (!glmTextoPreGenerado && configModelo.nombre === 'NewserAdmin' && GPT4FREE_ENABLED && !imagenes.length) {
+      const mensajesParaGlm = [
+        ...construirHistorialParaModelo(historial),
+        { role: 'user', content: contenidoUsuario },
+      ];
+      const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt, { signal: controladorGroq.signal });
+      if (resultadoGlm.ok && !clienteDesconectado) {
+        glmTextoPreGenerado = stripThinkTags(resultadoGlm.texto);
       }
     }
 
