@@ -2248,6 +2248,401 @@ app.get('/api/v1/creditos', (req, res) => {
   res.json({ ok: true, creditos, creditosIniciales: esAdmin ? -1 : 1000, esAdmin });
 });
 
+// ============================================================
+// VERBO CODE — Sistema de proyectos con IA
+// ============================================================
+// Verbo Code es un editor tipo ChatGPT Work dentro de Verbo AI.
+// Permite crear proyectos, editar archivos con Monaco Editor, y chatear
+// con la IA (NewserAdvanced1.5 o NewserPro) que tiene herramientas para
+// crear/editar archivos, generar imágenes, buscar en web, etc.
+//
+// Solo los administradores pueden acceder (botón en el sidebar + check
+// en cada endpoint).
+
+const VERBOCODE_DIR = path.join(MEMORY_DIR, 'verbocode');
+if (!fs.existsSync(VERBOCODE_DIR)) fs.mkdirSync(VERBOCODE_DIR, { recursive: true });
+
+// Modelos disponibles en Verbo Code (públicos dentro de Verbo Code,
+// aunque NewserPro sea solo-admin en el chat normal).
+const MODELOS_VERBO_CODE = {
+  'NewserAdvanced1.5': MODELOS_DISPONIBLES['NewserAdvanced1.5'],
+  'NewserPro': MODELOS_DISPONIBLES['NewserPro'],
+};
+
+function leerProyectosVerboCode(usuario) {
+  // Cada proyecto se guarda como <id>.json en /memory/verbocode/
+  // El archivo contiene: { id, nombre, usuario, creadoEn, actualizadoEn, archivos, chat }
+  try {
+    const archivos = fs.readdirSync(VERBOCODE_DIR).filter(f => f.endsWith('.json') && f !== '.gitkeep');
+    const proyectos = [];
+    for (const arch of archivos) {
+      try {
+        const data = JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, arch), 'utf-8'));
+        if (data.usuario === usuario) {
+          proyectos.push({
+            id: data.id,
+            nombre: data.nombre,
+            creadoEn: data.creadoEn,
+            actualizadoEn: data.actualizadoEn,
+            archivos: data.archivos || {},
+            // No devolver el chat en el listado (puede ser grande)
+            numArchivos: Object.keys(data.archivos || {}).length,
+          });
+        }
+      } catch (e) { /* archivo corrupto, ignorar */ }
+    }
+    proyectos.sort((a, b) => new Date(b.actualizadoEn || 0) - new Date(a.actualizadoEn || 0));
+    return proyectos;
+  } catch (e) {
+    return [];
+  }
+}
+
+function leerProyectoVerboCode(id, usuario) {
+  try {
+    const data = JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, `${id}.json`), 'utf-8'));
+    if (data.usuario !== usuario) return null;
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
+function guardarProyectoVerboCode(proyecto) {
+  proyecto.actualizadoEn = new Date().toISOString();
+  fs.writeFileSync(path.join(VERBOCODE_DIR, `${proyecto.id}.json`), JSON.stringify(proyecto, null, 2));
+}
+
+// Middleware: requiere admin
+function requiereAdminVerboCode(req, res, next) {
+  const usuario = obtenerUsuarioActual(req);
+  if (!usuario) return res.status(401).json({ error: 'No autenticado.' });
+  if (!usuarioEsAdmin(usuario)) return res.status(403).json({ error: 'Verbo Code es exclusivo para cuentas administrador.' });
+  req.usuarioVerboCode = usuario;
+  next();
+}
+
+// ============================================================
+// Rutas HTML (sirven las páginas)
+// ============================================================
+app.get('/verbocode/home/', requiereAdminVerboCode, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'verbocode', 'home.html'));
+});
+
+app.get('/verbocode/editor/:projectId/', requiereAdminVerboCode, (req, res) => {
+  // Verificar que el proyecto existe y pertenece al usuario
+  const proyecto = leerProyectoVerboCode(req.params.projectId, req.usuarioVerboCode);
+  if (!proyecto) return res.status(404).send('Proyecto no encontrado');
+  res.sendFile(path.join(__dirname, 'public', 'verbocode', 'editor.html'));
+});
+
+// Agregar /verbocode/home y /verbocode/editor/:projectId sin trailing slash
+app.get('/verbocode/home', (req, res) => res.redirect(301, '/verbocode/home/'));
+app.get('/verbocode/editor/:projectId', (req, res) => res.redirect(301, `/verbocode/editor/${req.params.projectId}/`));
+
+// ============================================================
+// API: modelos
+// ============================================================
+app.get('/api/verbocode/models', requiereAdminVerboCode, (req, res) => {
+  const modelos = Object.values(MODELOS_VERBO_CODE).map((m) => ({
+    nombre: m.nombre,
+    descripcion: m.descripcion,
+    badge: m.badge || null,
+  }));
+  res.json({ ok: true, modelos });
+});
+
+// ============================================================
+// API: proyectos (CRUD)
+// ============================================================
+app.get('/api/verbocode/projects', requiereAdminVerboCode, (req, res) => {
+  const proyectos = leerProyectosVerboCode(req.usuarioVerboCode);
+  res.json({ ok: true, proyectos });
+});
+
+app.post('/api/verbocode/projects', requiereAdminVerboCode, (req, res) => {
+  const nombre = (req.body?.nombre || '').trim().slice(0, 60);
+  if (!nombre || nombre.length < 3) return res.status(400).json({ error: 'Nombre muy corto (min 3 caracteres).' });
+  const id = 'vc_' + crypto.randomUUID();
+  const proyecto = {
+    id,
+    nombre,
+    usuario: req.usuarioVerboCode,
+    creadoEn: new Date().toISOString(),
+    actualizadoEn: new Date().toISOString(),
+    archivos: {},
+    chat: [],
+  };
+  guardarProyectoVerboCode(proyecto);
+  res.json({ ok: true, proyecto: { id, nombre, creadoEn: proyecto.creadoEn, actualizadoEn: proyecto.actualizadoEn, archivos: {} } });
+});
+
+app.get('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => {
+  const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
+  if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
+  res.json({ ok: true, proyecto });
+});
+
+app.put('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => {
+  const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
+  if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
+  if (typeof req.body?.nombre === 'string') proyecto.nombre = req.body.nombre.trim().slice(0, 60);
+  if (req.body?.archivos && typeof req.body.archivos === 'object') proyecto.archivos = req.body.archivos;
+  if (Array.isArray(req.body?.chat)) proyecto.chat = req.body.chat;
+  guardarProyectoVerboCode(proyecto);
+  res.json({ ok: true });
+});
+
+app.delete('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => {
+  const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
+  if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
+  try { fs.unlinkSync(path.join(VERBOCODE_DIR, `${req.params.id}.json`)); } catch (e) {}
+  res.json({ ok: true });
+});
+
+// ============================================================
+// API: chat con IA (con herramientas)
+// ============================================================
+app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => {
+  const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
+  if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
+
+  const mensaje = (req.body?.mensaje || '').trim();
+  if (!mensaje) return res.status(400).json({ error: 'Falta el mensaje.' });
+
+  const modeloPedido = req.body?.modelo || 'NewserPro';
+  const configModelo = MODELOS_VERBO_CODE[modeloPedido] || MODELOS_VERBO_CODE['NewserPro'];
+  if (!configModelo) return res.status(400).json({ error: 'Modelo no disponible en Verbo Code.' });
+
+  try {
+    // System prompt específico de Verbo Code
+    let systemPrompt = SYSTEM_PROMPT + SYSTEM_PROMPT_PRO_EXTRA;
+    systemPrompt += `\n\nMODO ACTIVO: VERBO CODE
+Estás ayudando al usuario a construir un proyecto de programación. Tenés acceso a herramientas especiales para manipular archivos del proyecto. Usá estas etiquetas al FINAL de tu respuesta, cada una en su propia línea:
+
+[[FILE_CREATE::nombre.ext::contenido completo del archivo]]
+Crea un archivo nuevo en el proyecto. Si ya existe, lo reemplaza.
+
+[[FILE_EDIT::nombre.ext::contenido completo del archivo editado]]
+Edita un archivo existente. SIEMPE mandá el contenido COMPLETO del archivo, no solo los cambios.
+
+[[FILE_DELETE::nombre.ext]]
+Elimina un archivo del proyecto.
+
+[[IMAGE::prompt descriptivo de la imagen a generar]]
+Genera una imagen y la agrega al proyecto como archivo. Usá prompts en inglés para mejores resultados.
+
+[[WEB::consulta de búsqueda corta]]
+Busca información en internet (Google). Útil para investigación antes de escribir código.
+
+Reglas importantes:
+- Cuando crees un proyecto (web, addon, etc.), SIEMPE creá todos los archivos necesarios: HTML, CSS, JS, manifest.json, etc.
+- Para proyectos de Minecraft Bedrock, creá siempre manifest.json con format_version: 2.
+- Para Minecraft Java, creá pack.mcmeta si es datapack, o fabric.mod.json si es mod.
+- Cuando generes imágenes con [[IMAGE::...]], mencioná al usuario que se generó.
+- NUNCA escribas código incompleto. Si el archivo es grande, mandalo completo igual.
+- Después de crear/editar archivos, explicá brevemente qué hiciste.
+- Si el usuario pide algo de Minecraft, detectá automáticamente si es Bedrock (.mcaddon) o Java (.jar/.zip) por el contexto.
+
+Archivos actuales del proyecto:
+${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => `- ${n}`).join('\n') : '(proyecto vacío)'}
+
+Nombre del proyecto: ${proyecto.nombre}`;
+
+    // Construir historial del chat (últimos 10 mensajes para no explotar contexto)
+    const chatHistorial = (proyecto.chat || []).slice(-10).map(m => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    // Agregar el mensaje actual
+    chatHistorial.push({ role: 'user', content: mensaje });
+
+    // Razonamiento previo con Qwen3-32B (solo si el modelo es NewserPro o NewserAdvanced1.5)
+    let razonamientoPrevio = '';
+    if (configModelo.modeloTextoRazonamiento && modeloPedido === 'NewserPro') {
+      try {
+        const respRaz = await llamarGroqConReintentos({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: configModelo.modeloTextoRazonamiento,
+            messages: [
+              { role: 'system', content: 'Sos un modulo de razonamiento interno para Verbo Code. Analizá el pedido del usuario paso a paso: qué archivos necesita crear, qué estructura, qué investigación web hace falta. Plan breve (maximo 150 palabras). No respondas al usuario.' },
+              { role: 'user', content: mensaje },
+            ],
+            temperature: 0.4,
+            max_tokens: 500,
+            stream: false,
+          }),
+        }, () => {});
+        if (respRaz && respRaz.ok) {
+          const dataRaz = await respRaz.json();
+          razonamientoPrevio = stripThinkTags((dataRaz.choices?.[0]?.message?.content) || '');
+        }
+      } catch (e) {
+        console.warn('[verbocode] razonamiento previo fallo:', e.message);
+      }
+      if (razonamientoPrevio) {
+        systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por ${configModelo.modeloTextoRazonamiento}, no lo repitas, usalo como guia]:\n${razonamientoPrevio}`;
+      }
+    }
+
+    systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, modeloPedido);
+
+    // Llamar al modelo de texto
+    // 1. Intentar con el puente GPT4Free (g4f) si está habilitado y el modelo es NewserPro
+    let textoRespuesta = '';
+    let modeloUsado = configModelo.modeloTexto;
+
+    if (modeloPedido === 'NewserPro' && GPT4FREE_ENABLED && GPT4FREE_URL) {
+      const resultadoGlm = await llamarGlm4Bridge(chatHistorial.slice(-3), systemPrompt);
+      if (resultadoGlm.ok) {
+        textoRespuesta = stripThinkTags(resultadoGlm.texto);
+        modeloUsado = resultadoGlm.modelo;
+      } else {
+        console.warn(`[verbocode] GLM-4 fallo (${resultadoGlm.error}), fallback a Groq.`);
+      }
+    }
+
+    // 2. Fallback a Groq (configModelo.modeloTexto)
+    if (!textoRespuesta) {
+      const respuestaGroq = await llamarGroqConReintentos({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: configModelo.modeloTexto,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...chatHistorial,
+          ],
+          temperature: 0.7,
+          max_tokens: configModelo.maxTokens,
+          stream: false,
+        }),
+      }, () => {});
+      if (!respuestaGroq || !respuestaGroq.ok) {
+        const status = respuestaGroq ? respuestaGroq.status : 0;
+        return res.status(502).json({ error: mensajeErrorAmigableIA(status) });
+      }
+      const data = await respuestaGroq.json();
+      textoRespuesta = stripThinkTags((data.choices?.[0]?.message?.content) || '');
+      modeloUsado = configModelo.modeloTexto;
+    }
+
+    // Procesar las herramientas en la respuesta ([[FILE_CREATE::]], [[IMAGE::]], etc)
+    const acciones = [];
+    let textoLimpio = textoRespuesta;
+    let proyectoActualizado = false;
+
+    // FILE_CREATE / FILE_EDIT
+    const reFileCreate = /\[\[FILE_CREATE::([^:]+)::([\s\S]*?)\]\]/g;
+    const reFileEdit = /\[\[FILE_EDIT::([^:]+)::([\s\S]*?)\]\]/g;
+    const reFileDelete = /\[\[FILE_DELETE::([^\]]+)\]\]/g;
+    const reImage = /\[\[IMAGE::([^\]]+)\]\]/g;
+    const reWeb = /\[\[WEB::([^\]]+)\]\]/g;
+
+    // Procesar FILE_CREATE y FILE_EDIT (mismo efecto: crear/reemplazar archivo)
+    const procesarArchivos = (regex, tipo) => {
+      let match;
+      while ((match = regex.exec(textoRespuesta)) !== null) {
+        const nombre = match[1].trim();
+        const contenido = match[2].trim();
+        proyecto.archivos[nombre] = contenido;
+        proyectoActualizado = true;
+        acciones.push({
+          tipo,
+          nombre,
+          descripcion: `${tipo === 'file_create' ? 'Archivo creado' : 'Archivo editado'}: ${nombre} (${contenido.length} chars)`,
+        });
+      }
+    };
+    procesarArchivos(reFileCreate, 'file_create');
+    procesarArchivos(reFileEdit, 'file_edit');
+
+    // Procesar FILE_DELETE
+    let matchDel;
+    while ((matchDel = reFileDelete.exec(textoRespuesta)) !== null) {
+      const nombre = matchDel[1].trim();
+      if (proyecto.archivos[nombre]) {
+        delete proyecto.archivos[nombre];
+        proyectoActualizado = true;
+        acciones.push({ tipo: 'file_delete', nombre, descripcion: `Archivo eliminado: ${nombre}` });
+      }
+    }
+
+    // Procesar WEB (buscar en internet)
+    let matchWeb;
+    while ((matchWeb = reWeb.exec(textoRespuesta)) !== null) {
+      const query = matchWeb[1].trim();
+      acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}"` });
+      // Realizar la búsqueda asíncrona (no bloquear la respuesta)
+      // Por ahora solo registramos la acción; en el futuro podemos inlinear los resultados
+    }
+
+    // Procesar IMAGE (generar imágenes)
+    let matchImg;
+    while ((matchImg = reImage.exec(textoRespuesta)) !== null) {
+      const prompt = matchImg[1].trim();
+      // Generar imagen con Pollinations (flux-realism 1536x1536)
+      try {
+        const resultado = await generarImagenPollinations(prompt, undefined, {
+          detallada: false,
+          modeloOverride: 'flux',
+          anchoOverride: 1024,
+          altoOverride: 1024,
+        });
+        if (resultado.img) {
+          // Guardar la URL local en el proyecto como referencia
+          const nombreImg = `image_${acciones.filter(a => a.tipo === 'image').length + 1}.png`;
+          // Para imágenes, guardamos la URL (no el binario en JSON, sería muy grande)
+          proyecto.archivos[nombreImg + '.url'] = resultado.img.url;
+          proyectoActualizado = true;
+          acciones.push({
+            tipo: 'image',
+            nombre: nombreImg,
+            url: resultado.img.url,
+            descripcion: `Imagen generada: "${prompt.slice(0, 50)}..." → ${resultado.img.url}`,
+          });
+        }
+      } catch (e) {
+        console.error('[verbocode] error generando imagen:', e.message);
+        acciones.push({ tipo: 'image', descripcion: `Error generando imagen: ${e.message}` });
+      }
+    }
+
+    // Limpiar las etiquetas de herramientas del texto visible
+    textoLimpio = textoLimpio
+      .replace(reFileCreate, '')
+      .replace(reFileEdit, '')
+      .replace(reFileDelete, '')
+      .replace(reImage, '')
+      .replace(reWeb, '')
+      .trim();
+
+    // Guardar el mensaje del usuario + respuesta en el chat del proyecto
+    if (!proyecto.chat) proyecto.chat = [];
+    proyecto.chat.push({ role: 'user', content: mensaje, fecha: new Date().toISOString() });
+    proyecto.chat.push({ role: 'assistant', content: textoLimpio, fecha: new Date().toISOString(), modelo: modeloUsado });
+    // Limitar el chat a 50 mensajes para no explotar el storage
+    if (proyecto.chat.length > 50) proyecto.chat = proyecto.chat.slice(-50);
+    guardarProyectoVerboCode(proyecto);
+
+    res.json({
+      ok: true,
+      respuesta: textoLimpio,
+      acciones,
+      proyectoActualizado,
+      archivos: proyectoActualizado ? proyecto.archivos : undefined,
+      modeloUsado,
+      razonamiento: razonamientoPrevio || null,
+    });
+  } catch (e) {
+    console.error('[verbocode] error en chat:', e.message);
+    res.status(500).json({ error: 'Error procesando el mensaje: ' + e.message });
+  }
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: false,
   lastModified: false,

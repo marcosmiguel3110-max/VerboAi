@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Página Azul & Negro</title>
+  <style>
+    /* RESET básico */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0b0e1a 0%, #1a1f33 50%, #0b0e1a 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      color: #e0e7ff;
+    }
+
+    .card {
+      max-width: 700px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 24px;
+      padding: 40px 30px;
+      box-shadow: 0 25px 50px -12px rgba(0, 20, 80, 0.6);
+      animation: fadeUp 1s ease-out;
+      transition: all 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: #3b82f6;
+      box-shadow: 0 30px 60px -12px rgba(59, 130, 246, 0.4);
+    }
+
+    h1 {
+      font-size: 2.8rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #60a5fa, #3b82f6, #1e40af);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      margin-bottom: 16px;
+      animation: shimmer 4s infinite alternate;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      font-size: 1.2rem;
+      color: #93c5fd;
+      margin-bottom: 30px;
+      border-left: 4px solid #3b82f6;
+      padding-left: 16px;
+      animation: slideIn 1s ease-out 0.3s both;
+    }
+
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .item {
+      background: rgba(30, 58, 138, 0.15);
+      border-radius: 16px;
+      padding: 18px 22px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border: 1px solid rgba(59, 130, 246, 0.15);
+      transition: all 0.4s ease;
+      animation: fadeIn 0.8s ease-out both;
+    }
+
+    .item:nth-child(1) { animation-delay: 0.4s; }
+    .item:nth-child(2) { animation-delay: 0.6s; }
+    .item:nth-child(3) { animation-delay: 0.8s; }
+
+    .item:hover {
+      background: rgba(59, 130, 246, 0.12);
+      transform: translateX(8px);
+      border-color: #3b82f6;
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
+    }
+
+    .icon {
+      font-size: 2rem;
+      min-width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(59, 130, 246, 0.2);
+      border-radius: 12px;
+      color: #60a5fa;
+      transition: 0.3s;
+    }
+
+    .item:hover .icon {
+      transform: scale(1.1);
+      color: #93c5fd;
+    }
+
+    .item-text h3 {
+      font-size: 1.2rem;
+      color: #bfdbfe;
+      margin-bottom: 4px;
+    }
+
+    .item-text p {
+      color: #9ca3af;
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+
+    .btn {
+      display: inline-block;
+      margin-top: 24px;
+      padding: 14px 36px;
+      background: linear-gradient(135deg, #1e40af, #3b82f6);
+      color: white;
+      font-weight: 600;
+      border: none;
+      border-radius: 50px;
+      font-size: 1.05rem;
+      cursor: pointer;
+      transition: all 0.4s ease;
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+      text-decoration: none;
+      animation: pulseGlow 3s infinite;
+    }
+
+    .btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 30px rgba(59, 130, 246, 0.5);
+      background: linear-gradient(135deg, #3b82f6, #60a5fa);
+    }
+
+    /* ANIMACIONES */
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(40px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateX(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes shimmer {
+      0% {
+        background-position: 0% 50%;
+      }
+      100% {
+        background-position: 100% 50%;
+      }
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% {
+        box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+      }
+      50% {
+        box-shadow: 0 8px 30px rgba(59, 130, 246, 0.6);
+      }
+    }
+
+    /* Fondo decorativo animado (opcional) */
+    .bg-decoration {
+      position: fixed;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 30% 40%, rgba(59,130,246,0.03) 0%, transparent 50%),
+                  radial-gradient(circle at 70% 80%, rgba(30,64,175,0.05) 0%, transparent 50%);
+      animation: bgMove 20s linear infinite;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    @keyframes bgMove {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        padding: 24px 16px;
+      }
+      h1 {
+        font-size: 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Fondo animado decorativo -->
+  <div class="bg-decoration"></div>
+
+  <div class="card">
+    <h1>🌌 Azul & Negro</h1>
+    <div class="subtitle">Diseño elegante con animaciones suaves</div>
+
+    <div class="content">
+      <div class="item">
+        <div class="icon">⚡</div>
+        <div class="item-text">
+          <h3>Rendimiento</h3>
+          <p>Transiciones fluidas y efecto blur con tonos deep blue.</p>
+        </div>
+      </div>
+
+      <div class="item">
+        <div class="icon">🎨</div>
+        <div class="item-text">
+          <h3>Estilo moderno</h3>
+          <p>Paleta azul cobalto sobre fondos oscuros, tipografía limpia.</p>
+        </div>
+      </div>
+
+      <div class="item">
+        <div class="icon">✨</div>
+        <div class="item-text">
+          <h3>Animaciones</h3>
+          <p>Fade, shimmer, slide y glow pulsante integrados en CSS.</p>
+        </div>
+      </div>
+    </div>
+
+    <a href="#" class="btn">Explorar más</a>
+  </div>
+
+  <!-- Pequeño JS opcional para demostrar interacción -->
+  <script>
+    // Solo un detalle: al hacer clic en el botón, muestra un mensaje (opcional)
+    document.querySelector('.btn')?.addEventListener('click', function(e) {
+      e.preventDefault();
+      alert('¡Bienvenido al diseño azul y negro!');
+    });
+  </script>
+</body>
+</html>

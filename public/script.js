@@ -712,8 +712,22 @@ if (btnMasCodes) {
     const btnVerboCode = document.createElement('button');
     btnVerboCode.id = 'btnVerboCode';
     btnVerboCode.className = 'nav-item nav-item-verbocode';
-    btnVerboCode.disabled = true;
-    btnVerboCode.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg> Verbo Code <span class="badge-prox">Pronto</span>';
+    // Visible para todos, pero solo admins pueden hacer click
+    const esAdminParaVerboCode = !!window.esUsuarioAdmin;
+    if (esAdminParaVerboCode) {
+      btnVerboCode.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg> Verbo Code <span class="badge-prox" style="background:linear-gradient(135deg,#d4af37,#b8860b);color:#1a1a1a;">Admin</span>';
+      btnVerboCode.title = 'Abrir Verbo Code en nueva pestaña';
+      btnVerboCode.addEventListener('click', () => {
+        window.open('/verbocode/home/', '_blank');
+      });
+    } else {
+      btnVerboCode.disabled = true;
+      btnVerboCode.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg> Verbo Code <span class="badge-prox">Admin</span>';
+      btnVerboCode.title = 'Solo disponible para cuentas administrador';
+      btnVerboCode.addEventListener('click', () => {
+        alert('Verbo Code está disponible solo para cuentas administrador.');
+      });
+    }
     panel.appendChild(btnVerboCode);
 
     document.body.appendChild(panel);
