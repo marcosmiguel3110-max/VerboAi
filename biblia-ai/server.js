@@ -3703,9 +3703,22 @@ const GOOGLE_CSE_IDS = [
 const GOOGLE_CSE_API_KEY = process.env.GOOGLE_CSE_API_KEY || '';
 
 async function buscarWebGoogle(query) {
-  const ddg = await buscarWebDuckDuckGo(query);
+  // Si la query es muy larga (>80 chars), cortarla a las primeras palabras
+  // DuckDuckGo no devuelve resultados con queries muy largas
+  let q = (query || '').trim();
+  if (q.length > 80) {
+    const palabras = q.split(' ').slice(0, 8).join(' ');
+    q = palabras;
+  }
+  const ddg = await buscarWebDuckDuckGo(q);
   if (ddg.exito) return ddg;
-  if (GOOGLE_CSE_API_KEY) { const g = await buscarWebGoogleReal(query); if (g.exito) return g; }
+  if (GOOGLE_CSE_API_KEY) { const g = await buscarWebGoogleReal(q); if (g.exito) return g; }
+  // Último intento: buscar con aún menos palabras
+  if (q.split(' ').length > 4) {
+    const qCorta = q.split(' ').slice(0, 4).join(' ');
+    const ddg2 = await buscarWebDuckDuckGo(qCorta);
+    if (ddg2.exito) return ddg2;
+  }
   return ddg;
 }
 
