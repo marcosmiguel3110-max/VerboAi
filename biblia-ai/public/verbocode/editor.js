@@ -723,6 +723,41 @@ async function enviarChat() {
           scrollChatAbajo();
         } else if (evt.type === 'action') {
           renderAccion(evt.accion);
+        } else if (evt.type === 'investigando') {
+          // Mostrar indicador de investigación (igual que el chat principal)
+          if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
+          const invDiv = document.createElement('div');
+          invDiv.className = 'vc-msg-thinking';
+          invDiv.id = 'investigandoIndicator';
+          invDiv.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> ' + (evt.query || 'Investigando...');
+          document.getElementById('vcChatMensajes').appendChild(invDiv);
+          scrollChatAbajo();
+        } else if (evt.type === 'investigando_sitio') {
+          const invEl = document.getElementById('investigandoIndicator');
+          if (invEl) {
+            invEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> Buscando en ' + evt.sitio + '...';
+          }
+          scrollChatAbajo();
+        } else if (evt.type === 'investigando_fin') {
+          const invEl = document.getElementById('investigandoIndicator');
+          if (invEl && invEl.parentNode) invEl.remove();
+        } else if (evt.type === 'web_result') {
+          // Mostrar resultados de la búsqueda web en el chat
+          const webDiv = document.createElement('div');
+          webDiv.className = 'vc-msg-accion';
+          if (evt.resultados && evt.resultados.length > 0) {
+            let html = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" stroke-linecap="round"/></svg> <span>Búsqueda web: "' + escapeHtmlPlan(evt.query) + '" → ' + evt.resultados.length + ' resultados</span>';
+            // Mostrar los primeros 3 resultados
+            const top3 = evt.resultados.slice(0, 3);
+            for (const r of top3) {
+              html += '<br><small style="opacity:0.7;margin-left:22px;">' + escapeHtmlPlan(r.titulo) + ' — ' + escapeHtmlPlan(r.resumen || '') + '</small>';
+            }
+            webDiv.innerHTML = html;
+          } else {
+            webDiv.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" stroke-linecap="round"/></svg> <span>Búsqueda web: "' + escapeHtmlPlan(evt.query) + '" → sin resultados</span>';
+          }
+          document.getElementById('vcChatMensajes').appendChild(webDiv);
+          scrollChatAbajo();
         } else if (evt.type === 'done') {
           modeloRecibido = evt.modeloUsado || 'VerboAITeams';
           proyectoActualizado = evt.proyectoActualizado;

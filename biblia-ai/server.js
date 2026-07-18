@@ -2930,17 +2930,28 @@ Sea conciso. Máximo 5 pasos.`;
     }
 
     // Procesar WEB (buscar en internet DE VERDAD)
+    // Enviar status de "investigando" al cliente antes de cada búsqueda
     let matchWeb;
     let resultadosWebAcumulados = '';
+    let hayBusquedaWeb = false;
     while ((matchWeb = reWeb.exec(textoRespuesta)) !== null) {
       const query = matchWeb[1].trim();
+      hayBusquedaWeb = true;
+      // Enviar status al cliente
+      enviarSSE({ type: 'status', text: `Buscando en internet: "${query.slice(0, 40)}..."` });
+      // Crear indicador de investigación (igual que en el chat principal)
+      enviarSSE({ type: 'investigando', query });
+      enviarSSE({ type: 'investigando_sitio', sitio: 'DuckDuckGo + Google' });
       try {
         const resultadoWeb = await buscarWebGoogle(query);
+        enviarSSE({ type: 'investigando_fin' });
         if (resultadoWeb.exito && resultadoWeb.resultados.length > 0) {
           const textoResultados = resultadoWeb.resultados.map((r, i) =>
             `${i + 1}. ${r.titulo}\n   ${r.resumen}\n   ${r.link}`
           ).join('\n\n');
           resultadosWebAcumulados += `\n\n**Resultados de búsqueda "${query}":**\n${textoResultados}`;
+          // Enviar resultados al cliente en tiempo real
+          enviarSSE({ type: 'web_result', query, resultados: resultadoWeb.resultados });
           acciones.push({
             tipo: 'web',
             query,
@@ -2949,9 +2960,11 @@ Sea conciso. Máximo 5 pasos.`;
           });
         } else {
           resultadosWebAcumulados += `\n\nNo se encontraron resultados para "${query}".`;
+          enviarSSE({ type: 'web_result', query, resultados: [] });
           acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}" → sin resultados` });
         }
       } catch (e) {
+        enviarSSE({ type: 'investigando_fin' });
         acciones.push({ tipo: 'web', descripcion: `Búsqueda web: "${query}" → error: ${e.message}` });
       }
     }
