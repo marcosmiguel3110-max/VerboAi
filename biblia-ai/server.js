@@ -2274,7 +2274,17 @@ app.get('/api/v1/chats', (req, res) => {
 //
 // Respuesta:
 //   { ok, respuesta, razonamiento, modeloReal, capaGlm, capaGroq, ... }
-app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => {
+// /api/v1/pro-hybrid — DESACTIVADO (usaba Groq, ya no se usa)
+// Todos los flujos ahora van por /api/chat o /api/v1/chat con OpenRouter + g4f + Pollinations.
+app.post('/api/v1/pro-hybrid', (req, res) => {
+  return res.status(410).json({
+    ok: false,
+    error: 'Este endpoint fue desactivado. Usa /api/v1/chat con modelo "NewserPro" en su lugar (mismo resultado, sin Groq).',
+  });
+});
+
+// (endpoint original preservado abajo por compatibilidad, pero bloqueado arriba)
+app.post('/api/v1/pro-hybrid-legacy', upload.array('imagenes', 5), async (req, res) => {
   const valorToken = leerBearerToken(req);
   if (!valorToken) return res.status(401).json({ ok: false, error: 'Falta Authorization: Bearer verboai-XXXX' });
   const token = buscarTokenPorValor(valorToken);
@@ -4654,7 +4664,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     if (!chat) chat = crearChat(db, usuarioActual);
     const historial = chat.mensajes;
 
-    const modeloElegido = imagenes.length ? configModelo.modeloVision : configModelo.modeloTexto;
+    // Variable eliminada: modeloElegido ya no se usa (Groq removido de /api/chat)
+    // El chat usa OpenRouter Free + g4f + Pollinations, no necesita preseleccionar modelo.
 
     let contenidoUsuario;
     if (imagenes.length) {
@@ -5238,6 +5249,13 @@ app.get('/api/mongo-status', (req, res) => {
 });
 
 app.listen(PORT, () => {
+  console.log('========================================================');
+  console.log('VERBO AI - DEPLOY NUEVO (sin Groq en endpoints principales)');
+  console.log('Version: 2026-07-19-abf1cea+');
+  console.log('Fuentes: OpenRouter Free + g4f + Pollinations (sin Groq)');
+  console.log('Endpoints publicos SIN Groq: /api/chat, /api/v1/chat, /api/verbocode/chat/:id');
+  console.log('Endpoint /api/v1/pro-hybrid DESACTIVADO (devuelve 410)');
+  console.log('========================================================');
   console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
   try {
     const os = require('os');
