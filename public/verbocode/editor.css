@@ -457,6 +457,28 @@
   color: var(--vc-text);
   padding: 0;
 }
+
+/* Imágenes adjuntas en el chat */
+.vc-msg-imagen {
+  margin-bottom: 8px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--vc-bg-secondary);
+  border: 1px solid var(--vc-border);
+}
+.vc-msg-imagen img {
+  max-width: 100%;
+  max-height: 300px;
+  display: block;
+  object-fit: contain;
+}
+.vc-msg-imagen-label {
+  font-size: 11px;
+  color: var(--vc-text-muted);
+  padding: 4px 8px;
+  background: var(--vc-bg-tertiary);
+  border-top: 1px solid var(--vc-border);
+}
 .vc-msg.assistant pre {
   background: var(--vc-bg-secondary);
   border: 1px solid var(--vc-border);

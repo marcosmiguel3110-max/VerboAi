@@ -2635,7 +2635,10 @@ app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => 
   if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
 
   const mensaje = (req.body?.mensaje || '').trim();
-  if (!mensaje) return res.status(400).json({ error: 'Falta el mensaje.' });
+  const imagen = req.body?.imagen || null;
+  const nombreImagen = req.body?.nombreImagen || null;
+  
+  if (!mensaje && !imagen) return res.status(400).json({ error: 'Falta el mensaje o imagen.' });
 
   const modeloPedido = req.body?.modelo || 'NewserPro';
   const configModelo = MODELOS_VERBO_CODE[modeloPedido] || MODELOS_VERBO_CODE['NewserPro'];
@@ -2767,7 +2770,24 @@ Proyecto: ${proyecto.nombre}`;
     }));
 
     // Agregar el mensaje actual
-    chatHistorial.push({ role: 'user', content: mensaje });
+    let mensajeParaModelo = mensaje;
+    let imagenes = [];
+    
+    if (imagen) {
+      imagenes.push({
+        type: 'image_url',
+        image_url: { url: imagen },
+      });
+      if (!mensajeParaModelo) {
+        mensajeParaModelo = `Analizá esta imagen llamada "${nombreImagen || 'imagen'}" y ayudame con mi proyecto.`;
+      }
+    }
+    
+    chatHistorial.push({ 
+      role: 'user', 
+      content: mensajeParaModelo,
+      ...(imagenes.length > 0 ? { images: imagenes } : {}),
+    });
 
     // Razonamiento previo (cascada OpenRouter free, solo si el modelo es NewserPro)
     let razonamientoPrevio = '';

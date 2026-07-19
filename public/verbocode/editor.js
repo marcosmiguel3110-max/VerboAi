@@ -14,6 +14,8 @@ const estado = {
   monaco: null,        // instancia del editor Monaco
   monacoModels: {},    // {nombreArchivo: monacoModel}
   chatEnProgreso: false,
+  imagenPendiente: null,        // base64 de imagen adjunta
+  nombreImagenPendiente: null,  // nombre del archivo de imagen
 };
 
 // ============================================================
@@ -548,13 +550,32 @@ function configurarEventos() {
   // Probar (ejecutar HTML en nueva ventana full-screen)
   document.getElementById('btnProbar').addEventListener('click', probarProyecto);
 
-  // Botón imagen (generar imagen y agregarla al proyecto)
+  // Botón imagen (subir imagen para que la IA la analice)
   document.getElementById('btnImagenChat').addEventListener('click', () => {
-    const input = document.getElementById('vcChatInput');
-    const prompt = input.value.trim() || 'una imagen hermosa para mi proyecto';
-    input.value = `Generame una imagen de: ${prompt}`;
-    input.focus();
-    mostrarToast('Vas a pedir una imagen. Presioná Enter para enviar.', '');
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target.result;
+        const chatInput = document.getElementById('vcChatInput');
+        const promptActual = chatInput.value.trim();
+        
+        // Guardar la imagen en el estado para enviarla con el mensaje
+        estado.imagenPendiente = base64;
+        estado.nombreImagenPendiente = file.name;
+        
+        chatInput.value = promptActual ? `${promptActual}\n\n[Imagen adjunta: ${file.name}]` : `[Imagen adjunta: ${file.name}]`;
+        chatInput.focus();
+        mostrarToast('Imagen cargada. Presioná Enter para enviarla a la IA para análisis.', '');
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
   });
 
   // Cerrar preview
@@ -619,16 +640,24 @@ async function enviarChat() {
   const input = document.getElementById('vcChatInput');
   const btnEnviar = document.getElementById('btnEnviarChat');
   const texto = input.value.trim();
-  if (!texto) return;
+  if (!texto && !estado.imagenPendiente) return;
 
   const rehabilitarInput = () => {
     try { input.disabled = false; } catch(e) {}
     try { btnEnviar.disabled = false; } catch(e) {}
     estado.chatEnProgreso = false;
+    estado.imagenPendiente = null;
+    estado.nombreImagenPendiente = null;
     try { input.focus(); } catch(e) {}
   };
 
-  const msgUser = { role: 'user', content: texto, fecha: new Date().toISOString() };
+  const msgUser = { 
+    role: 'user', 
+    content: texto, 
+    fecha: new Date().toISOString(),
+    imagen: estado.imagenPendiente,
+    nombreImagen: estado.nombreImagenPendiente,
+  };
   if (!estado.proyecto.chat) estado.proyecto.chat = [];
   estado.proyecto.chat.push(msgUser);
   renderMensaje(msgUser);
@@ -655,10 +684,20 @@ async function enviarChat() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 120000);
 
+    const bodyData = { 
+      mensaje: texto, 
+      modelo: estado.modeloSeleccionado,
+    };
+    
+    if (estado.imagenPendiente) {
+      bodyData.imagen = estado.imagenPendiente;
+      bodyData.nombreImagen = estado.nombreImagenPendiente;
+    }
+
     const r = await fetch(`/api/verbocode/chat/${estado.proyectoId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mensaje: texto, modelo: estado.modeloSeleccionado }),
+      body: JSON.stringify(bodyData),
       signal: controller.signal,
     });
 
@@ -870,8 +909,25 @@ function renderMensaje(m) {
   const cont = document.getElementById('vcChatMensajes');
   const div = document.createElement('div');
   div.className = 'vc-msg ' + (m.role === 'user' ? 'user' : 'assistant');
+  
+  // Si tiene imagen adjunta, mostrarla primero
+  if (m.imagen) {
+    const imgDiv = document.createElement('div');
+    imgDiv.className = 'vc-msg-imagen';
+    imgDiv.innerHTML = `<img src="${m.imagen}" alt="${m.nombreImagen || 'Imagen adjunta'}" />`;
+    if (m.nombreImagen) {
+      const imgLabel = document.createElement('div');
+      imgLabel.className = 'vc-msg-imagen-label';
+      imgLabel.textContent = m.nombreImagen;
+      imgDiv.appendChild(imgLabel);
+    }
+    div.appendChild(imgDiv);
+  }
+  
   // Convertir markdown básico (code blocks, inline code, bold)
-  div.innerHTML = formatearMarkdown(m.content || '');
+  const contentDiv = document.createElement('div');
+  contentDiv.innerHTML = formatearMarkdown(m.content || '');
+  div.appendChild(contentDiv);
 
   // Si es mensaje del assistant y tiene modelo, mostrarlo abajo
   if (m.role === 'assistant' && m.modelo) {
