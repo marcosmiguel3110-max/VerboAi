@@ -578,6 +578,91 @@ function configurarEventos() {
     input.click();
   });
 
+  // Botón terminal (abrir modal de terminal)
+  document.getElementById('btnTerminal').addEventListener('click', () => {
+    document.getElementById('modalTerminal').classList.remove('oculto');
+    document.getElementById('vcTerminalInput').focus();
+  });
+
+  // Cerrar terminal
+  document.getElementById('btnCerrarTerminal').addEventListener('click', () => {
+    document.getElementById('modalTerminal').classList.add('oculto');
+  });
+
+  // Ejecutar comando en terminal
+  document.getElementById('vcTerminalInput').addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter') {
+      const input = e.target;
+      const comando = input.value.trim();
+      if (!comando) return;
+
+      const output = document.getElementById('vcTerminalOutput');
+      
+      // Mostrar comando ejecutado
+      const cmdLine = document.createElement('div');
+      cmdLine.className = 'vc-terminal-line command';
+      cmdLine.textContent = `$ ${comando}`;
+      output.appendChild(cmdLine);
+
+      input.value = '';
+      input.disabled = true;
+
+      try {
+        // Detectar lenguaje del comando
+        let lenguaje = 'bash';
+        let codigo = comando;
+
+        if (comando.startsWith('python ') || comando.startsWith('python3 ')) {
+          lenguaje = 'python';
+          codigo = comando.replace(/^python3?\s+/, '');
+        } else if (comando.startsWith('node ') || comando.startsWith('nodejs ')) {
+          lenguaje = 'javascript';
+          codigo = comando.replace(/^node(js)?\s+/, '');
+        } else if (comando.startsWith('js ')) {
+          lenguaje = 'javascript';
+          codigo = comando.replace(/^js\s+/, '');
+        }
+
+        // Ejecutar usando Piston API
+        const resp = await fetch('/api/verbocode/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lenguaje, codigo }),
+        });
+
+        const data = await resp.json();
+
+        if (data.exito) {
+          const resultLine = document.createElement('div');
+          resultLine.className = 'vc-terminal-line success';
+          resultLine.textContent = data.stdout || '(sin salida)';
+          output.appendChild(resultLine);
+
+          if (data.stderr) {
+            const errorLine = document.createElement('div');
+            errorLine.className = 'vc-terminal-line error';
+            errorLine.textContent = data.stderr;
+            output.appendChild(errorLine);
+          }
+        } else {
+          const errorLine = document.createElement('div');
+          errorLine.className = 'vc-terminal-line error';
+          errorLine.textContent = data.error || 'Error al ejecutar comando';
+          output.appendChild(errorLine);
+        }
+      } catch (e) {
+        const errorLine = document.createElement('div');
+        errorLine.className = 'vc-terminal-line error';
+        errorLine.textContent = 'Error: ' + e.message;
+        output.appendChild(errorLine);
+      } finally {
+        input.disabled = false;
+        input.focus();
+        output.scrollTop = output.scrollHeight;
+      }
+    }
+  });
+
   // Cerrar preview
   document.getElementById('btnCerrarPreview').addEventListener('click', () => {
     document.getElementById('modalPreview').classList.add('oculto');
@@ -780,21 +865,116 @@ async function enviarChat() {
           const invViejo = document.getElementById('investigandoIndicator');
           if (invViejo && invViejo.parentNode) invViejo.remove();
           if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
+          
+          // Crear frame de investigación estilo ventana de navegador
           const invDiv = document.createElement('div');
-          invDiv.className = 'vc-msg-thinking';
+          invDiv.className = 'vc-msg-investigando';
           invDiv.id = 'investigandoIndicator';
-          invDiv.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> ' + (evt.query || 'Investigando...');
+          invDiv.innerHTML = `
+            <div class="vc-investigando-topbar">
+              <span class="vc-investigando-punto rojo"></span>
+              <span class="vc-investigando-punto amarillo"></span>
+              <span class="vc-investigando-punto verde"></span>
+            </div>
+            <div class="vc-investigando-content">
+              <div class="vc-investigando-header">
+                <span class="vc-investigando-loading"></span>
+                Buscando "${evt.query || '...'}" en webs
+              </div>
+              <div class="vc-investigando-bar">
+                <svg class="vc-investigando-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
+                <span class="vc-investigando-sitio">Preparando búsqueda...</span>
+              </div>
+              <div class="vc-investigando-scan"></div>
+            </div>
+          `;
           document.getElementById('vcChatMensajes').appendChild(invDiv);
           scrollChatAbajo();
         } else if (evt.type === 'investigando_sitio') {
           const invEl = document.getElementById('investigandoIndicator');
           if (invEl) {
-            invEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> Buscando en ' + evt.sitio + '...';
+            const sitioEl = invEl.querySelector('.vc-investigando-sitio');
+            const barraEl = invEl.querySelector('.vc-investigando-bar');
+            
+            // Actualizar icono según el sitio
+            const iconoViejo = barraEl.querySelector('.vc-investigando-icon');
+            if (iconoViejo) iconoViejo.remove();
+            
+            let icono = `<svg class="vc-investigando-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>`;
+            if (/wikipedia/i.test(evt.sitio)) {
+              icono = `<img class="vc-investigando-favicon" src="https://www.google.com/s2/favicons?domain=es.wikipedia.org&sz=64" alt="" />`;
+            } else if (/biblia/i.test(evt.sitio)) {
+              icono = `<svg class="vc-investigando-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>`;
+            }
+            
+            barraEl.insertAdjacentHTML('afterbegin', icono);
+            sitioEl.textContent = evt.sitio;
           }
           scrollChatAbajo();
         } else if (evt.type === 'investigando_fin') {
           const invEl = document.getElementById('investigandoIndicator');
-          if (invEl && invEl.parentNode) invEl.remove();
+          if (invEl && invEl.parentNode) {
+            invEl.classList.add('vc-investigando-listo');
+            const headerEl = invEl.querySelector('.vc-investigando-header');
+            const sitioEl = invEl.querySelector('.vc-investigando-sitio');
+            const loadingEl = invEl.querySelector('.vc-investigando-loading');
+            
+            if (loadingEl) loadingEl.classList.add('vc-investigando-loading-done');
+            headerEl.innerHTML = '<span class="vc-investigando-loading vc-investigando-loading-done"></span> Investigación completa';
+            sitioEl.textContent = 'Listo ✓';
+            
+            setTimeout(() => {
+              invEl.classList.add('vc-investigando-colapsado');
+              setTimeout(() => invEl.remove(), 350);
+            }, 1600);
+          }
+        } else if (evt.type === 'creando_codigo') {
+          // Limpiar indicador anterior si quedó sin cerrar
+          const codeViejo = document.getElementById('creandoCodigoIndicator');
+          if (codeViejo && codeViejo.parentNode) codeViejo.remove();
+          if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
+          
+          // Crear frame de creación de código
+          const codeDiv = document.createElement('div');
+          codeDiv.className = 'vc-msg-creando-codigo';
+          codeDiv.id = 'creandoCodigoIndicator';
+          codeDiv.innerHTML = `
+            <div class="vc-creando-topbar">
+              <span class="vc-creando-punto rojo"></span>
+              <span class="vc-creando-punto amarillo"></span>
+              <span class="vc-creando-punto verde"></span>
+            </div>
+            <div class="vc-creando-content">
+              <div class="vc-creando-header">
+                <span class="vc-creando-loading"></span>
+                Creando código
+              </div>
+              <div class="vc-creando-bar">
+                <svg class="vc-creando-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                <span class="vc-creando-archivo">${evt.archivo || 'Generando...'}</span>
+              </div>
+              <div class="vc-creando-scan"></div>
+            </div>
+          `;
+          document.getElementById('vcChatMensajes').appendChild(codeDiv);
+          scrollChatAbajo();
+        } else if (evt.type === 'creando_codigo_fin') {
+          const codeEl = document.getElementById('creandoCodigoIndicator');
+          if (codeEl && codeEl.parentNode) {
+            codeEl.classList.add('vc-creando-listo');
+            const headerEl = codeEl.querySelector('.vc-creando-header');
+            const archivoEl = codeEl.querySelector('.vc-creando-archivo');
+            const loadingEl = codeEl.querySelector('.vc-creando-loading');
+            
+            if (loadingEl) loadingEl.classList.add('vc-creando-loading-done');
+            headerEl.innerHTML = '<span class="vc-creando-loading vc-creando-loading-done"></span> Código creado';
+            archivoEl.textContent = 'Listo ✓';
+            
+            setTimeout(() => {
+              codeEl.classList.add('vc-creando-colapsado');
+              setTimeout(() => codeEl.remove(), 350);
+            }, 1200);
+          }
         } else if (evt.type === 'web_result') {
           // Mostrar resultados de la búsqueda web en el chat
           const webDiv = document.createElement('div');

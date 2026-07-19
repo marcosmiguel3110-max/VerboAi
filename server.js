@@ -2628,6 +2628,23 @@ app.delete('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => 
 });
 
 // ============================================================
+// API: ejecutar código con Piston API (para terminal de Verbo Code)
+// ============================================================
+app.post('/api/verbocode/execute', requiereAdminVerboCode, async (req, res) => {
+  const lenguaje = (req.body?.lenguaje || 'bash').trim().toLowerCase();
+  const codigo = (req.body?.codigo || '').trim();
+  
+  if (!codigo) return res.status(400).json({ error: 'Falta el código a ejecutar.' });
+  
+  try {
+    const resultado = await ejecutarCodigoPiston(lenguaje, codigo);
+    res.json(resultado);
+  } catch (e) {
+    res.status(500).json({ exito: false, error: e.message });
+  }
+});
+
+// ============================================================
 // API: chat con IA (con herramientas)
 // ============================================================
 app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => {
@@ -4030,25 +4047,62 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
   // Modo detallada (NewserAdvanced1.5): mas resolucion y "enhance=true" (un segundo modelo de IA
   // que reescribe/mejora el prompt antes de renderizar la imagen final), por eso tarda un poco mas.
   // Modo Pro (NewserPro): flux-realism + 1024x576 + enhance=true (alta calidad 16:9).
-  const timeouts = (detallada || enhanceFinal) ? [45000, 60000, 75000] : [30000, 45000, 60000];
+  // Lista de modelos fallback para rotar si hay rate limits
+  const modelosFallback = ['flux', 'flux-realism', 'turbo'];
+  let modeloActual = modeloFinal;
+  
+  // Aumentamos reintentos y timeouts para manejar alta concurrencia
+  const maxIntentos = 6; // Aumentado de 3 a 6
   let ultimoError = null;
 
-  for (let intento = 0; intento < timeouts.length; intento++) {
+  for (let intento = 0; intento < maxIntentos; intento++) {
     try {
-      const paramsExtra = enhanceFinal ? '&enhance=true' : '';
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${encodeURIComponent(modeloFinal)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true${paramsExtra}`;
+      // Calcular timeout con backoff exponencial
+      const timeoutBase = (detallada || enhanceFinal) ? 45000 : 30000;
+      const timeout = timeoutBase + (intento * 15000); // 30s, 45s, 60s, 75s, 90s, 105s
+      
+      // Calcular delay entre reintentos con backoff exponencial
+      if (intento > 0) {
+        const delay = Math.min(1000 * Math.pow(2, intento - 1), 10000); // 1s, 2s, 4s, 8s, 10s max
+        console.log(`[pollinations] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
 
-      console.log(`[pollinations] Intento ${intento + 1}/${timeouts.length}${detallada ? ' [alta calidad]' : ''}${opciones.modeloOverride ? ` [modelo=${modeloFinal} ${anchoFinal}x${altoFinal}]` : ''} - prompt: "${promptLimpio.slice(0, 50)}..."`);
+      // Rotar modelo si es 429 y hay fallbacks disponibles
+      if (intento > 0 && ultimoError && ultimoError.includes('429')) {
+        const idxModelo = modelosFallback.indexOf(modeloActual);
+        if (idxModelo < modelosFallback.length - 1) {
+          modeloActual = modelosFallback[idxModelo + 1];
+          console.log(`[pollinations] Rotando a modelo fallback: ${modeloActual}`);
+        }
+      }
+
+      const paramsExtra = enhanceFinal ? '&enhance=true' : '';
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${encodeURIComponent(modeloActual)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true${paramsExtra}`;
+
+      console.log(`[pollinations] Intento ${intento + 1}/${maxIntentos}${detallada ? ' [alta calidad]' : ''}${opciones.modeloOverride ? ` [modelo=${modeloActual} ${anchoFinal}x${altoFinal}]` : ''} - prompt: "${promptLimpio.slice(0, 50)}..."`);
       const resp = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        signal: AbortSignal.timeout(timeouts[intento]),
+        signal: AbortSignal.timeout(timeout),
       });
 
       if (!resp.ok) {
         ultimoError = `HTTP ${resp.status}`;
         console.warn(`[pollinations] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
-        if (resp.status >= 400 && resp.status < 500) break;
-        await new Promise((r) => setTimeout(r, 2000));
+        
+        // Para 429, seguir reintentando con backoff
+        if (resp.status === 429) {
+          continue;
+        }
+        // Para 500, seguir reintentando (puede ser temporal)
+        if (resp.status === 500) {
+          continue;
+        }
+        // Para otros 4xx, no reintentar
+        if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+          break;
+        }
+        // Para 5xx, seguir reintentando
         continue;
       }
 
@@ -4056,7 +4110,6 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
       if (!mime.startsWith('image/')) {
         ultimoError = `Content-Type inesperado: ${mime}`;
         console.warn(`[pollinations] Intento ${intento + 1} devolvio ${mime} (esperaba image/*)`);
-        await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
 
@@ -4064,7 +4117,6 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
       if (!buffer || buffer.length < 1000) {
         ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
         console.warn(`[pollinations] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
-        await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
 
@@ -4077,7 +4129,7 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
           seed: seedFinal,
           tamanoKB: Math.round(buffer.length / 1024),
           detallada,
-          modelo: modeloFinal,
+          modelo: modeloActual,
           ancho: anchoFinal,
           alto: altoFinal,
           enhance: enhanceFinal,
@@ -4088,7 +4140,6 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
       ultimoError = e.message;
       console.warn(`[pollinations] Intento ${intento + 1} fallo: ${e.message}`);
       if (e.name === 'AbortError' || e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT') {
-        await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
       break;
