@@ -526,16 +526,27 @@ const anuncioCreditosContenedor = document.getElementById('anuncioCreditosConten
 // despues de esa unica pasada. Ahora se recrea el <ins> a mano y se llama a push() recien
 // cuando el contenedor ya es visible.
 function cargarAnuncioCreditos() {
-  if (!anuncioCreditosContenedor) return;
+  if (!anuncioCreditosContenedor) {
+    console.error('[AdSense] Contenedor de anuncio no encontrado');
+    return;
+  }
+  
+  console.log('[AdSense] Iniciando carga de anuncio...');
+  console.log('[AdSense] Contenedor visible:', !overlayAnuncioCreditos.classList.contains('oculto'));
+  
   anuncioCreditosContenedor.innerHTML = '';
 
   const adClient = anuncioCreditosContenedor.dataset.adClient;
   const adSlot = anuncioCreditosContenedor.dataset.adSlot;
+  
+  console.log('[AdSense] Ad Client:', adClient);
+  console.log('[AdSense] Ad Slot:', adSlot);
 
   // "ZZZZZZZZZZ" es un slot de ejemplo/placeholder, no un ID real de AdSense: reemplazalo
   // por el ID real que te da Google en tu panel de AdSense (Anuncios -> Por unidad de anuncio),
   // si no el anuncio nunca va a cargar (AdSense rechaza slots invalidos silenciosamente).
   if (!adSlot || adSlot === 'ZZZZZZZZZZ') {
+    console.error('[AdSense] Slot no configurado o es placeholder');
     anuncioCreditosContenedor.innerHTML = '<div class="anuncio-creditos-placeholder">Anuncio no configurado (falta el ID real de la unidad de anuncio de AdSense).</div>';
     return;
   }
@@ -557,12 +568,27 @@ function cargarAnuncioCreditos() {
   ins.setAttribute('data-ad-break-test', 'on'); // Forzar recarga
   anuncioCreditosContenedor.appendChild(ins);
 
+  console.log('[AdSense] Elemento <ins> creado con ID:', uniqueId);
+  console.log('[AdSense] Elemento <ins> en DOM:', document.getElementById(uniqueId) !== null);
+
   try {
     (window.adsbygoogle = window.adsbygoogle || []).push({});
-    console.log(`[AdSense] Anuncio cargado con ID único: ${uniqueId}`);
+    console.log(`[AdSense] push() ejecutado para ID: ${uniqueId}`);
+    console.log('[AdSense] Total adsbygoogle en array:', window.adsbygoogle.length);
   } catch (e) {
-    console.error('No se pudo cargar el anuncio de AdSense:', e);
+    console.error('[AdSense] Error al ejecutar push():', e);
   }
+  
+  // Verificar después de 2 segundos si el anuncio se cargó
+  setTimeout(() => {
+    const insElement = document.getElementById(uniqueId);
+    if (insElement) {
+      console.log('[AdSense] Estado después de 2s - innerHTML length:', insElement.innerHTML.length);
+      console.log('[AdSense] Estado después de 2s - tiene hijos:', insElement.children.length > 0);
+    } else {
+      console.error('[AdSense] Elemento <ins> desapareció después de 2s');
+    }
+  }, 2000);
 }
 
 if (btnRecargarCreditos) {
