@@ -320,25 +320,13 @@ function esperarMinimo(promesa, ms) {
 // ============================================================
 // CAPA UNIFICADA DE MODELOS GRATIS (reemplaza por completo a Groq)
 // ============================================================
-// PRIORIDAD: Pollinations texto primero (sin límites, sin auth, siempre disponible).
-// Si Pollinations falla, prueba OpenRouter ":free" con reintentos ante HTTP 429.
+// PRIORIDAD: OpenRouter ":free" primero (Pollinations requiere créditos).
+// Si OpenRouter falla, intenta Pollinations texto solo si está configurado sin key.
 //
 // Devuelve siempre el mismo shape: { ok, texto, modelo, capa } donde
-// capa es 'pollinations' | 'openrouter' | null.
+// capa es 'openrouter' | 'pollinations' | null.
 async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, enviar = () => {}, opciones = {}) {
-  // PRIMERO: Intentar Pollinations texto (sin límites, siempre disponible)
-  if (!opciones.signal?.aborted) {
-    console.log('[llamarModeloGratis] Intentando Pollinations texto primero...');
-    const rp = await llamarPollinationsTexto(messages, systemPrompt, opciones);
-    if (rp.ok) {
-      console.log('[llamarModeloGratis] Pollinations texto funcionó OK');
-      return { ok: true, texto: rp.texto, modelo: rp.modelo, capa: 'pollinations' };
-    } else {
-      console.log('[llamarModeloGratis] Pollinations texto falló:', rp.error, '- cayendo a OpenRouter');
-    }
-  }
-
-  // SEGUNDO: Si Pollinations falló, intentar OpenRouter free
+  // PRIMERO: Intentar OpenRouter free
   const lista = (Array.isArray(modelos) ? modelos : [modelos]).filter((v, i, a) => v && a.indexOf(v) === i);
   let ultimoError = null;
 
@@ -356,6 +344,13 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
       }
       break;
     }
+  }
+
+  // SEGUNDO: Si OpenRouter falló, intentar Pollinations gemini-2.0-flash (unlimited, no auth)
+  if (!opciones.signal?.aborted) {
+    console.log('[llamarModeloGratis] OpenRouter falló, intentando Pollinations gemini-2.0-flash (unlimited, no auth)...');
+    const rp = await llamarPollinationsTexto(messages, systemPrompt, { ...opciones, modelo: 'pollinations/gemini-2.0-flash' });
+    if (rp.ok) return { ok: true, texto: rp.texto, modelo: rp.modelo, capa: 'pollinations' };
   }
 
   return { ok: false, error: ultimoError || 'Todos los modelos gratis fallaron', capa: null };
@@ -456,7 +451,7 @@ async function llamarPollinationsTexto(messages, systemPrompt, opciones = {}) {
   }
 
   const body = {
-    model: POLLINATIONS_TEXT_MODEL,
+    model: opciones.modelo || POLLINATIONS_TEXT_MODEL,
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
     temperature: 0.7,
     max_tokens: 3072,
