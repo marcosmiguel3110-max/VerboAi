@@ -379,17 +379,24 @@ function mensajeErrorAmigableGratis(error) {
 const OPENROUTER_FREE_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_FREE_ENABLED = (process.env.OPENROUTER_FREE_ENABLED || 'true').toLowerCase() === 'true';
 const OPENROUTER_FREE_TIMEOUT = parseInt(process.env.OPENROUTER_FREE_TIMEOUT || '60000', 10);
-// API key opcional de OpenRouter (te da mas rate limit si la tenes)
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+// API keys de OpenRouter (múltiples para rotación cuando una se satura)
+const OPENROUTER_API_KEYS = (process.env.OPENROUTER_API_KEYS || '').split(',').map(k => k.trim()).filter(k => k);
+// Índice actual para rotación de keys
+let currentKeyIndex = 0;
 
-// Llama a OpenRouter con un modelo free (sin API key requerida para tier :free)
+// Llama a OpenRouter con un modelo free (con rotación de API keys)
 async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}) {
   if (!OPENROUTER_FREE_ENABLED) return { ok: false, error: 'OpenRouter free deshabilitado' };
 
   const headers = { 'Content-Type': 'application/json' };
-  if (OPENROUTER_API_KEY) {
-    headers['Authorization'] = `Bearer ${OPENROUTER_API_KEY}`;
+  
+  // Usar API key si hay disponibles (con rotación)
+  if (OPENROUTER_API_KEYS.length > 0) {
+    const key = OPENROUTER_API_KEYS[currentKeyIndex];
+    headers['Authorization'] = `Bearer ${key}`;
+    console.log(`[openrouter-free] Usando key index ${currentKeyIndex}/${OPENROUTER_API_KEYS.length}`);
   }
+  
   // HTTP-Referer y X-Title ayudan a OpenRouter a identificar la app (opcional)
   headers['HTTP-Referer'] = 'https://verboai.duckdns.org';
   headers['X-Title'] = 'Verbo AI';
@@ -412,6 +419,29 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     if (resp.status < 200 || resp.status >= 300) {
       const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
       console.error(`[openrouter-free] HTTP ${resp.status}: ${detalle}`);
+      
+      // Si es 429 y hay más keys, rotar y reintentar
+      if (resp.status === 429 && OPENROUTER_API_KEYS.length > 1) {
+        currentKeyIndex = (currentKeyIndex + 1) % OPENROUTER_API_KEYS.length;
+        console.log(`[openrouter-free] HTTP 429 - rotando a key index ${currentKeyIndex}`);
+        // Reintentar con la nueva key
+        const newHeaders = { ...headers };
+        newHeaders['Authorization'] = `Bearer ${OPENROUTER_API_KEYS[currentKeyIndex]}`;
+        const retryResp = await axios.post(OPENROUTER_FREE_URL, body, {
+          timeout: OPENROUTER_FREE_TIMEOUT,
+          headers: newHeaders,
+          signal: opciones.signal,
+          validateStatus: () => true,
+        });
+        if (retryResp.status >= 200 && retryResp.status < 300) {
+          const texto = retryResp.data?.choices?.[0]?.message?.content || '';
+          if (texto && texto.trim()) {
+            console.log(`[openrouter-free] OK tras rotación - ${texto.length} chars por ${model}`);
+            return { ok: true, texto: texto.trim(), modelo: model };
+          }
+        }
+      }
+      
       return { ok: false, error: `HTTP ${resp.status}` };
     }
     const texto = resp.data?.choices?.[0]?.message?.content || '';
