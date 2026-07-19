@@ -200,10 +200,9 @@ const MODELOS_DISPONIBLES = {
   },
   NewserAdmin: {
     nombre: 'NewserAdmin',
-    descripcion: 'Exclusivo admin. Modelo mas potente para codigo. Usa Qwen3-Coder-480B (480 billones de parametros, MoE 35B activos). Especializado en programacion, agentic coding y desarrollo.',
-    modeloOpenRouter: 'qwen/qwen3-coder:free',
+    descripcion: 'Exclusivo admin. Modelo mas potente para codigo. Usa Cohere North-Mini-Code (modelo especializado en codigo con mejor estabilidad). Especializado en programacion, agentic coding y desarrollo.',
+    modeloOpenRouter: 'cohere/north-mini-code:free',
     modelosOpenRouterTexto: [
-      'qwen/qwen3-coder:free',
       'cohere/north-mini-code:free',
       'nvidia/nemotron-3-ultra-550b-a55b:free',
       'nvidia/nemotron-3-super-120b-a12b:free',
@@ -211,6 +210,7 @@ const MODELOS_DISPONIBLES = {
       'meta-llama/llama-3.3-70b-instruct:free',
       'poolside/laguna-m.1:free',
       'poolside/laguna-xs-2.1:free',
+      'qwen/qwen3-coder:free',
     ],
     modeloOpenRouterRazonamiento: 'qwen/qwen3-next-80b-a3b-instruct:free',
     modelosOpenRouterRazonamiento: [
