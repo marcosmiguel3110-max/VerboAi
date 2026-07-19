@@ -585,13 +585,23 @@ function cargarAnuncioCreditos() {
     if (insElement) {
       console.log('[AdSense] Estado después de 2s - innerHTML length:', insElement.innerHTML.length);
       console.log('[AdSense] Estado después de 2s - tiene hijos:', insElement.children.length > 0);
-      console.log('[AdSense] Estado después de 2s - innerHTML preview:', insElement.innerHTML.substring(0, 200));
+      console.log('[AdSense] Estado después de 2s - innerHTML completo:', insElement.innerHTML);
       console.log('[AdSense] Estado después de 2s - computed display:', window.getComputedStyle(insElement).display);
       console.log('[AdSense] Estado después de 2s - computed visibility:', window.getComputedStyle(insElement).visibility);
       console.log('[AdSense] Estado después de 2s - computed opacity:', window.getComputedStyle(insElement).opacity);
       console.log('[AdSense] Estado después de 2s - computed z-index:', window.getComputedStyle(insElement).zIndex);
       console.log('[AdSense] Estado después de 2s - offsetHeight:', insElement.offsetHeight);
       console.log('[AdSense] Estado después de 2s - offsetWidth:', insElement.offsetWidth);
+      
+      // Verificar si hay iframe dentro
+      const iframe = insElement.querySelector('iframe');
+      if (iframe) {
+        console.log('[AdSense] Iframe encontrado:', iframe.src);
+        console.log('[AdSense] Iframe display:', window.getComputedStyle(iframe).display);
+        console.log('[AdSense] Iframe visibility:', window.getComputedStyle(iframe).visibility);
+      } else {
+        console.warn('[AdSense] No se encontró iframe dentro del anuncio');
+      }
     } else {
       console.error('[AdSense] Elemento <ins> desapareció después de 2s');
     }
