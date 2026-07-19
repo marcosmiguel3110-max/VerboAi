@@ -616,6 +616,7 @@ let currentKeyIndex = 0;
 // Contadores de peticiones por key con cooldown
 const keyStats = {};
 const KEY_COOLDOWN_DURATION = 5 * 60 * 1000; // 5 minutos cooldown para keys saturadas
+const KEY_DAILY_COOLDOWN_MULTIPLIER = 24 * 60 * 60 * 1000; // 24 horas para límite diario alcanzado
 const KEY_FAILURE_THRESHOLD = 5; // Rotar si hay 5 fallos consecutivos
 
 OPENROUTER_API_KEYS.forEach((key, i) => {
@@ -669,16 +670,17 @@ function selectBestKey() {
 }
 
 // Función para marcar una key como saturada (cooldown)
-function markKeyCooldown(index) {
+function markKeyCooldown(index, duration = KEY_COOLDOWN_DURATION) {
   if (index >= 0 && index < OPENROUTER_API_KEYS.length) {
-    keyStats[index].cooldownUntil = Date.now() + KEY_COOLDOWN_DURATION;
+    keyStats[index].cooldownUntil = Date.now() + duration;
     keyStats[index].consecutiveFailures = 0;
-    console.log(`[openrouter-free] Key ${index} en cooldown por ${KEY_COOLDOWN_DURATION / 1000}s`);
+    const durationMin = duration / 1000 / 60;
+    console.log(`[openrouter-free] Key ${index} en cooldown por ${durationMin.toFixed(1)} minutos`);
   }
 }
 
 // Función para actualizar estadísticas de una key
-function updateKeyStats(index, success, isRateLimit) {
+function updateKeyStats(index, success, isRateLimit, errorMessage = '') {
   if (index >= 0 && index < OPENROUTER_API_KEYS.length) {
     const stats = keyStats[index];
     stats.lastUsed = Date.now();
@@ -698,8 +700,15 @@ function updateKeyStats(index, success, isRateLimit) {
     
     if (isRateLimit) {
       stats.rateLimits++;
-      // Poner en cooldown inmediatamente si hay rate limit
-      markKeyCooldown(index);
+      
+      // Detectar límite diario (free-models-per-day) y aplicar cooldown de 24 horas
+      if (errorMessage && errorMessage.includes('free-models-per-day')) {
+        console.log(`[openrouter-free] Key ${index} alcanzó límite diario (50 requests), cooldown por 24 horas`);
+        markKeyCooldown(index, KEY_DAILY_COOLDOWN_MULTIPLIER);
+      } else {
+        // Para otros rate limits, cooldown normal de 5 minutos
+        markKeyCooldown(index);
+      }
     }
   }
 }
@@ -770,7 +779,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
         ultimoError = `HTTP ${resp.status}`;
         
         if (keyIndex !== null) {
-          updateKeyStats(keyIndex, false, resp.status === 429);
+          updateKeyStats(keyIndex, false, resp.status === 429, detalle);
           
           if (resp.status === 429) {
             console.log(`[openrouter-free] Key ${keyIndex} stats: ${keyStats[keyIndex].requests} requests, ${keyStats[keyIndex].successes} success, ${keyStats[keyIndex].failures} failures, ${keyStats[keyIndex].rateLimits} rate limits`);
@@ -4721,7 +4730,9 @@ async function ejecutarCodigoJudge0(lenguaje, codigo) {
 // Piston API: API de ejecución de código open-source, gratuita y sin API key
 // Más estable y fácil de usar que Judge0. Soporta múltiples lenguajes.
 // Documentación: https://emkc.org/api/v2/piston
+// Fallback: https://api.piston.epicb.dev
 const PISTON_API_URL = process.env.PISTON_API_URL || 'https://emkc.org/api/v2/piston';
+const PISTON_API_FALLBACK = 'https://api.piston.epicb.dev';
 
 // Mapeo de lenguajes para Piston API
 const PISTON_LANGUAGE_MAP = {
@@ -4761,6 +4772,7 @@ async function ejecutarCodigoPiston(lenguaje, codigo) {
     // Reintentos con backoff exponencial para manejar alta concurrencia
     const maxIntentos = 4;
     let ultimoError = null;
+    let usarFallback = false;
 
     for (let intento = 0; intento < maxIntentos; intento++) {
       try {
@@ -4774,9 +4786,10 @@ async function ejecutarCodigoPiston(lenguaje, codigo) {
           await new Promise((r) => setTimeout(r, delay));
         }
 
-        console.log(`[piston] Intento ${intento + 1}/${maxIntentos} - lenguaje: ${lang}, timeout: ${timeout}ms`);
+        const apiUrl = usarFallback ? PISTON_API_FALLBACK : PISTON_API_URL;
+        console.log(`[piston] Intento ${intento + 1}/${maxIntentos} - lenguaje: ${lang}, timeout: ${timeout}ms, API: ${usarFallback ? 'fallback' : 'primary'}`);
         
-        const resp = await axios.post(`${PISTON_API_URL}/execute`, {
+        const resp = await axios.post(`${apiUrl}/execute`, {
           language: langConfig.language,
           version: langConfig.version,
           files: [
@@ -4795,6 +4808,13 @@ async function ejecutarCodigoPiston(lenguaje, codigo) {
         if (resp.status !== 200) {
           ultimoError = `HTTP ${resp.status}`;
           console.warn(`[piston] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+          
+          // Si es 401 y no estamos usando fallback, cambiar a fallback
+          if (resp.status === 401 && !usarFallback) {
+            console.log(`[piston] HTTP 401 - cambiando a API fallback: ${PISTON_API_FALLBACK}`);
+            usarFallback = true;
+            continue; // Reintentar con fallback
+          }
           
           // Para 429/502/503/504, reintentar (errores temporales)
           if ([429, 502, 503, 504].includes(resp.status)) {
