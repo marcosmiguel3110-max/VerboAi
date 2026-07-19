@@ -3696,38 +3696,54 @@ async function obtenerContextoYoutube(url) {
 
 async function investigarWikipedia(query) {
   try {
-    const urlBusqueda = `https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=1`;
+    // Buscar múltiples resultados (aumentado de 1 a 5 para investigación más profunda)
+    const urlBusqueda = `https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=5`;
     const rBusqueda = await fetch(urlBusqueda);
     if (!rBusqueda.ok) {
       console.error(`[investigar] Wikipedia busqueda HTTP ${rBusqueda.status} para "${query}"`);
       return null;
     }
     const dataBusqueda = await rBusqueda.json();
-    const primero = dataBusqueda && dataBusqueda.query && dataBusqueda.query.search && dataBusqueda.query.search[0];
-    if (!primero) {
+    const resultados = dataBusqueda && dataBusqueda.query && dataBusqueda.query.search;
+    if (!resultados || !resultados.length) {
       console.error(`[investigar] Wikipedia no encontro ningun articulo para "${query}"`);
       return null;
     }
 
-    const urlExtracto = `https://es.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(primero.title)}&format=json&origin=*`;
-    const rExtracto = await fetch(urlExtracto);
-    if (!rExtracto.ok) {
-      console.error(`[investigar] Wikipedia extracto HTTP ${rExtracto.status} para "${primero.title}"`);
-      return null;
+    // Obtener extractos de múltiples artículos para investigación más profunda
+    const articulos = [];
+    for (const resultado of resultados.slice(0, 3)) { // Limitar a 3 para no sobrecargar
+      try {
+        const urlExtracto = `https://es.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(resultado.title)}&format=json&origin=*`;
+        const rExtracto = await fetch(urlExtracto);
+        if (rExtracto.ok) {
+          const dataExtracto = await rExtracto.json();
+          const paginas = dataExtracto && dataExtracto.query && dataExtracto.query.pages;
+          if (paginas) {
+            const pagina = Object.values(paginas)[0];
+            if (pagina && pagina.extract) {
+              articulos.push({
+                titulo: pagina.title,
+                extracto: pagina.extract.slice(0, 500),
+                url: `https://es.wikipedia.org/wiki/${encodeURIComponent(pagina.title.replace(/ /g, '_'))}`,
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error(`[investigar] Error obteniendo extracto para "${resultado.title}":`, e.message);
+      }
     }
-    const dataExtracto = await rExtracto.json();
-    const paginas = dataExtracto && dataExtracto.query && dataExtracto.query.pages;
-    if (!paginas) return null;
-    const pagina = Object.values(paginas)[0];
-    if (!pagina || !pagina.extract) {
-      console.error(`[investigar] Wikipedia: el articulo "${primero.title}" no tiene extracto de texto`);
+
+    if (!articulos.length) {
+      console.error(`[investigar] Wikipedia: no se pudo obtener extractos para "${query}"`);
       return null;
     }
 
     return {
-      titulo: pagina.title,
-      extracto: pagina.extract.slice(0, 700),
-      url: `https://es.wikipedia.org/wiki/${encodeURIComponent(pagina.title.replace(/ /g, '_'))}`,
+      query,
+      articulos,
+      totalResultados: resultados.length,
     };
   } catch (e) {
     console.error('[investigar] Error consultando Wikipedia:', e.message);
@@ -3766,7 +3782,17 @@ async function investigarBiblia(query) {
 async function sintetizarInvestigacion(query, wiki, versiculos, webResultados, modelosOverride) {
   try {
     let contexto = '';
-    if (wiki) contexto += `Wikipedia (${wiki.titulo}): ${wiki.extracto}\n\n`;
+    if (wiki) {
+      if (wiki.articulos && wiki.articulos.length) {
+        contexto += `Investigación Wikipedia (${wiki.totalResultados || wiki.articulos.length} resultados encontrados):\n`;
+        wiki.articulos.forEach((articulo, i) => {
+          contexto += `${i + 1}. ${articulo.titulo}: ${articulo.extracto}\n`;
+        });
+        contexto += '\n';
+      } else if (wiki.titulo) {
+        contexto += `Wikipedia (${wiki.titulo}): ${wiki.extracto}\n\n`;
+      }
+    }
     if (versiculos && versiculos.length) {
       contexto += 'Versiculos biblicos encontrados en una busqueda real dentro del texto completo:\n';
       versiculos.forEach((v) => { contexto += `- ${v.referencia}: "${v.texto}"\n`; });
@@ -3777,7 +3803,7 @@ async function sintetizarInvestigacion(query, wiki, versiculos, webResultados, m
     }
     if (!contexto.trim()) return null;
 
-    const esProfunda = !!webResultados;
+    const esProfunda = !!webResultados || (wiki && wiki.articulos && wiki.articulos.length > 1);
     const modelos = (modelosOverride && modelosOverride.length) ? modelosOverride : MODELOS_DISPONIBLES.NewserLite.modelosOpenRouterTexto;
     const resp = await llamarModeloGratisConReintentos(
       [{ role: 'user', content: `Tema investigado: "${query}"\n\n${contexto}\n\nEscribe el resumen.` }],
@@ -3786,8 +3812,8 @@ async function sintetizarInvestigacion(query, wiki, versiculos, webResultados, m
           'Usa UNICAMENTE la informacion entregada en el mensaje del usuario (Wikipedia, texto biblico y ' +
           'resultados web reales), nunca agregues datos, fechas ni afirmaciones que no esten ahi. ' +
           'Cruza y compara las distintas fuentes cuando aporte valor, se mas extenso que un resumen ' +
-          'comun (hasta 8 frases), y menciona brevemente de donde salio cada dato, sin sonar tecnico ' +
-          'ni mencionar APIs.'
+          'comun (hasta 10 frases), y menciona brevemente de donde salio cada dato, sin sonar tecnico ' +
+          'ni mencionar APIs. Genera multiples perspectivas y escenarios cuando sea apropiado.'
         : 'Resumes investigacion biblica real de forma breve, calida y en espanol natural. ' +
           'Usa UNICAMENTE la informacion entregada en el mensaje del usuario, nunca agregues datos, ' +
           'fechas ni afirmaciones que no esten ahi. Maximo 4 frases. Menciona brevemente de donde salio ' +
@@ -4982,14 +5008,22 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       const versiculos = await esperarMinimo(investigarBiblia(investigarQuery), 1000);
 
       let webInvestigacion = null;
-      if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') {
+      if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') {
         enviar({ type: 'investigando_sitio', sitio: 'Busqueda web adicional (investigacion profunda)' });
         const resWeb = await esperarMinimo(buscarWebGoogle(investigarQuery), 1000);
         if (resWeb && resWeb.exito && resWeb.resultados.length) webInvestigacion = resWeb.resultados;
       }
 
       const fuentes = [];
-      if (wiki) fuentes.push({ titulo: `Wikipedia: ${wiki.titulo}`, url: wiki.url });
+      if (wiki) {
+        if (wiki.articulos && wiki.articulos.length) {
+          wiki.articulos.forEach((articulo) => {
+            fuentes.push({ titulo: `Wikipedia: ${articulo.titulo}`, url: articulo.url });
+          });
+        } else if (wiki.titulo) {
+          fuentes.push({ titulo: `Wikipedia: ${wiki.titulo}`, url: wiki.url });
+        }
+      }
       if (versiculos && versiculos.length) fuentes.push({ titulo: 'Busqueda en el texto biblico completo (RV1960)', url: null });
       if (webInvestigacion) webInvestigacion.forEach((r) => fuentes.push({ titulo: r.titulo, url: r.link }));
 
