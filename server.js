@@ -610,7 +610,10 @@ const OPENROUTER_FREE_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_FREE_ENABLED = (process.env.OPENROUTER_FREE_ENABLED || 'true').toLowerCase() === 'true';
 const OPENROUTER_FREE_TIMEOUT = parseInt(process.env.OPENROUTER_FREE_TIMEOUT || '60000', 10);
 // API keys de OpenRouter (múltiples para rotación cuando una se satura)
-const OPENROUTER_API_KEYS = (process.env.OPENROUTER_API_KEYS || '').split(',').map(k => k.trim()).filter(k =>);
+const OPENROUTER_API_KEYS = (process.env.OPENROUTER_API_KEYS || '')
+  .split(',')
+  .map(k => k.trim())
+  .filter(k => k);
 // Índice actual para rotación de keys
 let currentKeyIndex = 0;
 // Contadores de peticiones por key con cooldown
