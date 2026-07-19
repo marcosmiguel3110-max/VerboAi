@@ -383,6 +383,11 @@ const OPENROUTER_FREE_TIMEOUT = parseInt(process.env.OPENROUTER_FREE_TIMEOUT || 
 const OPENROUTER_API_KEYS = (process.env.OPENROUTER_API_KEYS || '').split(',').map(k => k.trim()).filter(k => k);
 // Índice actual para rotación de keys
 let currentKeyIndex = 0;
+// Contadores de peticiones por key
+const keyStats = {};
+OPENROUTER_API_KEYS.forEach((key, i) => {
+  keyStats[i] = { requests: 0, successes: 0, failures: 0, rateLimits: 0 };
+});
 
 // Log de configuración de keys al iniciar
 console.log(`[CONFIG] OpenRouter API Keys cargadas: ${OPENROUTER_API_KEYS.length}`);
@@ -404,7 +409,8 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
   if (OPENROUTER_API_KEYS.length > 0) {
     const key = OPENROUTER_API_KEYS[currentKeyIndex];
     headers['Authorization'] = `Bearer ${key}`;
-    console.log(`[openrouter-free] Usando key index ${currentKeyIndex}/${OPENROUTER_API_KEYS.length}`);
+    keyStats[currentKeyIndex].requests++;
+    console.log(`[openrouter-free] Usando key index ${currentKeyIndex}/${OPENROUTER_API_KEYS.length} (total requests: ${keyStats[currentKeyIndex].requests})`);
   }
   
   // HTTP-Referer y X-Title ayudan a OpenRouter a identificar la app (opcional)
@@ -430,6 +436,14 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
       const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
       console.error(`[openrouter-free] HTTP ${resp.status}: ${detalle}`);
       
+      if (OPENROUTER_API_KEYS.length > 0) {
+        keyStats[currentKeyIndex].failures++;
+        if (resp.status === 429) {
+          keyStats[currentKeyIndex].rateLimits++;
+          console.log(`[openrouter-free] Key ${currentKeyIndex} stats: ${keyStats[currentKeyIndex].requests} requests, ${keyStats[currentKeyIndex].successes} success, ${keyStats[currentKeyIndex].failures} failures, ${keyStats[currentKeyIndex].rateLimits} rate limits`);
+        }
+      }
+      
       // Si es 429 y hay más keys, rotar y reintentar
       if (resp.status === 429 && OPENROUTER_API_KEYS.length > 1) {
         currentKeyIndex = (currentKeyIndex + 1) % OPENROUTER_API_KEYS.length;
@@ -437,6 +451,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
         // Reintentar con la nueva key
         const newHeaders = { ...headers };
         newHeaders['Authorization'] = `Bearer ${OPENROUTER_API_KEYS[currentKeyIndex]}`;
+        keyStats[currentKeyIndex].requests++;
         const retryResp = await axios.post(OPENROUTER_FREE_URL, body, {
           timeout: OPENROUTER_FREE_TIMEOUT,
           headers: newHeaders,
@@ -444,11 +459,15 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
           validateStatus: () => true,
         });
         if (retryResp.status >= 200 && retryResp.status < 300) {
+          keyStats[currentKeyIndex].successes++;
           const texto = retryResp.data?.choices?.[0]?.message?.content || '';
           if (texto && texto.trim()) {
             console.log(`[openrouter-free] OK tras rotación - ${texto.length} chars por ${model}`);
             return { ok: true, texto: texto.trim(), modelo: model };
           }
+        } else {
+          keyStats[currentKeyIndex].failures++;
+          if (retryResp.status === 429) keyStats[currentKeyIndex].rateLimits++;
         }
       }
       
@@ -457,8 +476,10 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     const texto = resp.data?.choices?.[0]?.message?.content || '';
     if (!texto || !texto.trim()) {
       console.error('[openrouter-free] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+      if (OPENROUTER_API_KEYS.length > 0) keyStats[currentKeyIndex].failures++;
       return { ok: false, error: 'Respuesta vacia de OpenRouter' };
     }
+    if (OPENROUTER_API_KEYS.length > 0) keyStats[currentKeyIndex].successes++;
     console.log(`[openrouter-free] OK - ${texto.length} chars por ${model}`);
     return { ok: true, texto: texto.trim(), modelo: model };
   } catch (e) {
