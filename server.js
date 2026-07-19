@@ -4513,7 +4513,7 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
         if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
           break;
         }
-        // Para 5xx, seguir reintentando
+        // Para 5xx, seguir reintentar
         continue;
       }
 
@@ -4559,6 +4559,462 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
 
   console.error(`[pollinations] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
   return { img: null, error: ultimoError || 'Error desconocido' };
+}
+
+// Función para editar imágenes existentes (image-to-image) usando modelo kontext de Pollinations
+async function editarImagenPollinations(prompt, imagenUrl, opciones = {}) {
+  const promptLimpio = (prompt || '').trim().slice(0, 200);
+  if (!promptLimpio) return { img: null, error: 'Prompt vacio' };
+  if (!imagenUrl) return { img: null, error: 'URL de imagen requerida' };
+
+  const seedFinal = (typeof opciones.seed === 'number' && opciones.seed > 0) ? opciones.seed : Math.floor(Math.random() * 1000000);
+  const anchoFinal = Number.isInteger(opciones.ancho) ? opciones.ancho : 1024;
+  const altoFinal = Number.isInteger(opciones.alto) ? opciones.alto : 1024;
+  
+  // Modelo kontext para image-to-image
+  const modeloFinal = 'kontext';
+  const maxIntentos = 4;
+  let ultimoError = null;
+
+  for (let intento = 0; intento < maxIntentos; intento++) {
+    try {
+      const timeout = 60000 + (intento * 15000); // 60s, 75s, 90s, 105s
+      
+      if (intento > 0) {
+        const delay = Math.min(1000 * Math.pow(2, intento - 1), 8000);
+        console.log(`[pollinations-edit] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&image=${encodeURIComponent(imagenUrl)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true`;
+
+      console.log(`[pollinations-edit] Intento ${intento + 1}/${maxIntentos} - prompt: "${promptLimpio.slice(0, 50)}..."`);
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(timeout),
+      });
+
+      if (!resp.ok) {
+        ultimoError = `HTTP ${resp.status}`;
+        console.warn(`[pollinations-edit] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+        
+        if ([429, 500, 502, 503, 504].includes(resp.status)) {
+          continue;
+        }
+        if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+          break;
+        }
+        continue;
+      }
+
+      const mime = resp.headers.get('content-type') || 'image/jpeg';
+      if (!mime.startsWith('image/')) {
+        ultimoError = `Content-Type inesperado: ${mime}`;
+        console.warn(`[pollinations-edit] Intento ${intento + 1} devolvio ${mime}`);
+        continue;
+      }
+
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      if (!buffer || buffer.length < 1000) {
+        ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
+        console.warn(`[pollinations-edit] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
+        continue;
+      }
+
+      const urlLocal = guardarImagenDisco(buffer, mime);
+      console.log(`[pollinations-edit] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
+      return {
+        img: {
+          url: urlLocal,
+          prompt: promptLimpio,
+          seed: seedFinal,
+          tamanoKB: Math.round(buffer.length / 1024),
+          modelo: modeloFinal,
+          ancho: anchoFinal,
+          alto: altoFinal,
+          imagenOriginal: imagenUrl,
+        },
+        error: null,
+      };
+    } catch (e) {
+      ultimoError = e.message;
+      console.warn(`[pollinations-edit] Intento ${intento + 1} fallo: ${e.message}`);
+      
+      if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
+        continue;
+      }
+      break;
+    }
+  }
+
+  console.error(`[pollinations-edit] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+  return { img: null, error: ultimoError || 'Pollinations edit fallo' };
+}
+
+// Función para corregir imperfecciones en imágenes (textos, elementos sin sentido)
+async function corregirImperfeccionesImagen(imagenUrl, opciones = {}) {
+  if (!imagenUrl) return { img: null, error: 'URL de imagen requerida' };
+
+  const tipoCorreccion = opciones.tipo || 'general'; // 'general', 'texto', 'elementos', 'minecraft'
+  const seedFinal = (typeof opciones.seed === 'number' && opciones.seed > 0) ? opciones.seed : Math.floor(Math.random() * 1000000);
+  const anchoFinal = Number.isInteger(opciones.ancho) ? opciones.ancho : 1024;
+  const altoFinal = Number.isInteger(opciones.alto) ? opciones.alto : 1024;
+
+  // Prompts específicos para cada tipo de corrección
+  const promptsCorreccion = {
+    general: 'fix all visual imperfections, enhance quality, remove artifacts, improve clarity and details',
+    texto: 'fix all text and typography, make text readable and properly aligned, correct any garbled characters',
+    elementos: 'remove nonsensical elements, fix visual inconsistencies, improve overall composition',
+    minecraft: 'fix all nonsensical blocks and structures, make everything logical and coherent, improve visual quality while keeping minecraft style',
+  };
+
+  const promptLimpio = promptsCorreccion[tipoCorreccion] || promptsCorreccion.general;
+  const modeloFinal = 'kontext';
+  const maxIntentos = 4;
+  let ultimoError = null;
+
+  for (let intento = 0; intento < maxIntentos; intento++) {
+    try {
+      const timeout = 60000 + (intento * 15000);
+      
+      if (intento > 0) {
+        const delay = Math.min(1000 * Math.pow(2, intento - 1), 8000);
+        console.log(`[pollinations-fix] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&image=${encodeURIComponent(imagenUrl)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true`;
+
+      console.log(`[pollinations-fix] Intento ${intento + 1}/${maxIntentos} - tipo: ${tipoCorreccion}`);
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(timeout),
+      });
+
+      if (!resp.ok) {
+        ultimoError = `HTTP ${resp.status}`;
+        console.warn(`[pollinations-fix] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+        
+        if ([429, 500, 502, 503, 504].includes(resp.status)) {
+          continue;
+        }
+        if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+          break;
+        }
+        continue;
+      }
+
+      const mime = resp.headers.get('content-type') || 'image/jpeg';
+      if (!mime.startsWith('image/')) {
+        ultimoError = `Content-Type inesperado: ${mime}`;
+        console.warn(`[pollinations-fix] Intento ${intento + 1} devolvio ${mime}`);
+        continue;
+      }
+
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      if (!buffer || buffer.length < 1000) {
+        ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
+        console.warn(`[pollinations-fix] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
+        continue;
+      }
+
+      const urlLocal = guardarImagenDisco(buffer, mime);
+      console.log(`[pollinations-fix] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
+      return {
+        img: {
+          url: urlLocal,
+          prompt: promptLimpio,
+          seed: seedFinal,
+          tamanoKB: Math.round(buffer.length / 1024),
+          modelo: modeloFinal,
+          ancho: anchoFinal,
+          alto: altoFinal,
+          imagenOriginal: imagenUrl,
+          tipoCorreccion,
+        },
+        error: null,
+      };
+    } catch (e) {
+      ultimoError = e.message;
+      console.warn(`[pollinations-fix] Intento ${intento + 1} fallo: ${e.message}`);
+      
+      if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
+        continue;
+      }
+      break;
+    }
+  }
+
+  console.error(`[pollinations-fix] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+  return { img: null, error: ultimoError || 'Pollinations fix fallo' };
+}
+
+// Función para generar escenarios alternativos para imágenes existentes
+async function generarEscenariosAlternativos(imagenUrl, escenario, opciones = {}) {
+  if (!imagenUrl) return { img: null, error: 'URL de imagen requerida' };
+  if (!escenario) return { img: null, error: 'Escenario requerido' };
+
+  const seedFinal = (typeof opciones.seed === 'number' && opciones.seed > 0) ? opciones.seed : Math.floor(Math.random() * 1000000);
+  const anchoFinal = Number.isInteger(opciones.ancho) ? opciones.ancho : 1024;
+  const altoFinal = Number.isInteger(opciones.alto) ? opciones.alto : 1024;
+
+  // Prompt para mantener el sujeto pero cambiar el escenario
+  const promptLimpio = `keep the main subject exactly as is, but change the background to: ${escenario}. Maintain the same subject, pose, and style, only modify the environment/background`;
+  const modeloFinal = 'kontext';
+  const maxIntentos = 4;
+  let ultimoError = null;
+
+  for (let intento = 0; intento < maxIntentos; intento++) {
+    try {
+      const timeout = 60000 + (intento * 15000);
+      
+      if (intento > 0) {
+        const delay = Math.min(1000 * Math.pow(2, intento - 1), 8000);
+        console.log(`[pollinations-scenario] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&image=${encodeURIComponent(imagenUrl)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true`;
+
+      console.log(`[pollinations-scenario] Intento ${intento + 1}/${maxIntentos} - escenario: "${escenario.slice(0, 50)}..."`);
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(timeout),
+      });
+
+      if (!resp.ok) {
+        ultimoError = `HTTP ${resp.status}`;
+        console.warn(`[pollinations-scenario] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+        
+        if ([429, 500, 502, 503, 504].includes(resp.status)) {
+          continue;
+        }
+        if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+          break;
+        }
+        continue;
+      }
+
+      const mime = resp.headers.get('content-type') || 'image/jpeg';
+      if (!mime.startsWith('image/')) {
+        ultimoError = `Content-Type inesperado: ${mime}`;
+        console.warn(`[pollinations-scenario] Intento ${intento + 1} devolvio ${mime}`);
+        continue;
+      }
+
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      if (!buffer || buffer.length < 1000) {
+        ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
+        console.warn(`[pollinations-scenario] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
+        continue;
+      }
+
+      const urlLocal = guardarImagenDisco(buffer, mime);
+      console.log(`[pollinations-scenario] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
+      return {
+        img: {
+          url: urlLocal,
+          prompt: promptLimpio,
+          seed: seedFinal,
+          tamanoKB: Math.round(buffer.length / 1024),
+          modelo: modeloFinal,
+          ancho: anchoFinal,
+          alto: altoFinal,
+          imagenOriginal: imagenUrl,
+          escenario,
+        },
+        error: null,
+      };
+    } catch (e) {
+      ultimoError = e.message;
+      console.warn(`[pollinations-scenario] Intento ${intento + 1} fallo: ${e.message}`);
+      
+      if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
+        continue;
+      }
+      break;
+    }
+  }
+
+  console.error(`[pollinations-scenario] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+  return { img: null, error: ultimoError || 'Pollinations scenario fallo' };
+}
+
+// Función para generar logos e iconos especializados
+async function generarLogoIcono(descripcion, tipo, opciones = {}) {
+  const descripcionLimpia = (descripcion || '').trim().slice(0, 150);
+  if (!descripcionLimpia) return { img: null, error: 'Descripción requerida' };
+
+  const tipoFinal = tipo || 'logo'; // 'logo', 'icono', 'app_icon', 'favicon'
+  const seedFinal = (typeof opciones.seed === 'number' && opciones.seed > 0) ? opciones.seed : Math.floor(Math.random() * 1000000);
+  
+  // Tamaños específicos según tipo
+  const tamaños = {
+    logo: { ancho: 1024, alto: 1024 },
+    icono: { ancho: 512, alto: 512 },
+    app_icon: { ancho: 1024, alto: 1024 },
+    favicon: { ancho: 256, alto: 256 },
+  };
+  const { ancho: anchoFinal, alto: altoFinal } = tamaños[tipoFinal] || tamaños.logo;
+
+  // Prompts especializados según tipo
+  const promptsPorTipo = {
+    logo: `professional logo design for ${descripcionLimpia}, minimalist, clean, modern, vector style, high quality, suitable for branding`,
+    icono: `simple icon design for ${descripcionLimpia}, minimalist, clean, recognizable at small sizes, flat design, modern`,
+    app_icon: `app icon design for ${descripcionLimpia}, modern, clean, appealing, suitable for mobile app store, high quality`,
+    favicon: `favicon design for ${descripcionLimpia}, extremely simple, recognizable at 16x16 pixels, clean, minimal`,
+  };
+
+  const promptLimpio = promptsPorTipo[tipoFinal] || promptsPorTipo.logo;
+  const modeloFinal = 'flux';
+  const maxIntentos = 4;
+  let ultimoError = null;
+
+  for (let intento = 0; intento < maxIntentos; intento++) {
+    try {
+      const timeout = 45000 + (intento * 10000);
+      
+      if (intento > 0) {
+        const delay = Math.min(1000 * Math.pow(2, intento - 1), 8000);
+        console.log(`[pollinations-logo] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true&enhance=true`;
+
+      console.log(`[pollinations-logo] Intento ${intento + 1}/${maxIntentos} - tipo: ${tipoFinal}, descripción: "${descripcionLimpio.slice(0, 50)}..."`);
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(timeout),
+      });
+
+      if (!resp.ok) {
+        ultimoError = `HTTP ${resp.status}`;
+        console.warn(`[pollinations-logo] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+        
+        if ([429, 500, 502, 503, 504].includes(resp.status)) {
+          continue;
+        }
+        if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+          break;
+        }
+        continue;
+      }
+
+      const mime = resp.headers.get('content-type') || 'image/jpeg';
+      if (!mime.startsWith('image/')) {
+        ultimoError = `Content-Type inesperado: ${mime}`;
+        console.warn(`[pollinations-logo] Intento ${intento + 1} devolvio ${mime}`);
+        continue;
+      }
+
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      if (!buffer || buffer.length < 1000) {
+        ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
+        console.warn(`[pollinations-logo] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
+        continue;
+      }
+
+      const urlLocal = guardarImagenDisco(buffer, mime);
+      console.log(`[pollinations-logo] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
+      return {
+        img: {
+          url: urlLocal,
+          prompt: promptLimpio,
+          seed: seedFinal,
+          tamanoKB: Math.round(buffer.length / 1024),
+          modelo: modeloFinal,
+          ancho: anchoFinal,
+          alto: altoFinal,
+          tipo: tipoFinal,
+          descripcion: descripcionLimpia,
+        },
+        error: null,
+      };
+    } catch (e) {
+      ultimoError = e.message;
+      console.warn(`[pollinations-logo] Intento ${intento + 1} fallo: ${e.message}`);
+      
+      if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
+        continue;
+      }
+      break;
+    }
+  }
+
+  console.error(`[pollinations-logo] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+  return { img: null, error: ultimoError || 'Pollinations logo fallo' };
+}
+
+// Estilos predefinidos de Awesome-GPT4o-Image-Prompts
+const ESTILOS_IMAGEN = {
+  '3d': {
+    nombre: '3D',
+    prompt: '3D style, volumetric lighting, depth, dimensional, 3D render',
+  },
+  'miniatura': {
+    nombre: 'Miniatura',
+    prompt: 'miniature scene, tiny, small scale, detailed miniature, diorama',
+  },
+  'escultura': {
+    nombre: 'Escultura',
+    prompt: 'sculpture, carved, statue, 3D art, sculpted, artistic sculpture',
+  },
+  'editorial': {
+    nombre: 'Editorial',
+    prompt: 'editorial photography, magazine style, professional photography, high-end editorial',
+  },
+  'isometrico': {
+    nombre: 'Isométrico',
+    prompt: 'isometric view, isometric perspective, 3D isometric, angled view',
+  },
+  'claymation': {
+    nombre: 'Claymation',
+    prompt: 'claymation style, clay texture, stop motion animation style, clay art',
+  },
+  'low_poly': {
+    nombre: 'Low Poly',
+    prompt: 'low poly style, geometric, polygon art, minimalist 3D',
+  },
+  'watercolor': {
+    nombre: 'Aquarela',
+    prompt: 'watercolor painting, watercolor art, painted, artistic watercolor',
+  },
+  'pixel_art': {
+    nombre: 'Pixel Art',
+    prompt: 'pixel art, 8-bit style, retro pixel art, pixelated',
+  },
+  'neon': {
+    nombre: 'Neón',
+    prompt: 'neon style, glowing, neon lights, cyberpunk aesthetic, vibrant colors',
+  },
+  'minimalista': {
+    nombre: 'Minimalista',
+    prompt: 'minimalist, clean, simple, minimal design, elegant minimalism',
+  },
+  'realista': {
+    nombre: 'Realista',
+    prompt: 'photorealistic, hyperrealistic, realistic, photo-like, detailed realism',
+  },
+  'anime': {
+    nombre: 'Anime',
+    prompt: 'anime style, manga art, Japanese animation style, anime illustration',
+  },
+  'comic': {
+    nombre: 'Comic',
+    prompt: 'comic book style, graphic novel, comic art, illustrated',
+  },
+  'vintage': {
+    nombre: 'Vintage',
+    prompt: 'vintage style, retro, old-fashioned, nostalgic, classic aesthetic',
+  },
+};
+
+// Función para aplicar estilo predefinido a un prompt
+function aplicarEstiloPrompt(prompt, estilo) {
+  if (!estilo || !ESTILOS_IMAGEN[estilo]) return prompt;
+  const estiloInfo = ESTILOS_IMAGEN[estilo];
+  return `${prompt}, ${estiloInfo.prompt}`;
 }
 
 function detectarGeneracionImagen(mensaje) {
