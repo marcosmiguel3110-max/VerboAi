@@ -5020,12 +5020,43 @@ function aplicarEstiloPrompt(prompt, estilo) {
 function detectarGeneracionImagen(mensaje) {
   if (!mensaje || typeof mensaje !== 'string') return { esGeneracion: false };
 
-  const re = /^\s*(generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé)\s+(?:una\s+imagen\s+(?:de|del|de la|de un|de una)\s*|una\s+foto\s+(?:de|del|de la|de un|de una)\s*|un\s+dibujo\s+(?:de|del|de la|de un|de una)\s*|imagen\s+(?:de|del|de la|de un|de una)\s*|foto\s+(?:de|del|de la|de un|de una)\s*)?(.+)$/i;
-  const m = mensaje.match(re);
-  if (!m) return { esGeneracion: false };
-  const prompt = (m[2] || '').trim();
-  if (!prompt || prompt.length < 3) return { esGeneracion: false };
-  return { esGeneracion: true, prompt: prompt.slice(0, 200) };
+  // Detección mejorada: busca descripciones visuales sin necesidad de palabras clave
+  const palabrasVisuales = [
+    'imagen', 'foto', 'dibujo', 'pintura', 'ilustración', 'ilustracion', 'gráfico', 'grafico',
+    'paisaje', 'retrato', 'escena', 'personaje', 'animal', 'objeto', 'lugar',
+    'color', 'estilo', 'diseño', 'logo', 'icono', 'fondo', 'ambiente',
+    'generame', 'generáme', 'genera', 'generá', 'generar', 'dibujame', 'dibújame', 'dibuja', 'dibujá',
+    'haceme', 'hacéme', 'hacer', 'hacé', 'crea', 'creame', 'creáme', 'diseñame', 'diseñáme'
+  ];
+
+  const mensajeLower = mensaje.toLowerCase();
+  const tienePalabraVisual = palabrasVisuales.some(palabra => mensajeLower.includes(palabra));
+  
+  // Si tiene palabras visuales, es probable que quiera generar una imagen
+  if (tienePalabraVisual) {
+    // Extraer el prompt eliminando palabras clave de comando
+    let prompt = mensaje;
+    const palabrasComando = /^(generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé|crea|creame|creáme|diseñame|diseñáme)\s+(?:una\s+)?(?:imagen|foto|dibujo|pintura|ilustración|ilustracion|gráfico|grafico|de|del|de la|de un|de una)?\s*/i;
+    prompt = prompt.replace(palabrasComando, '').trim();
+    
+    if (prompt.length >= 3) {
+      return { esGeneracion: true, prompt: prompt.slice(0, 200) };
+    }
+  }
+
+  // Si el mensaje es descriptivo y largo (más de 10 palabras), podría ser una solicitud de imagen
+  const palabras = mensaje.split(/\s+/).filter(p => p.length > 0);
+  if (palabras.length >= 10) {
+    // Verificar si describe algo visual
+    const descriptoresVisuales = ['rojo', 'azul', 'verde', 'amarillo', 'negro', 'blanco', 'grande', 'pequeño', 'alto', 'bajo', 'bonito', 'feo', 'nuevo', 'viejo', 'moderno', 'antiguo'];
+    const tieneDescriptor = descriptoresVisuales.some(d => mensajeLower.includes(d));
+    
+    if (tieneDescriptor) {
+      return { esGeneracion: true, prompt: mensaje.slice(0, 200) };
+    }
+  }
+
+  return { esGeneracion: false };
 }
 
 async function consultarClimaOpenMeteo(consulta) {
@@ -5585,6 +5616,145 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
   if (!mensajeOriginal && !imagenes.length) {
     return res.status(400).json({ error: 'Falta el mensaje o al menos una imagen.' });
+  }
+
+  // Si se enviaron imágenes con instrucciones, usar edición de imágenes
+  if (imagenes.length > 0 && mensajeOriginal) {
+    // Verificar si el modelo soporta generación de imágenes
+    if (configModelo.nombre === 'NewserAdvanced' || configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') {
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('X-Accel-Buffering', 'no');
+      
+      try {
+        const usuarioActualEdit = obtenerUsuarioActual(req);
+        const dbEdit = leerDB();
+        let chatEdit = chatId ? obtenerChat(dbEdit, chatId, usuarioActualEdit) : null;
+        if (!chatEdit) chatEdit = crearChat(dbEdit, usuarioActualEdit);
+        
+        chatEdit.mensajes.push({
+          role: 'user',
+          contenidoTexto: mensajeOriginal,
+          imagenes: imagenesGuardadasUrls,
+          fecha: new Date().toISOString(),
+        });
+        
+        res.write(JSON.stringify({ type: 'chunk', text: '🎨 Editando imagen...' }) + '\n');
+        
+        // Usar la primera imagen para edición
+        const imagenUrl = imagenesGuardadasUrls[0];
+        const resultadoEdicion = await editarImagenPollinations(mensajeOriginal, imagenUrl);
+        
+        if (resultadoEdicion.img) {
+          chatEdit.mensajes.push({
+            role: 'assistant',
+            contenidoTexto: `Imagen editada: ${mensajeOriginal}`,
+            imagenes: [resultadoEdicion.img.url],
+            fecha: new Date().toISOString(),
+          });
+          
+          res.write(JSON.stringify({ 
+            type: 'chunk', 
+            text: '✅ Imagen editada exitosamente.',
+            imagen: resultadoEdicion.img.url 
+          }) + '\n');
+        } else {
+          chatEdit.mensajes.push({
+            role: 'assistant',
+            contenidoTexto: `Error al editar imagen: ${resultadoEdicion.error}`,
+            fecha: new Date().toISOString(),
+          });
+          
+          res.write(JSON.stringify({ 
+            type: 'chunk', 
+            text: `❌ Error al editar imagen: ${resultadoEdicion.error}` 
+          }) + '\n');
+        }
+        
+        if (chatEdit.titulo === 'Nueva conversacion' && mensajeOriginal) {
+          chatEdit.titulo = mensajeOriginal.length > 40 ? mensajeOriginal.slice(0, 40) + '…' : mensajeOriginal;
+        }
+        chatEdit.actualizadoEn = new Date().toISOString();
+        guardarDB(dbEdit);
+        
+        res.write(JSON.stringify({ type: 'done', chatId: chatEdit.id }) + '\n');
+        res.end();
+      } catch (e) {
+        console.error('[chat-edit] Error:', e);
+        if (!res.writableEnded) {
+          res.write(JSON.stringify({ type: 'chunk', text: `❌ Error: ${e.message}` }) + '\n');
+          res.end();
+        }
+      }
+      return;
+    }
+  }
+
+  // Si solo se envió imagen sin texto, ofrecer corrección automática
+  if (imagenes.length > 0 && !mensajeOriginal) {
+    if (configModelo.nombre === 'NewserAdvanced' || configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') {
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('X-Accel-Buffering', 'no');
+      
+      try {
+        const usuarioActualFix = obtenerUsuarioActual(req);
+        const dbFix = leerDB();
+        let chatFix = chatId ? obtenerChat(dbFix, chatId, usuarioActualFix) : null;
+        if (!chatFix) chatFix = crearChat(dbFix, usuarioActualFix);
+        
+        chatFix.mensajes.push({
+          role: 'user',
+          contenidoTexto: '[Imagen enviada]',
+          imagenes: imagenesGuardadasUrls,
+          fecha: new Date().toISOString(),
+        });
+        
+        res.write(JSON.stringify({ type: 'chunk', text: '🔍 Analizando imagen para correcciones...' }) + '\n');
+        
+        const imagenUrl = imagenesGuardadasUrls[0];
+        const resultadoCorreccion = await corregirImperfeccionesImagen(imagenUrl, { tipo: 'general' });
+        
+        if (resultadoCorreccion.img) {
+          chatFix.mensajes.push({
+            role: 'assistant',
+            contenidoTexto: 'Imagen corregida automáticamente (imperfecciones visuales, calidad mejorada)',
+            imagenes: [resultadoCorreccion.img.url],
+            fecha: new Date().toISOString(),
+          });
+          
+          res.write(JSON.stringify({ 
+            type: 'chunk', 
+            text: '✅ Imagen corregida automáticamente.',
+            imagen: resultadoCorreccion.img.url 
+          }) + '\n');
+        } else {
+          chatFix.mensajes.push({
+            role: 'assistant',
+            contenidoTexto: `Error al corregir imagen: ${resultadoCorreccion.error}`,
+            fecha: new Date().toISOString(),
+          });
+          
+          res.write(JSON.stringify({ 
+            type: 'chunk', 
+            text: `❌ Error al corregir imagen: ${resultadoCorreccion.error}` 
+          }) + '\n');
+        }
+        
+        chatFix.actualizadoEn = new Date().toISOString();
+        guardarDB(dbFix);
+        
+        res.write(JSON.stringify({ type: 'done', chatId: chatFix.id }) + '\n');
+        res.end();
+      } catch (e) {
+        console.error('[chat-fix] Error:', e);
+        if (!res.writableEnded) {
+          res.write(JSON.stringify({ type: 'chunk', text: `❌ Error: ${e.message}` }) + '\n');
+          res.end();
+        }
+      }
+      return;
+    }
   }
 
   const usuarioActualRateLimit = obtenerUsuarioActual(req);
