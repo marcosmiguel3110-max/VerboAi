@@ -295,11 +295,17 @@ const MODELOS_DISPONIBLES = {
       'meta-llama/llama-3.3-70b-instruct:free',
       'nvidia/nemotron-3-nano-30b-a3b:free',
       'z-ai/glm-4.5-air:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'cohere/north-mini-code:free',
+      'qwen/qwen3-coder:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
     ],
     modeloOpenRouterVision: 'google/gemma-4-26b-a4b-it:free',
     modelosOpenRouterVision: [
       'google/gemma-4-26b-a4b-it:free',
       'nvidia/nemotron-nano-12b-v2-vl:free',
+      'nvidia/nemotron-3.5-content-safety:free',
     ],
     costoCreditos: 5,
     rateLimitMax: 5,
@@ -314,18 +320,28 @@ const MODELOS_DISPONIBLES = {
     modeloOpenRouter: 'nvidia/nemotron-3-super-120b-a12b:free',
     modelosOpenRouterTexto: [
       'nvidia/nemotron-3-super-120b-a12b:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
       'nvidia/nemotron-3-nano-30b-a3b:free',
       'meta-llama/llama-3.3-70b-instruct:free',
+      'cohere/north-mini-code:free',
+      'qwen/qwen3-coder:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
+      'poolside/laguna-m.1:free',
+      'poolside/laguna-xs-2.1:free',
     ],
-    modeloOpenRouterRazonamiento: 'qwen/qwen3-next-80b-a3b-instruct:free',
+    modeloOpenRouterRazonamiento: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
     modelosOpenRouterRazonamiento: [
-      'qwen/qwen3-next-80b-a3b-instruct:free',
       'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      'cohere/north-mini-code:free',
+      'qwen/qwen3-coder:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
     ],
     modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
     modelosOpenRouterVision: [
       'google/gemma-4-31b-it:free',
+      'google/gemma-4-26b-a4b-it:free',
       'nvidia/nemotron-nano-12b-v2-vl:free',
+      'nvidia/nemotron-3.5-content-safety:free',
     ],
     costoCreditos: 10,
     rateLimitMax: 3,
@@ -336,23 +352,34 @@ const MODELOS_DISPONIBLES = {
   },
   NewserPro: {
     nombre: 'NewserPro',
-    descripcion: 'Exclusivo admin. Razonamiento profundo, ejecuta codigo real, busca en la web y genera imagenes en alta calidad. 50% de la potencia de Admin pero supera a Advanced1.5.',
+    descripcion: 'Exclusivo admin. Razamiento profundo, ejecuta codigo real, busca en la web y genera imagenes en alta calidad. 50% de la potencia de Admin pero supera a Advanced1.5.',
     modeloOpenRouter: 'nvidia/nemotron-3-super-120b-a12b:free',
     modelosOpenRouterTexto: [
       'nvidia/nemotron-3-super-120b-a12b:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
       'nvidia/nemotron-3-nano-30b-a3b:free',
       'meta-llama/llama-3.3-70b-instruct:free',
-      'qwen/qwen3-next-80b-a3b-instruct:free',
-    ],
-    modeloOpenRouterRazonamiento: 'qwen/qwen3-next-80b-a3b-instruct:free',
-    modelosOpenRouterRazonamiento: [
-      'qwen/qwen3-next-80b-a3b-instruct:free',
+      'cohere/north-mini-code:free',
+      'qwen/qwen3-coder:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
+      'poolside/laguna-m.1:free',
+      'poolside/laguna-xs-2.1:free',
       'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    ],
+    modeloOpenRouterRazonamiento: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    modelosOpenRouterRazonamiento: [
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      'cohere/north-mini-code:free',
+      'qwen/qwen3-coder:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
     ],
     modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
     modelosOpenRouterVision: [
       'google/gemma-4-31b-it:free',
+      'google/gemma-4-26b-a4b-it:free',
       'nvidia/nemotron-nano-12b-v2-vl:free',
+      'nvidia/nemotron-3.5-content-safety:free',
     ],
     costoCreditos: 0,
     rateLimitMax: 5,
@@ -379,12 +406,18 @@ const MODELOS_DISPONIBLES = {
       'poolside/laguna-m.1:free',
       'poolside/laguna-xs-2.1:free',
       'qwen/qwen3-coder:free',
-    ],
-    modeloOpenRouterRazonamiento: 'qwen/qwen3-next-80b-a3b-instruct:free',
-    modelosOpenRouterRazonamiento: [
-      'qwen/qwen3-next-80b-a3b-instruct:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
       'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      'z-ai/glm-4.5-air:free',
+    ],
+    modeloOpenRouterRazonamiento: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    modelosOpenRouterRazonamiento: [
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      'cohere/north-mini-code:free',
+      'qwen/qwen3-coder:free',
       'nvidia/nemotron-3-super-120b-a12b:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'poolside/laguna-m.1:free',
     ],
     modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
     modelosOpenRouterVision: [
@@ -494,25 +527,54 @@ function esperarMinimo(promesa, ms) {
 // Devuelve siempre el mismo shape: { ok, texto, modelo, capa } donde
 // capa es 'openrouter' | 'pollinations' | null.
 async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, enviar = () => {}, opciones = {}) {
-  // PRIMERO: Intentar OpenRouter free
+  // PRIMERO: Intentar OpenRouter free con cascada mejorada
   const lista = (Array.isArray(modelos) ? modelos : [modelos]).filter((v, i, a) => v && a.indexOf(v) === i);
   let ultimoError = null;
+  let modelosProbados = 0;
 
   for (const modelo of lista) {
-    for (let intento = 1; intento <= 2; intento++) {
+    modelosProbados++;
+    // Más reintentos por modelo con backoff exponencial
+    const maxIntentosPorModelo = 3;
+    
+    for (let intento = 1; intento <= maxIntentosPorModelo; intento++) {
       if (opciones.signal?.aborted) return { ok: false, error: 'cancelado', capa: null };
+      
+      // Backoff exponencial entre reintentos: 1s, 2s, 4s
+      if (intento > 1) {
+        const delay = Math.min(1000 * Math.pow(2, intento - 2), 4000);
+        console.log(`[llamarModeloGratis] Esperando ${delay}ms antes del reintento ${intento}/${maxIntentosPorModelo} para ${modelo}...`);
+        enviar({ type: 'retry', modelo, intento, maxIntentos: maxIntentosPorModelo, espera: delay / 1000 });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      
       const r = await llamarOpenRouterFree(messages, systemPrompt, modelo, opciones);
-      if (r.ok) return { ok: true, texto: r.texto, modelo: r.modelo, capa: 'openrouter' };
+      if (r.ok) {
+        console.log(`[llamarModeloGratis] EXITO con ${modelo} (modelo ${modelosProbados}/${lista.length})`);
+        return { ok: true, texto: r.texto, modelo: r.modelo, capa: 'openrouter' };
+      }
+      
       ultimoError = r.error;
       if (r.error === 'cancelado') return { ok: false, error: 'cancelado', capa: null };
-      if (r.error === 'HTTP 429' && intento < 2) {
-        enviar({ type: 'retry', modelo, intento, maxIntentos: 2, espera: 3 });
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+      
+      // Si es 404 (modelo no disponible), saltar al siguiente modelo inmediatamente
+      if (typeof r.error === 'string' && r.error.includes('HTTP 404')) {
+        console.log(`[llamarModeloGratis] Modelo ${modelo} no disponible (404), probando siguiente...`);
+        break;
+      }
+      
+      // Si es 429 y no es el último intento, reintentar con backoff
+      if (typeof r.error === 'string' && r.error.includes('HTTP 429') && intento < maxIntentosPorModelo) {
+        console.log(`[llamarModeloGratis] Rate limit en ${modelo}, reintentando...`);
         continue;
       }
+      
+      // Para otros errores, pasar al siguiente modelo
       break;
     }
   }
+
+  console.log(`[llamarModeloGratis] ${modelosProbados}/${lista.length} modelos probados, todos fallaron. Último error: ${ultimoError}`);
 
   // SEGUNDO: Si OpenRouter falló, intentar Pollinations gemini-2.0-flash (unlimited, no auth)
   if (!opciones.signal?.aborted) {
