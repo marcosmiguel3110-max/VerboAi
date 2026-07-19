@@ -540,8 +540,13 @@ function cargarAnuncioCreditos() {
     return;
   }
 
+  // Agregar timestamp único para forzar que AdSense trate el slot como nuevo cada vez
+  const timestamp = Date.now();
+  const uniqueId = `adsense-${timestamp}`;
+
   const ins = document.createElement('ins');
   ins.className = 'adsbygoogle';
+  ins.id = uniqueId;
   ins.style.display = 'block';
   ins.style.width = '336px';
   ins.style.height = '280px';
@@ -549,10 +554,12 @@ function cargarAnuncioCreditos() {
   ins.setAttribute('data-ad-slot', adSlot);
   ins.setAttribute('data-ad-format', 'auto');
   ins.setAttribute('data-full-width-responsive', 'true');
+  ins.setAttribute('data-ad-break-test', 'on'); // Forzar recarga
   anuncioCreditosContenedor.appendChild(ins);
 
   try {
     (window.adsbygoogle = window.adsbygoogle || []).push({});
+    console.log(`[AdSense] Anuncio cargado con ID único: ${uniqueId}`);
   } catch (e) {
     console.error('No se pudo cargar el anuncio de AdSense:', e);
   }
