@@ -548,14 +548,99 @@ const OPENROUTER_FREE_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_FREE_ENABLED = (process.env.OPENROUTER_FREE_ENABLED || 'true').toLowerCase() === 'true';
 const OPENROUTER_FREE_TIMEOUT = parseInt(process.env.OPENROUTER_FREE_TIMEOUT || '60000', 10);
 // API keys de OpenRouter (múltiples para rotación cuando una se satura)
-const OPENROUTER_API_KEYS = (process.env.OPENROUTER_API_KEYS || '').split(',').map(k => k.trim()).filter(k => k);
+const OPENROUTER_API_KEYS = (process.env.OPENROUTER_API_KEYS || '').split(',').map(k => k.trim()).filter(k =>);
 // Índice actual para rotación de keys
 let currentKeyIndex = 0;
-// Contadores de peticiones por key
+// Contadores de peticiones por key con cooldown
 const keyStats = {};
+const KEY_COOLDOWN_DURATION = 5 * 60 * 1000; // 5 minutos cooldown para keys saturadas
+const KEY_FAILURE_THRESHOLD = 5; // Rotar si hay 5 fallos consecutivos
+
 OPENROUTER_API_KEYS.forEach((key, i) => {
-  keyStats[i] = { requests: 0, successes: 0, failures: 0, rateLimits: 0 };
+  keyStats[i] = { 
+    requests: 0, 
+    successes: 0, 
+    failures: 0, 
+    rateLimits: 0,
+    consecutiveFailures: 0,
+    cooldownUntil: 0,
+    lastUsed: 0
+  };
 });
+
+// Función para seleccionar la mejor key disponible
+function selectBestKey() {
+  if (OPENROUTER_API_KEYS.length === 0) return null;
+  
+  const now = Date.now();
+  const availableKeys = [];
+
+  // Filtrar keys que no están en cooldown
+  for (let i = 0; i < OPENROUTER_API_KEYS.length; i++) {
+    const stats = keyStats[i];
+    if (now > stats.cooldownUntil) {
+      availableKeys.push({
+        index: i,
+        stats,
+        score: stats.successes / (stats.requests || 1) - (stats.rateLimits * 0.5) - (stats.consecutiveFailures * 0.3)
+      });
+    }
+  }
+
+  // Si no hay keys disponibles (todas en cooldown), usar la que tenga cooldown más cercano
+  if (availableKeys.length === 0) {
+    let minCooldown = Infinity;
+    let bestIndex = 0;
+    for (let i = 0; i < OPENROUTER_API_KEYS.length; i++) {
+      const timeUntilCooldown = keyStats[i].cooldownUntil - now;
+      if (timeUntilCooldown < minCooldown) {
+        minCooldown = timeUntilCooldown;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  }
+
+  // Seleccionar la key con mejor score
+  availableKeys.sort((a, b) => b.score - a.score);
+  return availableKeys[0].index;
+}
+
+// Función para marcar una key como saturada (cooldown)
+function markKeyCooldown(index) {
+  if (index >= 0 && index < OPENROUTER_API_KEYS.length) {
+    keyStats[index].cooldownUntil = Date.now() + KEY_COOLDOWN_DURATION;
+    keyStats[index].consecutiveFailures = 0;
+    console.log(`[openrouter-free] Key ${index} en cooldown por ${KEY_COOLDOWN_DURATION / 1000}s`);
+  }
+}
+
+// Función para actualizar estadísticas de una key
+function updateKeyStats(index, success, isRateLimit) {
+  if (index >= 0 && index < OPENROUTER_API_KEYS.length) {
+    const stats = keyStats[index];
+    stats.lastUsed = Date.now();
+    
+    if (success) {
+      stats.successes++;
+      stats.consecutiveFailures = 0;
+    } else {
+      stats.failures++;
+      stats.consecutiveFailures++;
+      
+      // Si hay demasiados fallos consecutivos, poner en cooldown
+      if (stats.consecutiveFailures >= KEY_FAILURE_THRESHOLD) {
+        markKeyCooldown(index);
+      }
+    }
+    
+    if (isRateLimit) {
+      stats.rateLimits++;
+      // Poner en cooldown inmediatamente si hay rate limit
+      markKeyCooldown(index);
+    }
+  }
+}
 
 // Log de configuración de keys al iniciar
 console.log(`[CONFIG] OpenRouter API Keys cargadas: ${OPENROUTER_API_KEYS.length}`);
@@ -588,12 +673,14 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
 
       const headers = { 'Content-Type': 'application/json' };
       
-      // Usar API key si hay disponibles (con rotación)
+      // Usar API key si hay disponibles (con selección inteligente)
+      let keyIndex = null;
       if (OPENROUTER_API_KEYS.length > 0) {
-        const key = OPENROUTER_API_KEYS[currentKeyIndex];
+        keyIndex = selectBestKey();
+        const key = OPENROUTER_API_KEYS[keyIndex];
         headers['Authorization'] = `Bearer ${key}`;
-        keyStats[currentKeyIndex].requests++;
-        console.log(`[openrouter-free] Intento ${intento + 1}/${maxIntentos} - key index ${currentKeyIndex}/${OPENROUTER_API_KEYS.length} (total requests: ${keyStats[currentKeyIndex].requests})`);
+        keyStats[keyIndex].requests++;
+        console.log(`[openrouter-free] Intento ${intento + 1}/${maxIntentos} - key index ${keyIndex}/${OPENROUTER_API_KEYS.length} (total requests: ${keyStats[keyIndex].requests}, score: ${(keyStats[keyIndex].successes / (keyStats[keyIndex].requests || 1)).toFixed(2)})`);
       }
       
       // HTTP-Referer y X-Title ayudan a OpenRouter a identificar la app (opcional)
@@ -620,18 +707,12 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
         console.error(`[openrouter-free] Intento ${intento + 1} HTTP ${resp.status}: ${detalle}`);
         ultimoError = `HTTP ${resp.status}`;
         
-        if (OPENROUTER_API_KEYS.length > 0) {
-          keyStats[currentKeyIndex].failures++;
+        if (keyIndex !== null) {
+          updateKeyStats(keyIndex, false, resp.status === 429);
+          
           if (resp.status === 429) {
-            keyStats[currentKeyIndex].rateLimits++;
-            console.log(`[openrouter-free] Key ${currentKeyIndex} stats: ${keyStats[currentKeyIndex].requests} requests, ${keyStats[currentKeyIndex].successes} success, ${keyStats[currentKeyIndex].failures} failures, ${keyStats[currentKeyIndex].rateLimits} rate limits`);
-            
-            // Si es 429 y hay más keys, rotar inmediatamente
-            if (OPENROUTER_API_KEYS.length > 1) {
-              currentKeyIndex = (currentKeyIndex + 1) % OPENROUTER_API_KEYS.length;
-              console.log(`[openrouter-free] HTTP 429 - rotando a key index ${currentKeyIndex}`);
-              continue; // Reintentar con la nueva key
-            }
+            console.log(`[openrouter-free] Key ${keyIndex} stats: ${keyStats[keyIndex].requests} requests, ${keyStats[keyIndex].successes} success, ${keyStats[keyIndex].failures} failures, ${keyStats[keyIndex].rateLimits} rate limits`);
+            continue; // Reintentar con nueva key seleccionada automáticamente
           }
         }
         
@@ -650,20 +731,20 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
       const texto = resp.data?.choices?.[0]?.message?.content || '';
       if (!texto || !texto.trim()) {
         console.error('[openrouter-free] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
-        if (OPENROUTER_API_KEYS.length > 0) keyStats[currentKeyIndex].failures++;
+        if (keyIndex !== null) updateKeyStats(keyIndex, false, false);
         ultimoError = 'Respuesta vacia de OpenRouter';
         continue; // Reintentar si la respuesta está vacía
       }
 
-      if (OPENROUTER_API_KEYS.length > 0) keyStats[currentKeyIndex].successes++;
+      if (keyIndex !== null) updateKeyStats(keyIndex, true, false);
       console.log(`[openrouter-free] OK - ${texto.length} chars por ${model}`);
       return { ok: true, texto: texto.trim(), modelo: model };
     } catch (e) {
       ultimoError = e.message;
       console.warn(`[openrouter-free] Intento ${intento + 1} fallo: ${e.message}`);
       
-      if (OPENROUTER_API_KEYS.length > 0) {
-        keyStats[currentKeyIndex].failures++;
+      if (keyIndex !== null) {
+        updateKeyStats(keyIndex, false, false);
       }
       
       // Reintentar en errores de red/timeout
@@ -2686,10 +2767,25 @@ function leerProyectosVerboCode(usuario) {
   }
 }
 
+// Cache en memoria para proyectos VerboCode (reduce lecturas de disco)
+const verboCodeCache = new Map();
+const VERBOCODE_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
 function leerProyectoVerboCode(id, usuario) {
   try {
+    // Verificar cache primero
+    const cached = verboCodeCache.get(id);
+    if (cached && Date.now() - cached.timestamp < VERBOCODE_CACHE_TTL) {
+      if (cached.data.usuario !== usuario) return null;
+      return cached.data;
+    }
+
     const data = JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, `${id}.json`), 'utf-8'));
     if (data.usuario !== usuario) return null;
+    
+    // Guardar en cache
+    verboCodeCache.set(id, { data, timestamp: Date.now() });
+    
     return data;
   } catch (e) {
     return null;
@@ -2700,12 +2796,26 @@ function guardarProyectoVerboCode(proyecto) {
   proyecto.actualizadoEn = new Date().toISOString();
   try {
     fs.writeFileSync(path.join(VERBOCODE_DIR, `${proyecto.id}.json`), JSON.stringify(proyecto, null, 2));
+    
+    // Actualizar cache
+    verboCodeCache.set(proyecto.id, { data: proyecto, timestamp: Date.now() });
+    
     // Guardar también en MongoDB para que persista al reiniciar Render
     guardarEnMongoBackground('verbocode-' + proyecto.id, proyecto);
   } catch (e) {
     console.error('[verbocode] Error guardando proyecto:', e.message);
   }
 }
+
+// Limpiar cache de VerboCode periódicamente
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, cached] of verboCodeCache.entries()) {
+    if (now - cached.timestamp > VERBOCODE_CACHE_TTL) {
+      verboCodeCache.delete(id);
+    }
+  }
+}, 2 * 60 * 1000); // Limpiar cada 2 minutos
 
 // Cargar proyectos desde MongoDB al arrancar (para que persistan al reiniciar)
 async function cargarProyectosVerboCodeDesdeMongo() {
@@ -4097,7 +4207,7 @@ async function sintetizarInvestigacion(query, wiki, versiculos, webResultados, m
 async function buscarImagenesWeb(query) {
   try {
     const url = `https://es.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=10&prop=pageimages|info&piprop=thumbnail&pithumbsize=600&inprop=url&format=json&origin=*`;
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!resp.ok) return [];
     const data = await resp.json();
     const paginas = data && data.query && data.query.pages;
@@ -4118,7 +4228,7 @@ async function buscarImagenesWeb(query) {
 async function buscarImagenesParaDescargar(query, cantidad) {
   try {
     const url = `https://es.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=${cantidad + 4}&prop=pageimages|info&piprop=thumbnail&pithumbsize=1400&inprop=url&format=json&origin=*`;
-    const resp = await fetch(url, { headers: HEADERS_BIBLIA });
+    const resp = await fetch(url, { headers: HEADERS_BIBLIA, signal: AbortSignal.timeout(12000) });
     if (!resp.ok) return [];
     const data = await resp.json();
     const paginas = data && data.query && data.query.pages;
@@ -4134,7 +4244,7 @@ async function buscarImagenesParaDescargar(query, cantidad) {
 
 async function descargarImagenAlDisco(item) {
   try {
-    const resp = await fetch(item.url, { headers: HEADERS_BIBLIA });
+    const resp = await fetch(item.url, { headers: HEADERS_BIBLIA, signal: AbortSignal.timeout(15000) });
     if (!resp.ok) return null;
     const mime = resp.headers.get('content-type') || 'image/jpeg';
     const buffer = Buffer.from(await resp.arrayBuffer());
@@ -4798,18 +4908,49 @@ const HEADERS_BIBLIA = {
   Accept: 'application/json',
 };
 
-async function fetchBiblia(url, intentos = 2) {
+async function fetchBiblia(url, intentos = 3) {
   let ultimoError;
   for (let i = 0; i < intentos; i++) {
     try {
-      const r = await fetch(url, { headers: HEADERS_BIBLIA });
+      // Timeout con backoff: 8s, 12s, 16s
+      const timeout = 8000 + (i * 4000);
+      
+      // Delay entre reintentos con backoff exponencial
+      if (i > 0) {
+        const delay = Math.min(500 * Math.pow(2, i - 1), 2000); // 500ms, 1s max
+        console.log(`[fetchBiblia] Esperando ${delay}ms antes del reintento ${i + 1}...`);
+        await new Promise((res) => setTimeout(res, delay));
+      }
+      
+      const r = await fetch(url, { 
+        headers: HEADERS_BIBLIA,
+        signal: AbortSignal.timeout(timeout)
+      });
+      
       if (r.ok) return r;
+      
       const cuerpo = await r.text().catch(() => '');
       ultimoError = new Error(`HTTP ${r.status} ${r.statusText} -> ${cuerpo.slice(0, 200)}`);
+      
+      // Para 429/502/503/504, reintentar
+      if ([429, 502, 503, 504].includes(r.status)) {
+        continue;
+      }
+      // Para otros 4xx, no reintentar
+      if (r.status >= 400 && r.status < 500) {
+        break;
+      }
+      // Para 5xx, reintentar
+      continue;
     } catch (e) {
       ultimoError = e;
+      // Reintentar en errores de red/timeout
+      if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
+        continue;
+      }
+      // Para otros errores, no reintentar
+      break;
     }
-    if (i < intentos - 1) await new Promise((res) => setTimeout(res, 400));
   }
   throw ultimoError;
 }
