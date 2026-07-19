@@ -338,7 +338,7 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
       ultimoError = r.error;
       if (r.error === 'cancelado') return { ok: false, error: 'cancelado', capa: null };
       if (r.error === 'HTTP 429' && intento < 2) {
-        enviar({ type: 'retry', modelo, intento });
+        enviar({ type: 'retry', modelo, intento, maxIntentos: 2, espera: 3 });
         await new Promise((resolve) => setTimeout(resolve, 3000));
         continue;
       }
