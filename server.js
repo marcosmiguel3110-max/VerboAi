@@ -384,6 +384,16 @@ const OPENROUTER_API_KEYS = (process.env.OPENROUTER_API_KEYS || '').split(',').m
 // Índice actual para rotación de keys
 let currentKeyIndex = 0;
 
+// Log de configuración de keys al iniciar
+console.log(`[CONFIG] OpenRouter API Keys cargadas: ${OPENROUTER_API_KEYS.length}`);
+if (OPENROUTER_API_KEYS.length > 0) {
+  OPENROUTER_API_KEYS.forEach((key, i) => {
+    console.log(`[CONFIG] Key ${i}: ${key.substring(0, 20)}...${key.substring(key.length - 10)}`);
+  });
+} else {
+  console.log('[CONFIG] WARNING: No se detectaron API keys de OpenRouter. Usando modo sin key (límite 50/day)');
+}
+
 // Llama a OpenRouter con un modelo free (con rotación de API keys)
 async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}) {
   if (!OPENROUTER_FREE_ENABLED) return { ok: false, error: 'OpenRouter free deshabilitado' };
