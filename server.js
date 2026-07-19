@@ -2144,7 +2144,7 @@ app.post('/api/v1/chat', async (req, res) => {
 
     if (codeQueryApi) {
       try {
-        const resultado = await ejecutarCodigoJudge0(codeQueryApi.lenguaje, codeQueryApi.codigo);
+        const resultado = await ejecutarCodigoPiston(codeQueryApi.lenguaje, codeQueryApi.codigo);
         if (resultado.exito) {
           costoRealHerramientas += 1;
           herramientasResultado.push({
@@ -3014,24 +3014,22 @@ Sea conciso. Máximo 5 pasos.`;
       });
     }
 
-    // Procesar TEST (ejecutar código con Judge0 si está disponible)
+    // Procesar TEST (ejecutar código con Piston API)
     const reTest = /\[\[TEST::([^:]+?)::([\s\S]*?)\]\]/g;
     let matchTest;
     while ((matchTest = reTest.exec(textoRespuesta)) !== null) {
       const lenguaje = matchTest[1].trim().toLowerCase();
       const codigo = matchTest[2].trim();
-      // Intentar ejecutar con Judge0 si está configurado
+      // Intentar ejecutar con Piston API
       let resultadoTest = null;
       try {
-        if (process.env.JUDGE0_API_URL) {
-          const resultadoCode = await ejecutarCodigoJudge0(lenguaje, codigo);
-          if (resultadoCode.exito) {
-            resultadoTest = {
-              stdout: resultadoCode.stdout || '(sin salida)',
-              stderr: resultadoCode.stderr || '',
-              codigoSalida: resultadoCode.codigoSalida,
-            };
-          }
+        const resultadoCode = await ejecutarCodigoPiston(lenguaje, codigo);
+        if (resultadoCode.exito) {
+          resultadoTest = {
+            stdout: resultadoCode.stdout || '(sin salida)',
+            stderr: resultadoCode.stderr || '',
+            exitCode: resultadoCode.exitCode,
+          };
         }
       } catch (e) {
         resultadoTest = { error: e.message };
@@ -3041,7 +3039,7 @@ Sea conciso. Máximo 5 pasos.`;
         lenguaje,
         codigo: codigo.slice(0, 200) + (codigo.length > 200 ? '...' : ''),
         resultado: resultadoTest,
-        descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Judge0 no configurado)'}`,
+        descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Piston API)'}`,
       });
     }
 
@@ -3314,7 +3312,7 @@ Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real d
 Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
 rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r.
 Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
-Esto ejecuta el codigo REAL en un sandbox (Judge0 API) y el resultado real (stdout/stderr) se agrega
+Esto ejecuta el codigo REAL en un sandbox (Piston API) y el resultado real (stdout/stderr) se agrega
 despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
 esta herramienta en vez de imaginarte el resultado.
 
@@ -3427,7 +3425,7 @@ Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real d
 Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
 rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r.
 Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
-Esto ejecuta el codigo REAL en un sandbox (Judge0 API) y el resultado real (stdout/stderr) se agrega
+Esto ejecuta el codigo REAL en un sandbox (Piston API) y el resultado real (stdout/stderr) se agrega
 despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
 esta herramienta en vez de imaginarte el resultado.
 
@@ -3516,7 +3514,7 @@ Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real d
 Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
 rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r.
 Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
-Esto ejecuta el codigo REAL en un sandbox (Judge0 API) y el resultado real (stdout/stderr) se agrega
+Esto ejecuta el codigo REAL en un sandbox (Piston API) y el resultado real (stdout/stderr) se agrega
 despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
 esta herramienta en vez de imaginarte el resultado.
 
@@ -4221,6 +4219,91 @@ async function ejecutarCodigoJudge0(lenguaje, codigo) {
     };
   } catch (e) {
     return { exito: false, error: 'Judge0 fallo: ' + e.message };
+  }
+}
+
+// Piston API: API de ejecución de código open-source, gratuita y sin API key
+// Más estable y fácil de usar que Judge0. Soporta múltiples lenguajes.
+// Documentación: https://emkc.org/api/v2/piston
+const PISTON_API_URL = process.env.PISTON_API_URL || 'https://emkc.org/api/v2/piston';
+
+// Mapeo de lenguajes para Piston API
+const PISTON_LANGUAGE_MAP = {
+  python: { language: 'python', version: '3.10.0' },
+  javascript: { language: 'javascript', version: '18.15.0' },
+  typescript: { language: 'typescript', version: '5.0.3' },
+  java: { language: 'java', version: '15.0.2' },
+  c: { language: 'c', version: '10.2.1' },
+  cpp: { language: 'c++', version: '10.2.1' },
+  csharp: { language: 'csharp', version: '6.12.0' },
+  go: { language: 'go', version: '1.19.1' },
+  rust: { language: 'rust', version: '1.68.2' },
+  ruby: { language: 'ruby', version: '3.2.1' },
+  php: { language: 'php', version: '8.2.8' },
+  bash: { language: 'bash', version: '5.2.0' },
+  sql: { language: 'sql', version: 'sqlite3.3.0' },
+  kotlin: { language: 'kotlin', version: '1.8.20' },
+  swift: { language: 'swift', version: '5.8.0' },
+  perl: { language: 'perl', version: '5.38.0' },
+  lua: { language: 'lua', version: '5.4.6' },
+  r: { language: 'r', version: '4.3.1' },
+};
+
+async function ejecutarCodigoPiston(lenguaje, codigo) {
+  try {
+    const lang = (lenguaje || '').trim().toLowerCase();
+    const fuente = (codigo || '').replace(/\\n/g, '\n');
+    if (!lang || !fuente.trim()) return { exito: false, error: 'Falta lenguaje o codigo.' };
+    if (fuente.length > 10000) return { exito: false, error: 'El codigo es demasiado largo (max 10000 caracteres).' };
+
+    const langConfig = PISTON_LANGUAGE_MAP[lang];
+    if (!langConfig) {
+      return { exito: false, error: `Lenguaje "${lang}" no soportado por Piston. Usa: ${Object.keys(PISTON_LANGUAGE_MAP).join(', ')}.` };
+    }
+
+    const resp = await axios.post(`${PISTON_API_URL}/execute`, {
+      language: langConfig.language,
+      version: langConfig.version,
+      files: [
+        {
+          name: 'main',
+          content: fuente,
+        },
+      ],
+    }, {
+      timeout: 30000,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (resp.status !== 200) {
+      return { exito: false, error: `Piston HTTP ${resp.status}` };
+    }
+
+    const data = resp.data;
+    const run = data.run || {};
+    const compile = data.compile || {};
+
+    const stdout = run.stdout || '';
+    const stderr = run.stderr || '';
+    const compileStderr = compile.stderr || '';
+    const compileStdout = compile.stdout || '';
+
+    const salidaCompleta = [compileStdout, compileStderr, stdout, stderr].filter(Boolean).join('\n');
+    const error = (run.code !== null && run.code !== 0) ? `Exit code: ${run.code}` : null;
+
+    return {
+      exito: true,
+      lenguaje: lang,
+      version: `${langConfig.language} ${langConfig.version}`,
+      stdout: salidaCompleta || '(sin salida)',
+      stderr: stderr || compileStderr || '',
+      tiempo: run.cpu_time || 0,
+      memoria: run.memory || 0,
+      exitCode: run.code,
+      error,
+    };
+  } catch (e) {
+    return { exito: false, error: 'Piston fallo: ' + e.message };
   }
 }
 
@@ -4987,8 +5070,8 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
     if (codeQuery) {
       enviar({ type: 'investigando', query: `Ejecutando codigo (${codeQuery.lenguaje})...` });
-      enviar({ type: 'investigando_sitio', sitio: 'Judge0 API' });
-      const resultadoCode = await esperarMinimo(ejecutarCodigoJudge0(codeQuery.lenguaje, codeQuery.codigo), 900);
+      enviar({ type: 'investigando_sitio', sitio: 'Piston API' });
+      const resultadoCode = await esperarMinimo(ejecutarCodigoPiston(codeQuery.lenguaje, codeQuery.codigo), 900);
       enviar({ type: 'investigando_fin' });
 
       if (resultadoCode.exito) {
