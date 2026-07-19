@@ -12,6 +12,174 @@ const axios = require('axios');
 
 const app = express();
 
+// ============================================================
+// CACHING EN MEMORIA PARA APIs EXTERNAS
+// ============================================================
+// Cache simple en memoria para reducir llamadas a APIs externas
+// Útil para Wikipedia, Biblia, y otros endpoints que no cambian frecuentemente
+const cache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+function getCacheKey(prefix, data) {
+  const hash = crypto.createHash('md5').update(JSON.stringify(data)).digest('hex');
+  return `${prefix}:${hash}`;
+}
+
+function getCached(key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCache(key, data, ttl = CACHE_TTL) {
+  cache.set(key, {
+    data,
+    expiresAt: Date.now() + ttl,
+  });
+}
+
+// Limpiar cache cada 10 minutos para evitar crecimiento excesivo
+setInterval(() => {
+  const now = Date.now();
+  let deleted = 0;
+  for (const [key, entry] of cache.entries()) {
+    if (now > entry.expiresAt) {
+      cache.delete(key);
+      deleted++;
+    }
+  }
+  if (deleted > 0) {
+    console.log(`[cache] Limpiados ${deleted} entradas expiradas. Tamaño actual: ${cache.size}`);
+  }
+}, 10 * 60 * 1000);
+
+// ============================================================
+// QUEUE DE PETICIONES PARA EVITAR SOBRECARGA
+// ============================================================
+// Sistema simple de colas para limitar concurrencia en endpoints críticos
+const queues = new Map();
+const QUEUE_CONCURRENCY = 3; // Máximo 3 peticiones simultáneas por queue
+const QUEUE_TIMEOUT = 60000; // 60 segundos timeout en queue
+
+async function enqueue(queueName, task) {
+  if (!queues.has(queueName)) {
+    queues.set(queueName, {
+      running: 0,
+      queue: [],
+    });
+  }
+
+  const queue = queues.get(queueName);
+  
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      // Remover de la queue si timeout
+      const idx = queue.queue.indexOf(taskWrapper);
+      if (idx > -1) queue.queue.splice(idx, 1);
+      reject(new Error(`Queue timeout para ${queueName}`));
+    }, QUEUE_TIMEOUT);
+
+    const taskWrapper = {
+      task,
+      resolve: (result) => {
+        clearTimeout(timeout);
+        resolve(result);
+      },
+      reject: (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    };
+
+    queue.queue.push(taskWrapper);
+    processQueue(queueName);
+  });
+}
+
+async function processQueue(queueName) {
+  const queue = queues.get(queueName);
+  if (!queue) return;
+
+  while (queue.running < QUEUE_CONCURRENCY && queue.queue.length > 0) {
+    queue.running++;
+    const taskWrapper = queue.queue.shift();
+    
+    taskWrapper.task()
+      .then(taskWrapper.resolve)
+      .catch(taskWrapper.reject)
+      .finally(() => {
+        queue.running--;
+        processQueue(queueName);
+      });
+  }
+}
+
+// ============================================================
+// RATE LIMITING A NIVEL DE APLICACIÓN
+// ============================================================
+// Rate limiting global para prevenir abuse y proteger la aplicación
+const globalRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 1000, // Máximo 1000 peticiones por IP cada 15 minutos
+  message: { error: 'Demasiadas peticiones desde esta IP. Intentá de nuevo más tarde.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Saltar rate limit para rutas públicas y archivos estáticos
+    return req.path.startsWith('/icons/') || 
+           req.path.startsWith('/uploads/') || 
+           req.path.endsWith('.css') || 
+           req.path.endsWith('.js') || 
+           req.path.endsWith('.png') || 
+           req.path.endsWith('.jpg') || 
+           req.path.endsWith('.ico') ||
+           req.path.endsWith('.svg');
+  },
+});
+
+// Rate limit más estricto para endpoints de chat
+const chatRateLimit = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minuto
+  max: 30, // Máximo 30 mensajes por minuto
+  message: { error: 'Demasiados mensajes. Esperá un momento antes de enviar otro.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Rate limit para generación de imágenes
+const imageRateLimit = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutos
+  max: 10, // Máximo 10 imágenes cada 5 minutos
+  message: { error: 'Alcanzaste el límite de generación de imágenes. Intentá de nuevo más tarde.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Rate limit para investigación web
+const researchRateLimit = rateLimit({
+  windowMs: 2 * 60 * 1000, // 2 minutos
+  max: 15, // Máximo 15 investigaciones cada 2 minutos
+  message: { error: 'Demasiadas investigaciones web. Esperá un momento.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Rate limit para ejecución de código
+const codeRateLimit = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minuto
+  max: 20, // Máximo 20 ejecuciones por minuto
+  message: { error: 'Demasiadas ejecuciones de código. Esperá un momento.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Aplicar rate limiting global
+app.use(globalRateLimit);
+
 // Antes era "true" (confia en TODOS los proxies, lo que permite falsificar X-Forwarded-For
 // y evadir el rate limit por IP). Se deja en 1 salto: el proxy real que tenga delante
 // (Render/nginx/etc.), suficiente para que req.ip siga siendo el del cliente real.
@@ -403,90 +571,112 @@ if (OPENROUTER_API_KEYS.length > 0) {
 async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}) {
   if (!OPENROUTER_FREE_ENABLED) return { ok: false, error: 'OpenRouter free deshabilitado' };
 
-  const headers = { 'Content-Type': 'application/json' };
-  
-  // Usar API key si hay disponibles (con rotación)
-  if (OPENROUTER_API_KEYS.length > 0) {
-    const key = OPENROUTER_API_KEYS[currentKeyIndex];
-    headers['Authorization'] = `Bearer ${key}`;
-    keyStats[currentKeyIndex].requests++;
-    console.log(`[openrouter-free] Usando key index ${currentKeyIndex}/${OPENROUTER_API_KEYS.length} (total requests: ${keyStats[currentKeyIndex].requests})`);
-  }
-  
-  // HTTP-Referer y X-Title ayudan a OpenRouter a identificar la app (opcional)
-  headers['HTTP-Referer'] = 'https://verboai.duckdns.org';
-  headers['X-Title'] = 'Verbo AI';
+  // Reintentos con backoff exponencial para manejar alta concurrencia
+  const maxIntentos = 3;
+  let ultimoError = null;
 
-  const body = {
-    model: model,
-    messages: [{ role: 'system', content: systemPrompt }, ...messages],
-    temperature: 0.7,
-    max_tokens: 16384,
-    stream: false,
-  };
+  for (let intento = 0; intento < maxIntentos; intento++) {
+    if (opciones.signal?.aborted) return { ok: false, error: 'cancelado' };
 
-  try {
-    const resp = await axios.post(OPENROUTER_FREE_URL, body, {
-      timeout: OPENROUTER_FREE_TIMEOUT,
-      headers,
-      signal: opciones.signal,
-      validateStatus: () => true,
-    });
-    if (resp.status < 200 || resp.status >= 300) {
-      const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
-      console.error(`[openrouter-free] HTTP ${resp.status}: ${detalle}`);
+    try {
+      // Delay entre reintentos con backoff exponencial
+      if (intento > 0) {
+        const delay = Math.min(1000 * Math.pow(2, intento - 1), 5000); // 1s, 2s, 4s max
+        console.log(`[openrouter-free] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+
+      const headers = { 'Content-Type': 'application/json' };
+      
+      // Usar API key si hay disponibles (con rotación)
+      if (OPENROUTER_API_KEYS.length > 0) {
+        const key = OPENROUTER_API_KEYS[currentKeyIndex];
+        headers['Authorization'] = `Bearer ${key}`;
+        keyStats[currentKeyIndex].requests++;
+        console.log(`[openrouter-free] Intento ${intento + 1}/${maxIntentos} - key index ${currentKeyIndex}/${OPENROUTER_API_KEYS.length} (total requests: ${keyStats[currentKeyIndex].requests})`);
+      }
+      
+      // HTTP-Referer y X-Title ayudan a OpenRouter a identificar la app (opcional)
+      headers['HTTP-Referer'] = 'https://verboai.duckdns.org';
+      headers['X-Title'] = 'Verbo AI';
+
+      const body = {
+        model: model,
+        messages: [{ role: 'system', content: systemPrompt }, ...messages],
+        temperature: 0.7,
+        max_tokens: 16384,
+        stream: false,
+      };
+
+      const resp = await axios.post(OPENROUTER_FREE_URL, body, {
+        timeout: OPENROUTER_FREE_TIMEOUT,
+        headers,
+        signal: opciones.signal,
+        validateStatus: () => true,
+      });
+
+      if (resp.status < 200 || resp.status >= 300) {
+        const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
+        console.error(`[openrouter-free] Intento ${intento + 1} HTTP ${resp.status}: ${detalle}`);
+        ultimoError = `HTTP ${resp.status}`;
+        
+        if (OPENROUTER_API_KEYS.length > 0) {
+          keyStats[currentKeyIndex].failures++;
+          if (resp.status === 429) {
+            keyStats[currentKeyIndex].rateLimits++;
+            console.log(`[openrouter-free] Key ${currentKeyIndex} stats: ${keyStats[currentKeyIndex].requests} requests, ${keyStats[currentKeyIndex].successes} success, ${keyStats[currentKeyIndex].failures} failures, ${keyStats[currentKeyIndex].rateLimits} rate limits`);
+            
+            // Si es 429 y hay más keys, rotar inmediatamente
+            if (OPENROUTER_API_KEYS.length > 1) {
+              currentKeyIndex = (currentKeyIndex + 1) % OPENROUTER_API_KEYS.length;
+              console.log(`[openrouter-free] HTTP 429 - rotando a key index ${currentKeyIndex}`);
+              continue; // Reintentar con la nueva key
+            }
+          }
+        }
+        
+        // Para 429/502/503/504, reintentar con backoff
+        if ([429, 502, 503, 504].includes(resp.status)) {
+          continue;
+        }
+        // Para otros 4xx, no reintentar
+        if (resp.status >= 400 && resp.status < 500) {
+          break;
+        }
+        // Para 5xx, reintentar
+        continue;
+      }
+
+      const texto = resp.data?.choices?.[0]?.message?.content || '';
+      if (!texto || !texto.trim()) {
+        console.error('[openrouter-free] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+        if (OPENROUTER_API_KEYS.length > 0) keyStats[currentKeyIndex].failures++;
+        ultimoError = 'Respuesta vacia de OpenRouter';
+        continue; // Reintentar si la respuesta está vacía
+      }
+
+      if (OPENROUTER_API_KEYS.length > 0) keyStats[currentKeyIndex].successes++;
+      console.log(`[openrouter-free] OK - ${texto.length} chars por ${model}`);
+      return { ok: true, texto: texto.trim(), modelo: model };
+    } catch (e) {
+      ultimoError = e.message;
+      console.warn(`[openrouter-free] Intento ${intento + 1} fallo: ${e.message}`);
       
       if (OPENROUTER_API_KEYS.length > 0) {
         keyStats[currentKeyIndex].failures++;
-        if (resp.status === 429) {
-          keyStats[currentKeyIndex].rateLimits++;
-          console.log(`[openrouter-free] Key ${currentKeyIndex} stats: ${keyStats[currentKeyIndex].requests} requests, ${keyStats[currentKeyIndex].successes} success, ${keyStats[currentKeyIndex].failures} failures, ${keyStats[currentKeyIndex].rateLimits} rate limits`);
-        }
       }
       
-      // Si es 429 y hay más keys, rotar y reintentar
-      if (resp.status === 429 && OPENROUTER_API_KEYS.length > 1) {
-        currentKeyIndex = (currentKeyIndex + 1) % OPENROUTER_API_KEYS.length;
-        console.log(`[openrouter-free] HTTP 429 - rotando a key index ${currentKeyIndex}`);
-        // Reintentar con la nueva key
-        const newHeaders = { ...headers };
-        newHeaders['Authorization'] = `Bearer ${OPENROUTER_API_KEYS[currentKeyIndex]}`;
-        keyStats[currentKeyIndex].requests++;
-        const retryResp = await axios.post(OPENROUTER_FREE_URL, body, {
-          timeout: OPENROUTER_FREE_TIMEOUT,
-          headers: newHeaders,
-          signal: opciones.signal,
-          validateStatus: () => true,
-        });
-        if (retryResp.status >= 200 && retryResp.status < 300) {
-          keyStats[currentKeyIndex].successes++;
-          const texto = retryResp.data?.choices?.[0]?.message?.content || '';
-          if (texto && texto.trim()) {
-            console.log(`[openrouter-free] OK tras rotación - ${texto.length} chars por ${model}`);
-            return { ok: true, texto: texto.trim(), modelo: model };
-          }
-        } else {
-          keyStats[currentKeyIndex].failures++;
-          if (retryResp.status === 429) keyStats[currentKeyIndex].rateLimits++;
-        }
+      // Reintentar en errores de red/timeout
+      if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
+        continue;
       }
-      
-      return { ok: false, error: `HTTP ${resp.status}` };
+      // Para otros errores, no reintentar
+      break;
     }
-    const texto = resp.data?.choices?.[0]?.message?.content || '';
-    if (!texto || !texto.trim()) {
-      console.error('[openrouter-free] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
-      if (OPENROUTER_API_KEYS.length > 0) keyStats[currentKeyIndex].failures++;
-      return { ok: false, error: 'Respuesta vacia de OpenRouter' };
-    }
-    if (OPENROUTER_API_KEYS.length > 0) keyStats[currentKeyIndex].successes++;
-    console.log(`[openrouter-free] OK - ${texto.length} chars por ${model}`);
-    return { ok: true, texto: texto.trim(), modelo: model };
-  } catch (e) {
-    if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return { ok: false, error: 'cancelado' };
-    console.error('[openrouter-free] fallo:', e.message);
-    return { ok: false, error: e.message };
   }
+
+  console.error(`[openrouter-free] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+  return { ok: false, error: ultimoError || 'Todos los intentos fallaron' };
 }
 
 // ============================================================
@@ -1775,7 +1965,7 @@ function leerBearerToken(req) {
   return m ? m[1].trim() : null;
 }
 
-app.post('/api/v1/chat', async (req, res) => {
+app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
   const valorToken = leerBearerToken(req);
   if (!valorToken) {
     return res.status(401).json({ ok: false, error: 'Falta el header Authorization: Bearer verboai-XXXX' });
@@ -2630,7 +2820,7 @@ app.delete('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => 
 // ============================================================
 // API: ejecutar código con Piston API (para terminal de Verbo Code)
 // ============================================================
-app.post('/api/verbocode/execute', requiereAdminVerboCode, async (req, res) => {
+app.post('/api/verbocode/execute', codeRateLimit, requiereAdminVerboCode, async (req, res) => {
   const lenguaje = (req.body?.lenguaje || 'bash').trim().toLowerCase();
   const codigo = (req.body?.codigo || '').trim();
   
@@ -3733,55 +3923,76 @@ async function obtenerContextoYoutube(url) {
 
 async function investigarWikipedia(query) {
   try {
-    // Buscar múltiples resultados (aumentado de 1 a 5 para investigación más profunda)
-    const urlBusqueda = `https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=5`;
-    const rBusqueda = await fetch(urlBusqueda);
-    if (!rBusqueda.ok) {
-      console.error(`[investigar] Wikipedia busqueda HTTP ${rBusqueda.status} para "${query}"`);
-      return null;
-    }
-    const dataBusqueda = await rBusqueda.json();
-    const resultados = dataBusqueda && dataBusqueda.query && dataBusqueda.query.search;
-    if (!resultados || !resultados.length) {
-      console.error(`[investigar] Wikipedia no encontro ningun articulo para "${query}"`);
-      return null;
+    // Verificar cache primero
+    const cacheKey = getCacheKey('wiki', query);
+    const cached = getCached(cacheKey);
+    if (cached) {
+      console.log(`[investigar] Wikipedia cache HIT para "${query}"`);
+      return cached;
     }
 
-    // Obtener extractos de múltiples artículos para investigación más profunda
-    const articulos = [];
-    for (const resultado of resultados.slice(0, 3)) { // Limitar a 3 para no sobrecargar
-      try {
-        const urlExtracto = `https://es.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(resultado.title)}&format=json&origin=*`;
-        const rExtracto = await fetch(urlExtracto);
-        if (rExtracto.ok) {
-          const dataExtracto = await rExtracto.json();
-          const paginas = dataExtracto && dataExtracto.query && dataExtracto.query.pages;
-          if (paginas) {
-            const pagina = Object.values(paginas)[0];
-            if (pagina && pagina.extract) {
-              articulos.push({
-                titulo: pagina.title,
-                extracto: pagina.extract.slice(0, 500),
-                url: `https://es.wikipedia.org/wiki/${encodeURIComponent(pagina.title.replace(/ /g, '_'))}`,
-              });
+    // Usar queue para limitar concurrencia de llamadas a Wikipedia
+    return await enqueue('wikipedia', async () => {
+      // Buscar múltiples resultados (aumentado de 1 a 5 para investigación más profunda)
+      const urlBusqueda = `https://es.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=5`;
+      const rBusqueda = await fetch(urlBusqueda, { signal: AbortSignal.timeout(10000) });
+      if (!rBusqueda.ok) {
+        console.error(`[investigar] Wikipedia busqueda HTTP ${rBusqueda.status} para "${query}"`);
+        return null;
+      }
+      const dataBusqueda = await rBusqueda.json();
+      const resultados = dataBusqueda && dataBusqueda.query && dataBusqueda.query.search;
+      if (!resultados || !resultados.length) {
+        console.error(`[investigar] Wikipedia no encontro ningun articulo para "${query}"`);
+        return null;
+      }
+
+      // Obtener extractos de múltiples artículos para investigación más profunda
+      const articulos = [];
+      const promises = resultados.slice(0, 3).map(async (resultado) => {
+        try {
+          const urlExtracto = `https://es.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(resultado.title)}&format=json&origin=*`;
+          const rExtracto = await fetch(urlExtracto, { signal: AbortSignal.timeout(8000) });
+          if (rExtracto.ok) {
+            const dataExtracto = await rExtracto.json();
+            const paginas = dataExtracto && dataExtracto.query && dataExtracto.query.pages;
+            if (paginas) {
+              const pagina = Object.values(paginas)[0];
+              if (pagina && pagina.extract) {
+                return {
+                  titulo: pagina.title,
+                  extracto: pagina.extract.slice(0, 500),
+                  url: `https://es.wikipedia.org/wiki/${encodeURIComponent(pagina.title.replace(/ /g, '_'))}`,
+                };
+              }
             }
           }
+        } catch (e) {
+          console.error(`[investigar] Error obteniendo extracto para "${resultado.title}":`, e.message);
         }
-      } catch (e) {
-        console.error(`[investigar] Error obteniendo extracto para "${resultado.title}":`, e.message);
+        return null;
+      });
+
+      const resultadosPromises = await Promise.all(promises);
+      resultadosPromises.forEach(r => r && articulos.push(r));
+
+      if (!articulos.length) {
+        console.error(`[investigar] Wikipedia: no se pudo obtener extractos para "${query}"`);
+        return null;
       }
-    }
 
-    if (!articulos.length) {
-      console.error(`[investigar] Wikipedia: no se pudo obtener extractos para "${query}"`);
-      return null;
-    }
+      const result = {
+        query,
+        articulos,
+        totalResultados: resultados.length,
+      };
 
-    return {
-      query,
-      articulos,
-      totalResultados: resultados.length,
-    };
+      // Guardar en cache (10 minutos para Wikipedia)
+      setCache(cacheKey, result, 10 * 60 * 1000);
+      console.log(`[investigar] Wikipedia cache SET para "${query}"`);
+      
+      return result;
+    });
   } catch (e) {
     console.error('[investigar] Error consultando Wikipedia:', e.message);
     return null;
@@ -3790,26 +4001,42 @@ async function investigarWikipedia(query) {
 
 async function investigarBiblia(query) {
   try {
-    const url = `${BIBLIA_API_BASE}/read/rv1960/search?q=${encodeURIComponent(query)}&take=3`;
-    const r = await fetchBiblia(url);
-    const data = await r.json();
+    // Verificar cache primero
+    const cacheKey = getCacheKey('biblia', query);
+    const cached = getCached(cacheKey);
+    if (cached) {
+      console.log(`[investigar] Biblia cache HIT para "${query}"`);
+      return cached;
+    }
 
-    const arr = data.verses || data.vers || data.results || data.data || (Array.isArray(data) ? data : []);
-    if (!Array.isArray(arr) || !arr.length) {
-      console.error(`[investigar] Busqueda biblica sin resultados reconocibles para "${query}". Respuesta cruda:`, JSON.stringify(data).slice(0, 300));
-      return [];
-    }
-    const versos = arr
-      .slice(0, 3)
-      .map((v) => ({
-        referencia: v.reference || v.referencia || `${v.book || v.book_name || v.name || ''} ${v.chapter || ''}:${v.verse != null ? v.verse : v.number || ''}`.trim(),
-        texto: v.text || v.texto || (typeof v.verse === 'string' ? v.verse : '') || '',
-      }))
-      .filter((v) => v.texto);
-    if (!versos.length) {
-      console.error(`[investigar] Busqueda biblica: hubo resultados pero no se pudo extraer texto para "${query}". Respuesta cruda:`, JSON.stringify(data).slice(0, 300));
-    }
-    return versos;
+    // Usar queue para limitar concurrencia de llamadas a Biblia
+    return await enqueue('biblia', async () => {
+      const url = `${BIBLIA_API_BASE}/read/rv1960/search?q=${encodeURIComponent(query)}&take=3`;
+      const r = await fetchBiblia(url, { signal: AbortSignal.timeout(8000) });
+      const data = await r.json();
+
+      const arr = data.verses || data.vers || data.results || data.data || (Array.isArray(data) ? data : []);
+      if (!Array.isArray(arr) || !arr.length) {
+        console.error(`[investigar] Busqueda biblica sin resultados reconocibles para "${query}". Respuesta cruda:`, JSON.stringify(data).slice(0, 300));
+        return [];
+      }
+      const versos = arr
+        .slice(0, 3)
+        .map((v) => ({
+          referencia: v.reference || v.referencia || `${v.book || v.book_name || v.name || ''} ${v.chapter || ''}:${v.verse != null ? v.verse : v.number || ''}`.trim(),
+          texto: v.text || v.texto || (typeof v.verse === 'string' ? v.verse : '') || '',
+        }))
+        .filter((v) => v.texto);
+      if (!versos.length) {
+        console.error(`[investigar] Busqueda biblica: hubo resultados pero no se pudo extraer texto para "${query}". Respuesta cruda:`, JSON.stringify(data).slice(0, 300));
+      }
+
+      // Guardar en cache (15 minutos para Biblia, contenido estático)
+      setCache(cacheKey, versos, 15 * 60 * 1000);
+      console.log(`[investigar] Biblia cache SET para "${query}"`);
+      
+      return versos;
+    });
   } catch (e) {
     console.error('[investigar] Error consultando busqueda biblica:', e.message);
     return [];
@@ -4347,61 +4574,109 @@ const PISTON_LANGUAGE_MAP = {
 };
 
 async function ejecutarCodigoPiston(lenguaje, codigo) {
-  try {
-    const lang = (lenguaje || '').trim().toLowerCase();
-    const fuente = (codigo || '').replace(/\\n/g, '\n');
-    if (!lang || !fuente.trim()) return { exito: false, error: 'Falta lenguaje o codigo.' };
-    if (fuente.length > 10000) return { exito: false, error: 'El codigo es demasiado largo (max 10000 caracteres).' };
+  const lang = (lenguaje || '').trim().toLowerCase();
+  const fuente = (codigo || '').replace(/\\n/g, '\n');
+  if (!lang || !fuente.trim()) return { exito: false, error: 'Falta lenguaje o codigo.' };
+  if (fuente.length > 10000) return { exito: false, error: 'El codigo es demasiado largo (max 10000 caracteres).' };
 
-    const langConfig = PISTON_LANGUAGE_MAP[lang];
-    if (!langConfig) {
-      return { exito: false, error: `Lenguaje "${lang}" no soportado por Piston. Usa: ${Object.keys(PISTON_LANGUAGE_MAP).join(', ')}.` };
-    }
-
-    const resp = await axios.post(`${PISTON_API_URL}/execute`, {
-      language: langConfig.language,
-      version: langConfig.version,
-      files: [
-        {
-          name: 'main',
-          content: fuente,
-        },
-      ],
-    }, {
-      timeout: 30000,
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (resp.status !== 200) {
-      return { exito: false, error: `Piston HTTP ${resp.status}` };
-    }
-
-    const data = resp.data;
-    const run = data.run || {};
-    const compile = data.compile || {};
-
-    const stdout = run.stdout || '';
-    const stderr = run.stderr || '';
-    const compileStderr = compile.stderr || '';
-    const compileStdout = compile.stdout || '';
-
-    const salidaCompleta = [compileStdout, compileStderr, stdout, stderr].filter(Boolean).join('\n');
-    const error = (run.code !== null && run.code !== 0) ? `Exit code: ${run.code}` : null;
-
-    return {
-      exito: true,
-      lenguaje: lang,
-      version: `${langConfig.language} ${langConfig.version}`,
-      stdout: salidaCompleta || '(sin salida)',
-      stderr: stderr || compileStderr || '',
-      tiempo: run.cpu_time || 0,
-      memoria: run.memory || 0,
-      exitCode: run.code,
-      error,
-    };
-  } catch (e) {
-    return { exito: false, error: 'Piston fallo: ' + e.message };
+  const langConfig = PISTON_LANGUAGE_MAP[lang];
+  if (!langConfig) {
+    return { exito: false, error: `Lenguaje "${lang}" no soportado por Piston. Usa: ${Object.keys(PISTON_LANGUAGE_MAP).join(', ')}.` };
   }
+
+  // Usar queue para limitar concurrencia de ejecución de código
+  return await enqueue('piston', async () => {
+    // Reintentos con backoff exponencial para manejar alta concurrencia
+    const maxIntentos = 4;
+    let ultimoError = null;
+
+    for (let intento = 0; intento < maxIntentos; intento++) {
+      try {
+        // Timeout con backoff: 15s, 20s, 25s, 30s
+        const timeout = 15000 + (intento * 5000);
+        
+        // Delay entre reintentos con backoff exponencial
+        if (intento > 0) {
+          const delay = Math.min(500 * Math.pow(2, intento - 1), 3000); // 500ms, 1s, 2s max
+          console.log(`[piston] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+
+        console.log(`[piston] Intento ${intento + 1}/${maxIntentos} - lenguaje: ${lang}, timeout: ${timeout}ms`);
+        
+        const resp = await axios.post(`${PISTON_API_URL}/execute`, {
+          language: langConfig.language,
+          version: langConfig.version,
+          files: [
+            {
+              name: 'main',
+              content: fuente,
+            },
+          ],
+        }, {
+          timeout,
+          headers: { 'Content-Type': 'application/json' },
+          validateStatus: () => true, // Manejar todos los status codes manualmente
+        });
+
+        // Manejo específico de errores HTTP
+        if (resp.status !== 200) {
+          ultimoError = `HTTP ${resp.status}`;
+          console.warn(`[piston] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+          
+          // Para 429/502/503/504, reintentar (errores temporales)
+          if ([429, 502, 503, 504].includes(resp.status)) {
+            continue;
+          }
+          // Para otros 4xx, no reintentar
+          if (resp.status >= 400 && resp.status < 500) {
+            break;
+          }
+          // Para 5xx, reintentar
+          continue;
+        }
+
+        const data = resp.data;
+        const run = data.run || {};
+        const compile = data.compile || {};
+
+        const stdout = run.stdout || '';
+        const stderr = run.stderr || '';
+        const compileStderr = compile.stderr || '';
+        const compileStdout = compile.stdout || '';
+
+        const salidaCompleta = [compileStdout, compileStderr, stdout, stderr].filter(Boolean).join('\n');
+        const error = (run.code !== null && run.code !== 0) ? `Exit code: ${run.code}` : null;
+
+        console.log(`[piston] OK - lenguaje: ${lang}, tiempo: ${run.cpu_time}ms, memoria: ${run.memory}KB`);
+        
+        return {
+          exito: true,
+          lenguaje: lang,
+          version: `${langConfig.language} ${langConfig.version}`,
+          stdout: salidaCompleta || '(sin salida)',
+          stderr: stderr || compileStderr || '',
+          tiempo: run.cpu_time || 0,
+          memoria: run.memory || 0,
+          exitCode: run.code,
+          error,
+        };
+      } catch (e) {
+        ultimoError = e.message;
+        console.warn(`[piston] Intento ${intento + 1} fallo: ${e.message}`);
+        
+        // Reintentar en errores de red/timeout
+        if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
+          continue;
+        }
+        // Para otros errores, no reintentar
+        break;
+      }
+    }
+
+    console.error(`[piston] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+    return { exito: false, error: ultimoError || 'Piston fallo' };
+  });
 }
 
 const JSONPLACEHOLDER_RECURSOS_VALIDOS = ['posts', 'comments', 'albums', 'photos', 'todos', 'users'];
