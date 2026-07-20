@@ -4469,8 +4469,8 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
   for (let intento = 0; intento < maxIntentos; intento++) {
     try {
       // Calcular timeout con backoff exponencial
-      const timeoutBase = (detallada || enhanceFinal) ? 45000 : 30000;
-      const timeout = timeoutBase + (intento * 15000); // 30s, 45s, 60s, 75s, 90s, 105s
+      const timeoutBase = (detallada || enhanceFinal) ? 60000 : 45000; // Aumentado de 45s a 60s para detallada
+      const timeout = timeoutBase + (intento * 20000); // 45s, 65s, 85s, 105s, 125s, 145s
       
       // Calcular delay entre reintentos con backoff exponencial
       if (intento > 0) {
