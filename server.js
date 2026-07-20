@@ -5220,9 +5220,13 @@ async function ejecutarCodigoJudge0(lenguaje, codigo) {
 // Piston API: API de ejecución de código open-source, gratuita y sin API key
 // Más estable y fácil de usar que Judge0. Soporta múltiples lenguajes.
 // Documentación: https://emkc.org/api/v2/piston
-// Fallback: https://api.piston.epicb.dev
+// Fallbacks alternativos cuando la API principal falla
 const PISTON_API_URL = process.env.PISTON_API_URL || 'https://emkc.org/api/v2/piston';
-const PISTON_API_FALLBACK = 'https://api.piston.epicb.dev';
+const PISTON_API_FALLBACKS = [
+  'https://api.piston.epicb.dev',
+  'https://piston-api.vercel.app',
+  'https://piston.fly.dev'
+];
 
 // Mapeo de lenguajes para Piston API
 const PISTON_LANGUAGE_MAP = {
@@ -5262,7 +5266,7 @@ async function ejecutarCodigoPiston(lenguaje, codigo) {
     // Reintentos con backoff exponencial para manejar alta concurrencia
     const maxIntentos = 4;
     let ultimoError = null;
-    let usarFallback = false;
+    let fallbackIndex = -1; // -1 = API principal, 0+ = fallbacks
 
     for (let intento = 0; intento < maxIntentos; intento++) {
       try {
@@ -5276,8 +5280,9 @@ async function ejecutarCodigoPiston(lenguaje, codigo) {
           await new Promise((r) => setTimeout(r, delay));
         }
 
-        const apiUrl = usarFallback ? PISTON_API_FALLBACK : PISTON_API_URL;
-        console.log(`[piston] Intento ${intento + 1}/${maxIntentos} - lenguaje: ${lang}, timeout: ${timeout}ms, API: ${usarFallback ? 'fallback' : 'primary'}`);
+        const apiUrl = fallbackIndex === -1 ? PISTON_API_URL : PISTON_API_FALLBACKS[fallbackIndex];
+        const apiName = fallbackIndex === -1 ? 'primary' : `fallback[${fallbackIndex}]`;
+        console.log(`[piston] Intento ${intento + 1}/${maxIntentos} - lenguaje: ${lang}, timeout: ${timeout}ms, API: ${apiName}`);
         
         const resp = await axios.post(`${apiUrl}/execute`, {
           language: langConfig.language,
@@ -5299,22 +5304,23 @@ async function ejecutarCodigoPiston(lenguaje, codigo) {
           ultimoError = `HTTP ${resp.status}`;
           console.warn(`[piston] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
           
-          // Si es 401 y no estamos usando fallback, cambiar a fallback
-          if (resp.status === 401 && !usarFallback) {
-            console.log(`[piston] HTTP 401 - cambiando a API fallback: ${PISTON_API_FALLBACK}`);
-            usarFallback = true;
-            continue; // Reintentar con fallback
+          // Si es 401, 429, 500, 502, 503, cambiar al siguiente fallback
+          if ([401, 429, 500, 502, 503, 504].includes(resp.status)) {
+            if (fallbackIndex < PISTON_API_FALLBACKS.length - 1) {
+              fallbackIndex++;
+              console.log(`[piston] HTTP ${resp.status} - cambiando a fallback[${fallbackIndex}]: ${PISTON_API_FALLBACKS[fallbackIndex]}`);
+              continue;
+            } else if (fallbackIndex === -1) {
+              fallbackIndex = 0;
+              console.log(`[piston] HTTP ${resp.status} - cambiando a primer fallback: ${PISTON_API_FALLBACKS[0]}`);
+              continue;
+            }
           }
           
-          // Para 429/502/503/504, reintentar (errores temporales)
-          if ([429, 502, 503, 504].includes(resp.status)) {
-            continue;
-          }
           // Para otros 4xx, no reintentar
-          if (resp.status >= 400 && resp.status < 500) {
+          if (resp.status >= 400 && resp.status < 500 && resp.status !== 401 && resp.status !== 429) {
             break;
           }
-          // Para 5xx, reintentar
           continue;
         }
 
