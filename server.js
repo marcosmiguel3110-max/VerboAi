@@ -62,8 +62,8 @@ setInterval(() => {
 // ============================================================
 // Sistema simple de colas para limitar concurrencia en endpoints críticos
 const queues = new Map();
-const QUEUE_CONCURRENCY = 3; // Máximo 3 peticiones simultáneas por queue
-const QUEUE_TIMEOUT = 60000; // 60 segundos timeout en queue
+const QUEUE_CONCURRENCY = 5; // Aumentado a 5 para mayor concurrencia en imágenes
+const QUEUE_TIMEOUT = 120000; // Aumentado a 120 segundos para imágenes grandes
 
 async function enqueue(queueName, task) {
   if (!queues.has(queueName)) {
@@ -4459,106 +4459,120 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
   // que reescribe/mejora el prompt antes de renderizar la imagen final), por eso tarda un poco mas.
   // Modo Pro (NewserPro): flux-realism + 1024x576 + enhance=true (alta calidad 16:9).
   // Lista de modelos fallback para rotar si hay rate limits
-  const modelosFallback = ['flux', 'flux-realism', 'turbo'];
+  const modelosFallback = ['flux', 'flux-realism', 'turbo', 'flux-cablyai', 'flux-pro'];
   let modeloActual = modeloFinal;
   
   // Aumentamos reintentos y timeouts para manejar alta concurrencia
-  const maxIntentos = 6; // Aumentado de 3 a 6
+  const maxIntentos = 8; // Aumentado a 8 para mayor resiliencia
   let ultimoError = null;
 
-  for (let intento = 0; intento < maxIntentos; intento++) {
-    try {
-      // Calcular timeout con backoff exponencial
-      const timeoutBase = (detallada || enhanceFinal) ? 60000 : 45000; // Aumentado de 45s a 60s para detallada
-      const timeout = timeoutBase + (intento * 20000); // 45s, 65s, 85s, 105s, 125s, 145s
-      
-      // Calcular delay entre reintentos con backoff exponencial
-      if (intento > 0) {
-        const delay = Math.min(1000 * Math.pow(2, intento - 1), 10000); // 1s, 2s, 4s, 8s, 10s max
-        console.log(`[pollinations] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
-        await new Promise((r) => setTimeout(r, delay));
-      }
-
-      // Rotar modelo si es 429 y hay fallbacks disponibles
-      if (intento > 0 && ultimoError && ultimoError.includes('429')) {
-        const idxModelo = modelosFallback.indexOf(modeloActual);
-        if (idxModelo < modelosFallback.length - 1) {
-          modeloActual = modelosFallback[idxModelo + 1];
-          console.log(`[pollinations] Rotando a modelo fallback: ${modeloActual}`);
-        }
-      }
-
-      const paramsExtra = enhanceFinal ? '&enhance=true' : '';
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${encodeURIComponent(modeloActual)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true${paramsExtra}`;
-
-      console.log(`[pollinations] Intento ${intento + 1}/${maxIntentos}${detallada ? ' [alta calidad]' : ''}${opciones.modeloOverride ? ` [modelo=${modeloActual} ${anchoFinal}x${altoFinal}]` : ''} - prompt: "${promptLimpio.slice(0, 50)}..."`);
-      const resp = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        signal: AbortSignal.timeout(timeout),
-      });
-
-      if (!resp.ok) {
-        ultimoError = `HTTP ${resp.status}`;
-        console.warn(`[pollinations] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+  // Usar queue para limitar concurrencia de generación de imágenes
+  return await enqueue('pollinations', async () => {
+    for (let intento = 0; intento < maxIntentos; intento++) {
+      try {
+        // Calcular timeout con backoff exponencial
+        const timeoutBase = (detallada || enhanceFinal) ? 90000 : 60000; // Aumentado a 90s para detallada
+        const timeout = timeoutBase + (intento * 25000); // 60s, 85s, 110s, 135s, 160s, 185s, 210s, 235s
         
-        // Para 429, seguir reintentando con backoff
-        if (resp.status === 429) {
+        // Calcular delay entre reintentos con backoff exponencial + jitter aleatorio
+        if (intento > 0) {
+          const delayBase = Math.min(2000 * Math.pow(2, intento - 1), 15000); // 2s, 4s, 8s, 16s max
+          const jitter = Math.floor(Math.random() * 1000); // Jitter aleatorio 0-1000ms
+          const delay = delayBase + jitter;
+          console.log(`[pollinations] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
+
+        // Rotar modelo si hay errores de rate limit o 500
+        if (intento > 0 && ultimoError && (ultimoError.includes('429') || ultimoError.includes('500'))) {
+          const idxModelo = modelosFallback.indexOf(modeloActual);
+          if (idxModelo < modelosFallback.length - 1) {
+            modeloActual = modelosFallback[idxModelo + 1];
+            console.log(`[pollinations] Rotando a modelo fallback: ${modeloActual}`);
+          }
+        }
+
+        const paramsExtra = enhanceFinal ? '&enhance=true' : '';
+        // Agregar parámetros adicionales para evitar bloqueos
+        const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${encodeURIComponent(modeloActual)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true${paramsExtra}&private=true`;
+
+        console.log(`[pollinations] Intento ${intento + 1}/${maxIntentos}${detallada ? ' [alta calidad]' : ''}${opciones.modeloOverride ? ` [modelo=${modeloActual} ${anchoFinal}x${altoFinal}]` : ''} - prompt: "${promptLimpio.slice(0, 50)}..."`);
+        
+        // Headers adicionales para evitar bloqueos
+        const resp = await fetch(url, {
+          headers: { 
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'image/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          },
+          signal: AbortSignal.timeout(timeout),
+        });
+
+        if (!resp.ok) {
+          ultimoError = `HTTP ${resp.status}`;
+          console.warn(`[pollinations] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+          
+          // Para 429, seguir reintentando con backoff
+          if (resp.status === 429) {
+            continue;
+          }
+          // Para 500, seguir reintentando (puede ser temporal)
+          if (resp.status === 500) {
+            continue;
+          }
+          // Para otros 4xx, no reintentar
+          if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+            break;
+          }
+          // Para 5xx, seguir reintentar
           continue;
         }
-        // Para 500, seguir reintentando (puede ser temporal)
-        if (resp.status === 500) {
+
+        const mime = resp.headers.get('content-type') || 'image/jpeg';
+        if (!mime.startsWith('image/')) {
+          ultimoError = `Content-Type inesperado: ${mime}`;
+          console.warn(`[pollinations] Intento ${intento + 1} devolvio ${mime} (esperaba image/*)`);
           continue;
         }
-        // Para otros 4xx, no reintentar
-        if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
-          break;
+
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        if (!buffer || buffer.length < 1000) {
+          ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
+          console.warn(`[pollinations] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
+          continue;
         }
-        // Para 5xx, seguir reintentar
-        continue;
-      }
 
-      const mime = resp.headers.get('content-type') || 'image/jpeg';
-      if (!mime.startsWith('image/')) {
-        ultimoError = `Content-Type inesperado: ${mime}`;
-        console.warn(`[pollinations] Intento ${intento + 1} devolvio ${mime} (esperaba image/*)`);
-        continue;
+        const urlLocal = guardarImagenDisco(buffer, mime);
+        console.log(`[pollinations] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
+        return {
+          img: {
+            url: urlLocal,
+            prompt: promptLimpio,
+            seed: seedFinal,
+            tamanoKB: Math.round(buffer.length / 1024),
+            detallada,
+            modelo: modeloActual,
+            ancho: anchoFinal,
+            alto: altoFinal,
+            enhance: enhanceFinal,
+          },
+          error: null,
+        };
+      } catch (e) {
+        ultimoError = e.message;
+        console.warn(`[pollinations] Intento ${intento + 1} fallo: ${e.message}`);
+        if (e.name === 'AbortError' || e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT') {
+          continue;
+        }
+        break;
       }
-
-      const buffer = Buffer.from(await resp.arrayBuffer());
-      if (!buffer || buffer.length < 1000) {
-        ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
-        console.warn(`[pollinations] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
-        continue;
-      }
-
-      const urlLocal = guardarImagenDisco(buffer, mime);
-      console.log(`[pollinations] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
-      return {
-        img: {
-          url: urlLocal,
-          prompt: promptLimpio,
-          seed: seedFinal,
-          tamanoKB: Math.round(buffer.length / 1024),
-          detallada,
-          modelo: modeloActual,
-          ancho: anchoFinal,
-          alto: altoFinal,
-          enhance: enhanceFinal,
-        },
-        error: null,
-      };
-    } catch (e) {
-      ultimoError = e.message;
-      console.warn(`[pollinations] Intento ${intento + 1} fallo: ${e.message}`);
-      if (e.name === 'AbortError' || e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT') {
-        continue;
-      }
-      break;
     }
-  }
 
-  console.error(`[pollinations] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
-  return { img: null, error: ultimoError || 'Error desconocido' };
+    console.error(`[pollinations] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+    return { img: null, error: ultimoError || 'Error desconocido' };
+  });
 }
 
 // Función para editar imágenes existentes (image-to-image) usando modelo kontext de Pollinations
