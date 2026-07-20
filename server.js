@@ -5861,6 +5861,17 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
 
       enviarGen({ type: 'chunk', text: (esDetalladaWeb || esProWeb) ? `Generando imagen en alta calidad (2 modelos de IA): **${intencionImagen.prompt}**...` : `Generando imagen: **${intencionImagen.prompt}**...` });
+      
+      // Enviar lista de tareas thinking
+      enviarGen({ type: 'thinking', tareas: [
+        'Analizando prompt del usuario',
+        'Preparando modelo de IA',
+        'Conectando con servicio de imágenes',
+        'Generando imagen',
+        'Aplicando mejoras de calidad',
+        'Finalizando imagen'
+      ] });
+      
       enviarGen({ type: 'investigando', query: `Generando imagen: ${intencionImagen.prompt}` });
       enviarGen({ type: 'investigando_sitio', sitio: 'image.pollinations.ai' });
 

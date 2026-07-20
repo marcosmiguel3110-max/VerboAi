@@ -1819,7 +1819,7 @@ function mostrarReintento(intento, maxIntentos, espera) {
 function ocultarReintento() {
   if (temporizadorReintento) { clearInterval(temporizadorReintento); temporizadorReintento = null; }
   elIndicador.classList.remove('reintentando');
-  elIndicador.querySelector('span').textContent = 'Meditando la respuesta...';
+  elIndicador.querySelector('span').textContent = 'VerboAI';
 }
 
 const ICONO_BIBLIA_SVG = `<svg class="investigando-favicon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>`;
@@ -2158,11 +2158,84 @@ elForm.addEventListener('submit', async (ev) => {
         if (evt.type === 'retry') {
           mostrarReintento(evt.intento, evt.maxIntentos, evt.espera);
         } else if (evt.type === 'ping') {
+        } else if (evt.type === 'thinking') {
+          // Mostrar lista de tareas thinking
+          if (evt.tareas && evt.tareas.length > 0) {
+            const thinkingDiv = document.createElement('div');
+            thinkingDiv.className = 'thinking-lista';
+            thinkingDiv.id = 'thinkingLista';
+            thinkingDiv.innerHTML = `
+              <div class="thinking-header">Thinking</div>
+              <ul class="thinking-tareas">
+                ${evt.tareas.map((t, i) => `<li class="thinking-tarea" data-index="${i}">${t}</li>`).join('')}
+              </ul>
+            `;
+            document.getElementById('mensajes').appendChild(thinkingDiv);
+            scrollAbajo();
+            
+            // Simular progreso marcando tareas como completadas
+            let tareaActual = 0;
+            const intervaloThinking = setInterval(() => {
+              if (tareaActual < evt.tareas.length) {
+                const tareaEl = thinkingDiv.querySelector(`[data-index="${tareaActual}"]`);
+                if (tareaEl) {
+                  tareaEl.classList.add('completada');
+                  tareaActual++;
+                }
+              } else {
+                clearInterval(intervaloThinking);
+                // Cambiar a "Buscando Web" cuando termina
+                const headerEl = thinkingDiv.querySelector('.thinking-header');
+                if (headerEl) {
+                  headerEl.textContent = 'Buscando Web';
+                  thinkingDiv.classList.add('buscando-web');
+                  
+                  // Agregar texto que cambia rápido con webs consultadas
+                  const websText = document.createElement('div');
+                  websText.className = 'thinking-webs-text';
+                  websText.textContent = 'Consultando...';
+                  thinkingDiv.appendChild(websText);
+                  
+                  const webs = [
+                    'google.com',
+                    'wikipedia.org',
+                    'stackoverflow.com',
+                    'github.com',
+                    'reddit.com',
+                    'medium.com',
+                    'dev.to',
+                    'mdn.io'
+                  ];
+                  let webIndex = 0;
+                  const intervaloWebs = setInterval(() => {
+                    webIndex = (webIndex + 1) % webs.length;
+                    websText.textContent = `Consultando ${webs[webIndex]}...`;
+                  }, 300);
+                  
+                  // Guardar el intervalo para limpiarlo después
+                  thinkingDiv.dataset.intervaloWebs = intervaloWebs;
+                }
+              }
+            }, 800);
+          }
         } else if (evt.type === 'chunk') {
           ocultarReintento();
           asegurarBurbuja();
           textoAcumulado += evt.text;
           escritor.agregar(evt.text);
+          
+          // Si viene una imagen en el chunk, mostrarla
+          if (evt.imagen) {
+            const imgContainer = document.createElement('div');
+            imgContainer.className = 'galeria-item';
+            const img = document.createElement('img');
+            img.src = evt.imagen;
+            img.alt = 'Imagen editada';
+            img.onclick = () => abrirVisorImagen(evt.imagen);
+            imgContainer.appendChild(img);
+            burbujaIA.appendChild(imgContainer);
+            scrollAbajo();
+          }
         } else if (evt.type === 'notebook') {
           mostrarCuaderno(evt.referencia, evt.texto);
         } else if (evt.type === 'investigando') {

@@ -2357,8 +2357,6 @@ html.tema-night .item-capitulo.activo {
   color: var(--texto);
   border-color: var(--chat-activo-noche-borde);
 }
-  font-size: 14px;
-}
 
 /* ---------- Boton unico para mostrar/ocultar el sidebar (PC y celular) ---------- */
 .btn-menu-movil {
@@ -2947,7 +2945,77 @@ html.tema-night .selector-modelo-header .opcion-modelo-desc { color: #999 !impor
 .selector-modelo-header .opcion-modelo-badge-beta { background: #2E8B57 !important; color: white !important; }
 .selector-modelo-header .opcion-modelo-badge-pronto { background: #6c757d !important; color: white !important; }
 .selector-modelo-header .opcion-modelo-badge-admin {
-  background: linear-gradient(135deg, #d4af37 0%, #b8860b 50%, #8b6914 100%) !important;
-  color: #1a1a1a !important;
-  font-weight: 700 !important;
+  background: #C9663A !important;
+  color: white !important;
+}
+
+/* ---------- Lista de tareas Thinking ---------- */
+.thinking-lista {
+  align-self: flex-start;
+  background: var(--crema-oscuro);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 8px 0;
+  max-width: 320px;
+  font-size: 13px;
+}
+
+.thinking-header {
+  font-weight: 600;
+  color: var(--acento);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.thinking-lista.buscando-web .thinking-header {
+  color: #4a9a5c;
+}
+
+.thinking-tareas {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.thinking-tarea {
+  padding: 4px 0;
+  color: var(--texto-suave);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.thinking-tarea::before {
+  content: "○";
+  color: var(--borde);
+  font-size: 10px;
+}
+
+.thinking-tarea.completada {
+  color: var(--texto);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.thinking-tarea.completada::before {
+  content: "✓";
+  color: #4a9a5c;
+  font-weight: bold;
+}
+
+.thinking-webs-text {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--texto-suave);
+  font-style: italic;
+  animation: parpadeo 1.5s ease-in-out infinite;
+}
+
+@keyframes parpadeo {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
