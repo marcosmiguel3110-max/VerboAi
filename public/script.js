@@ -2114,6 +2114,21 @@ elForm.addEventListener('submit', async (ev) => {
   let cursor = null;
   let escritor = null;
   let frameInvestigando = null;
+  let thinkingDiv = null;
+  let intervaloThinking = null;
+  let intervaloWebs = null;
+
+  // Corta de una la animacion falsa de "Thinking"/"Buscando Web" (que corre en
+  // su propio timer, sin enterarse del progreso real) y la saca de pantalla.
+  // Hay que llamarla apenas llega una respuesta real (imagen lista, done, error)
+  // para que no se quede mostrando "Consultando reddit.com..." despues de que
+  // el trabajo de verdad ya termino.
+  const finalizarThinking = () => {
+    if (intervaloThinking) { clearInterval(intervaloThinking); intervaloThinking = null; }
+    if (intervaloWebs) { clearInterval(intervaloWebs); intervaloWebs = null; }
+    if (thinkingDiv && thinkingDiv.parentNode) { thinkingDiv.remove(); }
+    thinkingDiv = null;
+  };
 
   const controladorPausa = new AbortController();
   mostrarBotonPausar(controladorPausa);
@@ -2159,9 +2174,16 @@ elForm.addEventListener('submit', async (ev) => {
           mostrarReintento(evt.intento, evt.maxIntentos, evt.espera);
         } else if (evt.type === 'ping') {
         } else if (evt.type === 'thinking') {
-          // Mostrar lista de tareas thinking
+          // Mostrar lista de tareas. Ojo: esto es solo un indicador visual de que
+          // el trabajo esta en curso - las tareas se van marcando con el tiempo,
+          // pero SIEMPRE se cortan y se sacan de pantalla en cuanto llega la
+          // respuesta real (ver finalizarThinking), nunca corren mas alla de eso.
+          // Ya NO hay una fase falsa de "Buscando Web" con sitios inventados:
+          // esto es generacion de imagen, no busqueda web real, y mostrar eso
+          // era enganoso.
           if (evt.tareas && evt.tareas.length > 0) {
-            const thinkingDiv = document.createElement('div');
+            finalizarThinking(); // por si quedo uno anterior sin cerrar
+            thinkingDiv = document.createElement('div');
             thinkingDiv.className = 'thinking-lista';
             thinkingDiv.id = 'thinkingLista';
             thinkingDiv.innerHTML = `
@@ -2171,51 +2193,23 @@ elForm.addEventListener('submit', async (ev) => {
               </ul>
             `;
             document.getElementById('mensajes').appendChild(thinkingDiv);
-            scrollAbajo();
-            
-            // Simular progreso marcando tareas como completadas
+            elMensajes.scrollTop = elMensajes.scrollHeight;
+
+            // Marcar tareas como completadas con el tiempo, solo de forma visual.
+            // Si el trabajo real termina antes, finalizarThinking() corta esto
+            // en el acto - nunca se queda mostrando pasos "pendientes" de mentira
+            // despues de que la imagen ya esta lista.
             let tareaActual = 0;
-            const intervaloThinking = setInterval(() => {
-              if (tareaActual < evt.tareas.length) {
-                const tareaEl = thinkingDiv.querySelector(`[data-index="${tareaActual}"]`);
-                if (tareaEl) {
-                  tareaEl.classList.add('completada');
-                  tareaActual++;
-                }
-              } else {
+            const divRef = thinkingDiv;
+            intervaloThinking = setInterval(() => {
+              if (tareaActual >= evt.tareas.length) {
                 clearInterval(intervaloThinking);
-                // Cambiar a "Buscando Web" cuando termina
-                const headerEl = thinkingDiv.querySelector('.thinking-header');
-                if (headerEl) {
-                  headerEl.textContent = 'Buscando Web';
-                  thinkingDiv.classList.add('buscando-web');
-                  
-                  // Agregar texto que cambia rápido con webs consultadas
-                  const websText = document.createElement('div');
-                  websText.className = 'thinking-webs-text';
-                  websText.textContent = 'Consultando...';
-                  thinkingDiv.appendChild(websText);
-                  
-                  const webs = [
-                    'google.com',
-                    'wikipedia.org',
-                    'stackoverflow.com',
-                    'github.com',
-                    'reddit.com',
-                    'medium.com',
-                    'dev.to',
-                    'mdn.io'
-                  ];
-                  let webIndex = 0;
-                  const intervaloWebs = setInterval(() => {
-                    webIndex = (webIndex + 1) % webs.length;
-                    websText.textContent = `Consultando ${webs[webIndex]}...`;
-                  }, 300);
-                  
-                  // Guardar el intervalo para limpiarlo después
-                  thinkingDiv.dataset.intervaloWebs = intervaloWebs;
-                }
+                intervaloThinking = null;
+                return;
               }
+              const tareaEl = divRef.querySelector(`[data-index="${tareaActual}"]`);
+              if (tareaEl) tareaEl.classList.add('completada');
+              tareaActual++;
             }, 800);
           }
         } else if (evt.type === 'chunk') {
@@ -2231,10 +2225,10 @@ elForm.addEventListener('submit', async (ev) => {
             const img = document.createElement('img');
             img.src = evt.imagen;
             img.alt = 'Imagen editada';
-            img.onclick = () => abrirVisorImagen(evt.imagen);
+            img.onclick = () => abrirLightbox(evt.imagen, 'Imagen editada');
             imgContainer.appendChild(img);
             burbujaIA.appendChild(imgContainer);
-            scrollAbajo();
+            elMensajes.scrollTop = elMensajes.scrollHeight;
           }
         } else if (evt.type === 'notebook') {
           mostrarCuaderno(evt.referencia, evt.texto);
@@ -2253,6 +2247,7 @@ elForm.addEventListener('submit', async (ev) => {
           mostrarImagenesEnCuaderno(evt.query, evt.items);
         } else if (evt.type === 'descargas') {
           ocultarReintento();
+          finalizarThinking();
           asegurarBurbuja();
           if (escritor) {
             escritor.detener();
@@ -2291,6 +2286,7 @@ elForm.addEventListener('submit', async (ev) => {
         } else if (evt.type === 'error') {
           ocultarReintento();
           ocultarOverlayGenerandoImagen();
+          finalizarThinking();
           if (escritor) escritor.detener();
           if (burbujaIA) {
             burbujaIA.remove();
@@ -2300,6 +2296,7 @@ elForm.addEventListener('submit', async (ev) => {
           pintarMensajeCompleto('assistant', evt.message || 'Ocurrio un error.', null, true);
         } else if (evt.type === 'done') {
           ocultarOverlayGenerandoImagen();
+          finalizarThinking();
           await new Promise((resolve) => {
             const finalizar = () => {
               if (escritor) escritor.detener();
@@ -2329,6 +2326,13 @@ elForm.addEventListener('submit', async (ev) => {
       if (escritor) escritor.detener();
       if (burbujaIA) actualizarBurbujaPreservandoImagenes(burbujaIA, textoAcumulado.trim());
     } else {
+      // OJO: este catch atrapa CUALQUIER excepcion de todo el bloque try de arriba,
+      // no solo errores de red. Si el server ya respondio bien (res.end() exitoso),
+      // esto casi siempre es un bug de JS en el propio cliente (ej. algo que revienta
+      // al procesar un evento 'thinking'/'descargas'/'done'), no un problema de conexion.
+      // Lo logueamos completo para ver la causa real en vez de tapar todo con el mismo
+      // mensaje generico.
+      console.error('[chat] Error procesando la respuesta del servidor (revisar si es de red o un bug de JS):', e);
       ocultarOverlayGenerandoImagen();
       if (escritor) escritor.detener();
       if (burbujaIA) burbujaIA.remove();
@@ -2336,6 +2340,7 @@ elForm.addEventListener('submit', async (ev) => {
     }
   } finally {
     ocultarReintento();
+    finalizarThinking();
     elIndicador.classList.add('oculto');
     ocultarBotonPausar();
   }
