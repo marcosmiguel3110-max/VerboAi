@@ -79,7 +79,19 @@ setInterval(() => {
 // ============================================================
 // Sistema simple de colas para limitar concurrencia en endpoints críticos
 const queues = new Map();
-const QUEUE_CONCURRENCY = 5; // Aumentado a 5 para mayor concurrencia en imágenes
+const QUEUE_CONCURRENCY = 5; // Default para colas sin override especifico (wikipedia, biblia, piston, etc).
+// Pollinations (imagen.pollinations.ai) tiene su propio limite de rate MUCHO mas estricto que
+// nuestras otras colas (mas que nada en el tier anonimo/sin token): mandarle 5 pedidos en paralelo
+// desde ESTE server ya alcanza para que Pollinations empiece a devolver 429 en cadena, lo cual antes
+// se malinterpretaba como "Pollinations esta caido". Bajamos su concurrencia a un numero mas realista
+// (configurable por env por si el token de Pollinations que se use despues da mas margen).
+const QUEUE_CONCURRENCY_POR_COLA = {
+  pollinations: parseInt(process.env.POLLINATIONS_CONCURRENCY || '2', 10),
+};
+function concurrenciaDeCola(queueName) {
+  const override = QUEUE_CONCURRENCY_POR_COLA[queueName];
+  return Number.isInteger(override) && override > 0 ? override : QUEUE_CONCURRENCY;
+}
 const QUEUE_TIMEOUT = 120000; // Timeout de SEGURIDAD (solo cubre espera en cola + margen). La tarea
 // en sí debe autolimitarse a un deadline MENOR a esto (ver generarImagenPollinations) y aceptar
 // una señal de abort — así este timeout casi nunca dispara, y si dispara, cancela de verdad.
@@ -129,7 +141,7 @@ async function processQueue(queueName) {
   const queue = queues.get(queueName);
   if (!queue) return;
 
-  while (queue.running < QUEUE_CONCURRENCY && queue.queue.length > 0) {
+  while (queue.running < concurrenciaDeCola(queueName) && queue.queue.length > 0) {
     queue.running++;
     const taskWrapper = queue.queue.shift();
     
@@ -288,28 +300,88 @@ const POLLINATIONS_TEXT_REFERER = process.env.POLLINATIONS_TEXT_REFERER || 'http
 // modelos "nectar" (glm-5.2, etc). Sin token, solo openai-fast (anonimo).
 const POLLINATIONS_TEXT_API_TOKEN = process.env.POLLINATIONS_TEXT_API_TOKEN || '';
 
+// Token OPCIONAL para las llamadas de IMAGEN (image.pollinations.ai). Registrarse gratis en
+// https://enter.pollinations.ai da un tier de rate limit bastante mas alto que el anonimo, que es
+// justamente el que veniamos pisando con tantos pedidos en paralelo. Si no se configura POLLINATIONS_IMAGE_API_TOKEN
+// especifico, reusamos el token de texto (si existe) porque Pollinations lo trata como el mismo usuario/cuenta.
+const POLLINATIONS_IMAGE_API_TOKEN = process.env.POLLINATIONS_IMAGE_API_TOKEN || POLLINATIONS_TEXT_API_TOKEN || '';
+function headersImagenPollinations() {
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'image/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+  };
+  if (POLLINATIONS_IMAGE_API_TOKEN) headers['Authorization'] = `Bearer ${POLLINATIONS_IMAGE_API_TOKEN}`;
+  return headers;
+}
+// Backoff cuando Pollinations devuelve 429: respeta el header Retry-After si viene, y si no,
+// usa un backoff mas largo que el de errores 500 (un 429 significa "estas mandando de mas", no
+// un error transitorio, asi que hay que frenar mas en serio para no seguir alimentando el bloqueo).
+function calcularBackoff429(resp, intento, tiempoRestanteMs) {
+  const retryAfterHeader = resp && resp.headers ? resp.headers.get('retry-after') : null;
+  const retryAfterMs = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : NaN;
+  const backoffCalculado = Number.isFinite(retryAfterMs) && retryAfterMs > 0
+    ? retryAfterMs
+    : Math.min(2000 * Math.pow(2, Math.max(0, intento - 1)), 15000); // 2s, 4s, 8s, hasta 15s max
+  const jitter = Math.floor(Math.random() * 400);
+  return Math.max(0, Math.min(backoffCalculado + jitter, Math.max(0, tiempoRestanteMs - 3000)));
+}
+
 const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 
 const MODELOS_DISPONIBLES = {
   NewserLite: {
     nombre: 'NewserLite',
     descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.',
-    // Cascada de texto: se prueba cada modelo en orden hasta que uno responda.
-    modeloOpenRouter: 'openai/gpt-oss-20b:free',
+    // REWORK: cascada reordenada de menor a mayor tamaño (antes probaba primero el modelo de 20B).
+    // Empezar por el modelo mas chico (3B) hace que el caso comun (la mayoria de las consultas de
+    // Lite son simples) responda mas rapido y consuma menos computo; solo se sube de tamaño si el
+    // modelo chico falla o esta rate-limited, asi no se pierde calidad en los casos que la necesitan.
+    modeloOpenRouter: 'meta-llama/llama-3.2-3b-instruct:free',
     modelosOpenRouterTexto: [
-      'openai/gpt-oss-20b:free',
       'meta-llama/llama-3.2-3b-instruct:free',
       'nvidia/nemotron-nano-9b-v2:free',
+      'openai/gpt-oss-20b:free',
     ],
     modeloOpenRouterVision: 'nvidia/nemotron-nano-12b-v2-vl:free',
     modelosOpenRouterVision: [
       'nvidia/nemotron-nano-12b-v2-vl:free',
     ],
     costoCreditos: 1,
-    rateLimitMax: 20,
-    rateLimitMaxWeb: 30,
-    maxTokens: 1024,
+    // Mas barato de correr con la cascada reordenada, asi que el limite sube un poco (antes 20/30).
+    rateLimitMax: 24,
+    rateLimitMaxWeb: 36,
+    // Techo de tokens un poco mas bajo (antes 1024): respuestas mas cortas y directas, coherente
+    // con el rework "mas rapido y economico". Para respuestas largas esta NewserAdvanced.
+    maxTokens: 900,
     badge: null,
+    disponible: true,
+  },
+  NewserLiteCompact: {
+    nombre: 'NewserLiteCompact',
+    descripcion: 'Igual que NewserLite pero mas economico: ~17% mas eficiente en el uso de tokens por respuesta, ideal para consultas cortas y de alto volumen.',
+    // Misma cascada de modelos que NewserLite (mismo acceso, mismo comportamiento), la diferencia
+    // esta en el presupuesto de tokens (mas chico = menos costo por respuesta) y en que se permiten
+    // mas consultas por ventana de tiempo, ya que cada una es mas barata de generar.
+    modeloOpenRouter: 'meta-llama/llama-3.2-3b-instruct:free',
+    modelosOpenRouterTexto: [
+      'meta-llama/llama-3.2-3b-instruct:free',
+      'nvidia/nemotron-nano-9b-v2:free',
+      'openai/gpt-oss-20b:free',
+    ],
+    modeloOpenRouterVision: 'nvidia/nemotron-nano-12b-v2-vl:free',
+    modelosOpenRouterVision: [
+      'nvidia/nemotron-nano-12b-v2-vl:free',
+    ],
+    costoCreditos: 1,
+    rateLimitMax: 30,
+    rateLimitMaxWeb: 45,
+    // 17% menos que el maxTokens original de NewserLite (1024 * 0.83 ≈ 850): mismo modelo, respuestas
+    // mas compactas, menos tokens generados por consulta = mas eficiente y mas barato.
+    maxTokens: 850,
+    badge: 'eco',
     disponible: true,
   },
   NewserAdvanced: {
@@ -1279,12 +1351,81 @@ const EMAILS_AUTORIZADOS_API = new Set(
 // Emails con permiso para crear codigos canjeables desde la web (ver seccion
 // "Codes"). Por defecto usa los mismos emails que EMAILS_AUTORIZADOS_API;
 // para separarlos agrega la variable de entorno ADMIN_EMAILS en Render.
-const ADMIN_EMAILS = new Set(
-  (process.env.ADMIN_EMAILS || process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com,FloppaAdminstrador@gmail.com')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
-);
+//
+// Ademas de los emails fijados por variable de entorno, los admins se pueden
+// agregar/quitar en caliente (sin redeploy) desde el panel de admin en la web
+// (seccion "Administradores" dentro de Codes). Esa lista se persiste en
+// memory/admins.json (y se sincroniza a Mongo si esta configurado), y se
+// carga aca abajo para sumarse a ADMIN_EMAILS al arrancar.
+const ADMIN_EMAIL_OWNER = 'marcos.miguel.3110@gmail.com'; // cuenta duena del panel: nunca se puede quitar como admin.
+const ADMINS_FILE = path.join(MEMORY_DIR, 'admins.json');
+
+function normalizarEmailAdmin(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function leerAdminsPersistidos() {
+  try {
+    const d = JSON.parse(fs.readFileSync(ADMINS_FILE, 'utf-8'));
+    return Array.isArray(d.emails) ? d.emails.map(normalizarEmailAdmin).filter(Boolean) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+const ADMIN_EMAILS_ENV = (process.env.ADMIN_EMAILS || process.env.EMAILS_AUTORIZADOS_API || 'marcos.miguel.3110@gmail.com,FloppaAdminstrador@gmail.com')
+  .split(',')
+  .map(normalizarEmailAdmin)
+  .filter(Boolean);
+
+if (!fs.existsSync(ADMINS_FILE)) {
+  fs.writeFileSync(ADMINS_FILE, JSON.stringify({ emails: [...new Set([ADMIN_EMAIL_OWNER, ...ADMIN_EMAILS_ENV])] }, null, 2));
+}
+
+// ADMIN_EMAILS es la union de los emails fijados por env var + los agregados
+// desde el panel. Es un Set mutable: guardarAdminsPersistidos() lo actualiza
+// en memoria ademas de en disco, asi los cambios aplican al instante sin reiniciar.
+const ADMIN_EMAILS = new Set([...ADMIN_EMAILS_ENV, ...leerAdminsPersistidos()]);
+
+function guardarAdminsPersistidos(emails) {
+  const limpios = [...new Set(emails.map(normalizarEmailAdmin).filter(Boolean))];
+  const valor = { emails: limpios };
+  fs.writeFileSync(ADMINS_FILE, JSON.stringify(valor, null, 2));
+  guardarEnMongoBackground('admins', valor);
+  return limpios;
+}
+
+// Devuelve solo los admins agregados/gestionados desde el panel (para mostrarlos
+// en la UI); no incluye los que vienen fijos por variable de entorno ADMIN_EMAILS.
+function listarAdminsPanel() {
+  return leerAdminsPersistidos();
+}
+
+function agregarAdminPanel(email) {
+  const limpio = normalizarEmailAdmin(email);
+  if (!limpio) throw Object.assign(new Error('Falta el email.'), { codigo: 400 });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(limpio)) {
+    throw Object.assign(new Error('Ese email no parece valido.'), { codigo: 400 });
+  }
+  const actuales = leerAdminsPersistidos();
+  if (actuales.includes(limpio)) throw Object.assign(new Error('Ese email ya es administrador.'), { codigo: 400 });
+  const nuevos = guardarAdminsPersistidos([...actuales, limpio]);
+  ADMIN_EMAILS.add(limpio);
+  return nuevos;
+}
+
+function quitarAdminPanel(email) {
+  const limpio = normalizarEmailAdmin(email);
+  if (limpio === ADMIN_EMAIL_OWNER) {
+    throw Object.assign(new Error('No se puede quitar al administrador principal.'), { codigo: 400 });
+  }
+  const actuales = leerAdminsPersistidos();
+  if (!actuales.includes(limpio)) throw Object.assign(new Error('Ese email no esta en la lista de administradores.'), { codigo: 404 });
+  const nuevos = guardarAdminsPersistidos(actuales.filter((e) => e !== limpio));
+  ADMIN_EMAILS.delete(limpio);
+  return nuevos;
+}
+
 function esAdmin(usuario) {
   if (!usuario || usuario.startsWith('local:')) return false;
   return ADMIN_EMAILS.has(usuario.toLowerCase());
@@ -1445,6 +1586,13 @@ async function cargarDesdeMongoAlArrancar() {
     if (codigos && typeof codigos === 'object') {
       fs.writeFileSync(CODIGOS_FILE, JSON.stringify(codigos, null, 2));
       console.log('[mongo-sync] codigos.json cargado desde Mongo.');
+    }
+
+    const admins = await mongoDb.leerDocumento('admins');
+    if (admins && typeof admins === 'object' && Array.isArray(admins.emails)) {
+      fs.writeFileSync(ADMINS_FILE, JSON.stringify(admins, null, 2));
+      admins.emails.map(normalizarEmailAdmin).filter(Boolean).forEach((e) => ADMIN_EMAILS.add(e));
+      console.log('[mongo-sync] admins.json cargado desde Mongo.');
     }
   } catch (e) {
     console.error('[mongo-sync] Error cargando desde Mongo:', e.message);
@@ -1859,6 +2007,47 @@ app.delete('/api/codigos/:codigo', (req, res) => {
   guardarCodigos(codigos);
 
   res.json({ ok: true });
+});
+
+// ---------- Panel de admin: administradores (agregar/quitar por gmail) ----------
+// Cualquier cuenta que ya sea admin puede gestionar esta lista; el dueño
+// original (marcos.miguel.3110@gmail.com) nunca se puede quitar, para evitar
+// quedarse afuera del panel por error.
+app.get('/api/admins', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tenes permiso para ver los administradores.' });
+
+  const emails = listarAdminsPanel();
+  res.json({
+    ok: true,
+    owner: ADMIN_EMAIL_OWNER,
+    admins: emails.map((email) => ({ email, esOwner: email === ADMIN_EMAIL_OWNER })),
+  });
+});
+
+app.post('/api/admins', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tenes permiso para agregar administradores.' });
+
+  const { email } = req.body || {};
+  try {
+    agregarAdminPanel(email);
+    res.json({ ok: true, admins: listarAdminsPanel() });
+  } catch (e) {
+    res.status(e.codigo || 400).json({ error: e.message });
+  }
+});
+
+app.delete('/api/admins/:email', (req, res) => {
+  const usuario = obtenerUsuarioActual(req);
+  if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tenes permiso para quitar administradores.' });
+
+  try {
+    quitarAdminPanel(req.params.email);
+    res.json({ ok: true, admins: listarAdminsPanel() });
+  } catch (e) {
+    res.status(e.codigo || 400).json({ error: e.message });
+  }
 });
 
 app.post('/api/perfil/nombre', (req, res) => {
@@ -4498,6 +4687,7 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
   const inicio = Date.now();
   let intento = 0;
   let ultimoError = null;
+  let ultimoRespuesta429 = null;
 
   // Usar queue para limitar concurrencia de generación de imágenes
   return await enqueue('pollinations', async (signal) => {
@@ -4508,11 +4698,18 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
       try {
         if (signal.aborted) throw new Error('AbortError');
 
-        // Calcular delay entre reintentos con backoff exponencial + jitter, acotado al tiempo restante
+        // Calcular delay entre reintentos. El 429 usa su propio backoff (mas largo, y respeta
+        // Retry-After si Pollinations lo manda) porque significa "estas mandando de mas", no un
+        // error transitorio como un 500; para el resto seguimos con el backoff corto de siempre.
         if (intento > 1) {
-          const delayBase = Math.min(1000 * Math.pow(2, intento - 2), 4000); // 1s, 2s, 4s max
-          const jitter = Math.floor(Math.random() * 400);
-          const delay = Math.min(delayBase + jitter, tiempoRestante - 3000);
+          let delay;
+          if (ultimoError && ultimoError.includes('429') && ultimoRespuesta429) {
+            delay = calcularBackoff429(ultimoRespuesta429, intento, tiempoRestante);
+          } else {
+            const delayBase = Math.min(1000 * Math.pow(2, intento - 2), 4000); // 1s, 2s, 4s max
+            const jitter = Math.floor(Math.random() * 400);
+            delay = Math.min(delayBase + jitter, tiempoRestante - 3000);
+          }
           if (delay > 0) {
             console.log(`[pollinations] Esperando ${delay}ms antes del reintento ${intento}...`);
             await new Promise((r) => setTimeout(r, delay));
@@ -4537,23 +4734,19 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
 
         console.log(`[pollinations] Intento ${intento} - prompt: "${promptLimpio.slice(0, 50)}..."`);
 
-        // Headers adicionales para evitar bloqueos. Se combina el timeout del intento con la
-        // signal de la cola para poder cancelar de verdad si el deadline global se cumple.
+        // Headers adicionales para evitar bloqueos (incluye Authorization si hay token configurado,
+        // lo que da un tier de rate limit mas alto que el anonimo). Se combina el timeout del
+        // intento con la signal de la cola para poder cancelar de verdad si el deadline global se cumple.
         const timeoutSignal = AbortSignal.timeout(timeout);
         const combinedSignal = ('any' in AbortSignal) ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
         const resp = await fetch(url, {
-          headers: { 
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'image/*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          },
+          headers: headersImagenPollinations(),
           signal: combinedSignal,
         });
 
         if (!resp.ok) {
           ultimoError = `HTTP ${resp.status}`;
+          ultimoRespuesta429 = resp.status === 429 ? resp : null;
           console.warn(`[pollinations] Intento ${intento} devolvio HTTP ${resp.status}`);
           
           // Para 429, seguir reintentando con backoff
@@ -4635,86 +4828,101 @@ async function editarImagenPollinations(prompt, imagenUrl, opciones = {}) {
   const modeloFinal = 'kontext';
   const maxIntentos = 4;
   let ultimoError = null;
+  let ultimoRespuesta429 = null;
   // Mismo criterio que generarImagenPollinations: techo total de tiempo para no superar
   // timeouts de proxy/hosting (antes esto podia sumar hasta 330s solo de timeouts).
   const DEADLINE_MS_EDIT = 55000;
   const inicioEdit = Date.now();
 
-  for (let intento = 0; intento < maxIntentos; intento++) {
-    const restanteEdit = DEADLINE_MS_EDIT - (Date.now() - inicioEdit);
-    if (restanteEdit < 5000) break;
-    try {
-      const timeout = Math.min(20000, restanteEdit);
-      
-      if (intento > 0) {
-        const delay = Math.min(1000 * Math.pow(2, intento - 1), Math.max(0, restanteEdit - timeout));
-        console.log(`[pollinations-edit] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
-        await new Promise((r) => setTimeout(r, delay));
-      }
+  // IMPORTANTE: esta funcion antes pegaba directo a Pollinations SIN pasar por ninguna cola,
+  // lo que significaba que ediciones + generaciones + correcciones podian dispararse todas en
+  // paralelo sin ningun limite compartido, saturando el rate limit de Pollinations mucho antes
+  // de lo esperado. Ahora comparte la misma cola 'pollinations' (con su concurrencia reducida)
+  // que generarImagenPollinations, asi el limite es real y global, no por funcion.
+  return await enqueue('pollinations', async (signal) => {
+    for (let intento = 0; intento < maxIntentos; intento++) {
+      const restanteEdit = DEADLINE_MS_EDIT - (Date.now() - inicioEdit);
+      if (restanteEdit < 5000) break;
+      try {
+        if (signal.aborted) throw new Error('AbortError');
+        const timeout = Math.min(20000, restanteEdit);
 
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&image=${encodeURIComponent(imagenUrl)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true`;
+        if (intento > 0) {
+          const delay = (ultimoError && ultimoError.includes('429') && ultimoRespuesta429)
+            ? calcularBackoff429(ultimoRespuesta429, intento, restanteEdit)
+            : Math.min(1000 * Math.pow(2, intento - 1), Math.max(0, restanteEdit - timeout));
+          console.log(`[pollinations-edit] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
 
-      console.log(`[pollinations-edit] Intento ${intento + 1}/${maxIntentos} - prompt: "${promptLimpio.slice(0, 50)}..."`);
-      const resp = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        signal: AbortSignal.timeout(timeout),
-      });
+        const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&image=${encodeURIComponent(imagenUrl)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true`;
 
-      if (!resp.ok) {
-        ultimoError = `HTTP ${resp.status}`;
-        console.warn(`[pollinations-edit] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
-        
-        if ([429, 500, 502, 503, 504].includes(resp.status)) {
+        console.log(`[pollinations-edit] Intento ${intento + 1}/${maxIntentos} - prompt: "${promptLimpio.slice(0, 50)}..."`);
+        const timeoutSignal = AbortSignal.timeout(timeout);
+        const combinedSignal = ('any' in AbortSignal) ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+        const resp = await fetch(url, {
+          headers: headersImagenPollinations(),
+          signal: combinedSignal,
+        });
+
+        if (!resp.ok) {
+          ultimoError = `HTTP ${resp.status}`;
+          ultimoRespuesta429 = resp.status === 429 ? resp : null;
+          console.warn(`[pollinations-edit] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+          
+          if ([429, 500, 502, 503, 504].includes(resp.status)) {
+            continue;
+          }
+          if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+            break;
+          }
           continue;
         }
-        if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
-          break;
+
+        const mime = resp.headers.get('content-type') || 'image/jpeg';
+        if (!mime.startsWith('image/')) {
+          ultimoError = `Content-Type inesperado: ${mime}`;
+          console.warn(`[pollinations-edit] Intento ${intento + 1} devolvio ${mime}`);
+          continue;
         }
-        continue;
-      }
 
-      const mime = resp.headers.get('content-type') || 'image/jpeg';
-      if (!mime.startsWith('image/')) {
-        ultimoError = `Content-Type inesperado: ${mime}`;
-        console.warn(`[pollinations-edit] Intento ${intento + 1} devolvio ${mime}`);
-        continue;
-      }
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        if (!buffer || buffer.length < 1000) {
+          ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
+          console.warn(`[pollinations-edit] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
+          continue;
+        }
 
-      const buffer = Buffer.from(await resp.arrayBuffer());
-      if (!buffer || buffer.length < 1000) {
-        ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
-        console.warn(`[pollinations-edit] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
-        continue;
+        const urlLocal = guardarImagenDisco(buffer, mime);
+        console.log(`[pollinations-edit] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
+        return {
+          img: {
+            url: urlLocal,
+            prompt: promptLimpio,
+            seed: seedFinal,
+            tamanoKB: Math.round(buffer.length / 1024),
+            modelo: modeloFinal,
+            ancho: anchoFinal,
+            alto: altoFinal,
+            imagenOriginal: imagenUrl,
+          },
+          error: null,
+        };
+      } catch (e) {
+        ultimoError = e.message;
+        console.warn(`[pollinations-edit] Intento ${intento + 1} fallo: ${e.message}`);
+        
+        if (signal.aborted) break;
+        if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
+          continue;
+        }
+        break;
       }
-
-      const urlLocal = guardarImagenDisco(buffer, mime);
-      console.log(`[pollinations-edit] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
-      return {
-        img: {
-          url: urlLocal,
-          prompt: promptLimpio,
-          seed: seedFinal,
-          tamanoKB: Math.round(buffer.length / 1024),
-          modelo: modeloFinal,
-          ancho: anchoFinal,
-          alto: altoFinal,
-          imagenOriginal: imagenUrl,
-        },
-        error: null,
-      };
-    } catch (e) {
-      ultimoError = e.message;
-      console.warn(`[pollinations-edit] Intento ${intento + 1} fallo: ${e.message}`);
-      
-      if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
-        continue;
-      }
-      break;
     }
-  }
 
-  console.error(`[pollinations-edit] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
-  return { img: null, error: ultimoError || 'Pollinations edit fallo' };
+    console.error(`[pollinations-edit] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+    return { img: null, error: ultimoError || 'Pollinations edit fallo' };
+  });
 }
 
 // Función para corregir imperfecciones en imágenes (textos, elementos sin sentido)
@@ -4738,81 +4946,93 @@ async function corregirImperfeccionesImagen(imagenUrl, opciones = {}) {
   const modeloFinal = 'kontext';
   const maxIntentos = 4;
   let ultimoError = null;
+  let ultimoRespuesta429 = null;
 
-  for (let intento = 0; intento < maxIntentos; intento++) {
-    try {
-      const timeout = 60000 + (intento * 15000);
-      
-      if (intento > 0) {
-        const delay = Math.min(1000 * Math.pow(2, intento - 1), 8000);
-        console.log(`[pollinations-fix] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
-        await new Promise((r) => setTimeout(r, delay));
-      }
+  // Antes esta funcion NO pasaba por ninguna cola (mismo problema que editarImagenPollinations):
+  // ahora comparte la cola 'pollinations' para que el limite de concurrencia sea real y global.
+  return await enqueue('pollinations', async (signal) => {
+    for (let intento = 0; intento < maxIntentos; intento++) {
+      try {
+        if (signal.aborted) throw new Error('AbortError');
+        const timeout = 60000 + (intento * 15000);
 
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&image=${encodeURIComponent(imagenUrl)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true`;
+        if (intento > 0) {
+          const delay = (ultimoError && ultimoError.includes('429') && ultimoRespuesta429)
+            ? calcularBackoff429(ultimoRespuesta429, intento, 60000)
+            : Math.min(1000 * Math.pow(2, intento - 1), 8000);
+          console.log(`[pollinations-fix] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
 
-      console.log(`[pollinations-fix] Intento ${intento + 1}/${maxIntentos} - tipo: ${tipoCorreccion}`);
-      const resp = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        signal: AbortSignal.timeout(timeout),
-      });
+        const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&image=${encodeURIComponent(imagenUrl)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true`;
 
-      if (!resp.ok) {
-        ultimoError = `HTTP ${resp.status}`;
-        console.warn(`[pollinations-fix] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
-        
-        if ([429, 500, 502, 503, 504].includes(resp.status)) {
+        console.log(`[pollinations-fix] Intento ${intento + 1}/${maxIntentos} - tipo: ${tipoCorreccion}`);
+        const timeoutSignal = AbortSignal.timeout(timeout);
+        const combinedSignal = ('any' in AbortSignal) ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+        const resp = await fetch(url, {
+          headers: headersImagenPollinations(),
+          signal: combinedSignal,
+        });
+
+        if (!resp.ok) {
+          ultimoError = `HTTP ${resp.status}`;
+          ultimoRespuesta429 = resp.status === 429 ? resp : null;
+          console.warn(`[pollinations-fix] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+          
+          if ([429, 500, 502, 503, 504].includes(resp.status)) {
+            continue;
+          }
+          if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+            break;
+          }
           continue;
         }
-        if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
-          break;
+
+        const mime = resp.headers.get('content-type') || 'image/jpeg';
+        if (!mime.startsWith('image/')) {
+          ultimoError = `Content-Type inesperado: ${mime}`;
+          console.warn(`[pollinations-fix] Intento ${intento + 1} devolvio ${mime}`);
+          continue;
         }
-        continue;
-      }
 
-      const mime = resp.headers.get('content-type') || 'image/jpeg';
-      if (!mime.startsWith('image/')) {
-        ultimoError = `Content-Type inesperado: ${mime}`;
-        console.warn(`[pollinations-fix] Intento ${intento + 1} devolvio ${mime}`);
-        continue;
-      }
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        if (!buffer || buffer.length < 1000) {
+          ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
+          console.warn(`[pollinations-fix] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
+          continue;
+        }
 
-      const buffer = Buffer.from(await resp.arrayBuffer());
-      if (!buffer || buffer.length < 1000) {
-        ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
-        console.warn(`[pollinations-fix] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
-        continue;
+        const urlLocal = guardarImagenDisco(buffer, mime);
+        console.log(`[pollinations-fix] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
+        return {
+          img: {
+            url: urlLocal,
+            prompt: promptLimpio,
+            seed: seedFinal,
+            tamanoKB: Math.round(buffer.length / 1024),
+            modelo: modeloFinal,
+            ancho: anchoFinal,
+            alto: altoFinal,
+            imagenOriginal: imagenUrl,
+            tipoCorreccion,
+          },
+          error: null,
+        };
+      } catch (e) {
+        ultimoError = e.message;
+        console.warn(`[pollinations-fix] Intento ${intento + 1} fallo: ${e.message}`);
+        
+        if (signal.aborted) break;
+        if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
+          continue;
+        }
+        break;
       }
-
-      const urlLocal = guardarImagenDisco(buffer, mime);
-      console.log(`[pollinations-fix] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
-      return {
-        img: {
-          url: urlLocal,
-          prompt: promptLimpio,
-          seed: seedFinal,
-          tamanoKB: Math.round(buffer.length / 1024),
-          modelo: modeloFinal,
-          ancho: anchoFinal,
-          alto: altoFinal,
-          imagenOriginal: imagenUrl,
-          tipoCorreccion,
-        },
-        error: null,
-      };
-    } catch (e) {
-      ultimoError = e.message;
-      console.warn(`[pollinations-fix] Intento ${intento + 1} fallo: ${e.message}`);
-      
-      if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
-        continue;
-      }
-      break;
     }
-  }
 
-  console.error(`[pollinations-fix] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
-  return { img: null, error: ultimoError || 'Pollinations fix fallo' };
+    console.error(`[pollinations-fix] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+    return { img: null, error: ultimoError || 'Pollinations fix fallo' };
+  });
 }
 
 // Función para generar escenarios alternativos para imágenes existentes
@@ -4829,81 +5049,92 @@ async function generarEscenariosAlternativos(imagenUrl, escenario, opciones = {}
   const modeloFinal = 'kontext';
   const maxIntentos = 4;
   let ultimoError = null;
+  let ultimoRespuesta429 = null;
 
-  for (let intento = 0; intento < maxIntentos; intento++) {
-    try {
-      const timeout = 60000 + (intento * 15000);
-      
-      if (intento > 0) {
-        const delay = Math.min(1000 * Math.pow(2, intento - 1), 8000);
-        console.log(`[pollinations-scenario] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
-        await new Promise((r) => setTimeout(r, delay));
-      }
+  // Igual que las otras dos funciones de arriba: antes no pasaba por ninguna cola.
+  return await enqueue('pollinations', async (signal) => {
+    for (let intento = 0; intento < maxIntentos; intento++) {
+      try {
+        if (signal.aborted) throw new Error('AbortError');
+        const timeout = 60000 + (intento * 15000);
 
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&image=${encodeURIComponent(imagenUrl)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true`;
+        if (intento > 0) {
+          const delay = (ultimoError && ultimoError.includes('429') && ultimoRespuesta429)
+            ? calcularBackoff429(ultimoRespuesta429, intento, 60000)
+            : Math.min(1000 * Math.pow(2, intento - 1), 8000);
+          console.log(`[pollinations-scenario] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
 
-      console.log(`[pollinations-scenario] Intento ${intento + 1}/${maxIntentos} - escenario: "${escenario.slice(0, 50)}..."`);
-      const resp = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        signal: AbortSignal.timeout(timeout),
-      });
+        const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&image=${encodeURIComponent(imagenUrl)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true`;
 
-      if (!resp.ok) {
-        ultimoError = `HTTP ${resp.status}`;
-        console.warn(`[pollinations-scenario] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
-        
-        if ([429, 500, 502, 503, 504].includes(resp.status)) {
+        console.log(`[pollinations-scenario] Intento ${intento + 1}/${maxIntentos} - escenario: "${escenario.slice(0, 50)}..."`);
+        const timeoutSignal = AbortSignal.timeout(timeout);
+        const combinedSignal = ('any' in AbortSignal) ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+        const resp = await fetch(url, {
+          headers: headersImagenPollinations(),
+          signal: combinedSignal,
+        });
+
+        if (!resp.ok) {
+          ultimoError = `HTTP ${resp.status}`;
+          ultimoRespuesta429 = resp.status === 429 ? resp : null;
+          console.warn(`[pollinations-scenario] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+          
+          if ([429, 500, 502, 503, 504].includes(resp.status)) {
+            continue;
+          }
+          if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+            break;
+          }
           continue;
         }
-        if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
-          break;
+
+        const mime = resp.headers.get('content-type') || 'image/jpeg';
+        if (!mime.startsWith('image/')) {
+          ultimoError = `Content-Type inesperado: ${mime}`;
+          console.warn(`[pollinations-scenario] Intento ${intento + 1} devolvio ${mime}`);
+          continue;
         }
-        continue;
-      }
 
-      const mime = resp.headers.get('content-type') || 'image/jpeg';
-      if (!mime.startsWith('image/')) {
-        ultimoError = `Content-Type inesperado: ${mime}`;
-        console.warn(`[pollinations-scenario] Intento ${intento + 1} devolvio ${mime}`);
-        continue;
-      }
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        if (!buffer || buffer.length < 1000) {
+          ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
+          console.warn(`[pollinations-scenario] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
+          continue;
+        }
 
-      const buffer = Buffer.from(await resp.arrayBuffer());
-      if (!buffer || buffer.length < 1000) {
-        ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
-        console.warn(`[pollinations-scenario] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
-        continue;
+        const urlLocal = guardarImagenDisco(buffer, mime);
+        console.log(`[pollinations-scenario] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
+        return {
+          img: {
+            url: urlLocal,
+            prompt: promptLimpio,
+            seed: seedFinal,
+            tamanoKB: Math.round(buffer.length / 1024),
+            modelo: modeloFinal,
+            ancho: anchoFinal,
+            alto: altoFinal,
+            imagenOriginal: imagenUrl,
+            escenario,
+          },
+          error: null,
+        };
+      } catch (e) {
+        ultimoError = e.message;
+        console.warn(`[pollinations-scenario] Intento ${intento + 1} fallo: ${e.message}`);
+        
+        if (signal.aborted) break;
+        if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
+          continue;
+        }
+        break;
       }
-
-      const urlLocal = guardarImagenDisco(buffer, mime);
-      console.log(`[pollinations-scenario] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
-      return {
-        img: {
-          url: urlLocal,
-          prompt: promptLimpio,
-          seed: seedFinal,
-          tamanoKB: Math.round(buffer.length / 1024),
-          modelo: modeloFinal,
-          ancho: anchoFinal,
-          alto: altoFinal,
-          imagenOriginal: imagenUrl,
-          escenario,
-        },
-        error: null,
-      };
-    } catch (e) {
-      ultimoError = e.message;
-      console.warn(`[pollinations-scenario] Intento ${intento + 1} fallo: ${e.message}`);
-      
-      if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
-        continue;
-      }
-      break;
     }
-  }
 
-  console.error(`[pollinations-scenario] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
-  return { img: null, error: ultimoError || 'Pollinations scenario fallo' };
+    console.error(`[pollinations-scenario] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+    return { img: null, error: ultimoError || 'Pollinations scenario fallo' };
+  });
 }
 
 // Función para generar logos e iconos especializados
@@ -4935,81 +5166,92 @@ async function generarLogoIcono(descripcion, tipo, opciones = {}) {
   const modeloFinal = 'flux';
   const maxIntentos = 4;
   let ultimoError = null;
+  let ultimoRespuesta429 = null;
 
-  for (let intento = 0; intento < maxIntentos; intento++) {
-    try {
-      const timeout = 45000 + (intento * 10000);
-      
-      if (intento > 0) {
-        const delay = Math.min(1000 * Math.pow(2, intento - 1), 8000);
-        console.log(`[pollinations-logo] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
-        await new Promise((r) => setTimeout(r, delay));
-      }
+  // Cuarta funcion que antes pegaba directo a Pollinations sin cola compartida; misma correccion.
+  return await enqueue('pollinations', async (signal) => {
+    for (let intento = 0; intento < maxIntentos; intento++) {
+      try {
+        if (signal.aborted) throw new Error('AbortError');
+        const timeout = 45000 + (intento * 10000);
 
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true&enhance=true`;
+        if (intento > 0) {
+          const delay = (ultimoError && ultimoError.includes('429') && ultimoRespuesta429)
+            ? calcularBackoff429(ultimoRespuesta429, intento, 45000)
+            : Math.min(1000 * Math.pow(2, intento - 1), 8000);
+          console.log(`[pollinations-logo] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+          await new Promise((r) => setTimeout(r, delay));
+        }
 
-      console.log(`[pollinations-logo] Intento ${intento + 1}/${maxIntentos} - tipo: ${tipoFinal}, descripción: "${descripcionLimpio.slice(0, 50)}..."`);
-      const resp = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-        signal: AbortSignal.timeout(timeout),
-      });
+        const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${modeloFinal}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true&enhance=true`;
 
-      if (!resp.ok) {
-        ultimoError = `HTTP ${resp.status}`;
-        console.warn(`[pollinations-logo] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
-        
-        if ([429, 500, 502, 503, 504].includes(resp.status)) {
+        console.log(`[pollinations-logo] Intento ${intento + 1}/${maxIntentos} - tipo: ${tipoFinal}, descripción: "${descripcionLimpia.slice(0, 50)}..."`);
+        const timeoutSignal = AbortSignal.timeout(timeout);
+        const combinedSignal = ('any' in AbortSignal) ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+        const resp = await fetch(url, {
+          headers: headersImagenPollinations(),
+          signal: combinedSignal,
+        });
+
+        if (!resp.ok) {
+          ultimoError = `HTTP ${resp.status}`;
+          ultimoRespuesta429 = resp.status === 429 ? resp : null;
+          console.warn(`[pollinations-logo] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+          
+          if ([429, 500, 502, 503, 504].includes(resp.status)) {
+            continue;
+          }
+          if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
+            break;
+          }
           continue;
         }
-        if (resp.status >= 400 && resp.status < 500 && resp.status !== 429) {
-          break;
+
+        const mime = resp.headers.get('content-type') || 'image/jpeg';
+        if (!mime.startsWith('image/')) {
+          ultimoError = `Content-Type inesperado: ${mime}`;
+          console.warn(`[pollinations-logo] Intento ${intento + 1} devolvio ${mime}`);
+          continue;
         }
-        continue;
-      }
 
-      const mime = resp.headers.get('content-type') || 'image/jpeg';
-      if (!mime.startsWith('image/')) {
-        ultimoError = `Content-Type inesperado: ${mime}`;
-        console.warn(`[pollinations-logo] Intento ${intento + 1} devolvio ${mime}`);
-        continue;
-      }
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        if (!buffer || buffer.length < 1000) {
+          ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
+          console.warn(`[pollinations-logo] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
+          continue;
+        }
 
-      const buffer = Buffer.from(await resp.arrayBuffer());
-      if (!buffer || buffer.length < 1000) {
-        ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
-        console.warn(`[pollinations-logo] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
-        continue;
+        const urlLocal = guardarImagenDisco(buffer, mime);
+        console.log(`[pollinations-logo] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
+        return {
+          img: {
+            url: urlLocal,
+            prompt: promptLimpio,
+            seed: seedFinal,
+            tamanoKB: Math.round(buffer.length / 1024),
+            modelo: modeloFinal,
+            ancho: anchoFinal,
+            alto: altoFinal,
+            tipo: tipoFinal,
+            descripcion: descripcionLimpia,
+          },
+          error: null,
+        };
+      } catch (e) {
+        ultimoError = e.message;
+        console.warn(`[pollinations-logo] Intento ${intento + 1} fallo: ${e.message}`);
+        
+        if (signal.aborted) break;
+        if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
+          continue;
+        }
+        break;
       }
-
-      const urlLocal = guardarImagenDisco(buffer, mime);
-      console.log(`[pollinations-logo] OK - ${buffer.length} bytes guardados en ${urlLocal}`);
-      return {
-        img: {
-          url: urlLocal,
-          prompt: promptLimpio,
-          seed: seedFinal,
-          tamanoKB: Math.round(buffer.length / 1024),
-          modelo: modeloFinal,
-          ancho: anchoFinal,
-          alto: altoFinal,
-          tipo: tipoFinal,
-          descripcion: descripcionLimpia,
-        },
-        error: null,
-      };
-    } catch (e) {
-      ultimoError = e.message;
-      console.warn(`[pollinations-logo] Intento ${intento + 1} fallo: ${e.message}`);
-      
-      if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
-        continue;
-      }
-      break;
     }
-  }
 
-  console.error(`[pollinations-logo] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
-  return { img: null, error: ultimoError || 'Pollinations logo fallo' };
+    console.error(`[pollinations-logo] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
+    return { img: null, error: ultimoError || 'Pollinations logo fallo' };
+  });
 }
 
 // Estilos predefinidos de Awesome-GPT4o-Image-Prompts

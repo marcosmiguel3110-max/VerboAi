@@ -638,6 +638,16 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
         <button id="btnCrearCodigo">Crear código</button>
         <p id="codesAdminMensaje" class="codes-mensaje"></p>
         <div id="listaCodigosAdmin" class="lista-codigos-admin"></div>
+
+        <hr class="codes-separador" />
+        <h3>Administradores</h3>
+        <p class="settings-descripcion">Agregá o quitá administradores por su cuenta de Gmail. Se guarda al instante, sin reiniciar el servidor.</p>
+        <div class="codes-crear-grid">
+          <input type="email" id="adminNuevoEmail" placeholder="cuenta@gmail.com" autocomplete="off" />
+        </div>
+        <button id="btnAgregarAdmin">Agregar administrador</button>
+        <p id="adminsMensaje" class="codes-mensaje"></p>
+        <div id="listaAdmins" class="lista-codigos-admin"></div>
       </div>
     </div>
   </div>

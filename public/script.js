@@ -114,7 +114,8 @@ let modoActual = localStorage.getItem('verboAiModo') || 'general';
 let modeloActual = localStorage.getItem('verboAiModelo') || 'NewserLite';
 let modelosDisponibles = [
 
-  { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 20, rateLimitMaxWeb: 30 },
+  { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 1, rateLimitMax: 24, rateLimitMaxWeb: 36 },
+  { nombre: 'NewserLiteCompact', descripcion: 'Igual que NewserLite pero mas economico: ~17% mas eficiente en el uso de tokens por respuesta.', costoCreditos: 1, rateLimitMax: 30, rateLimitMaxWeb: 45, badge: 'eco', disponible: true },
   { nombre: 'NewserAdvanced', descripcion: 'Mas potente. Genera imagenes, busca en la web y consulta el clima.', costoCreditos: 5, rateLimitMax: 5, rateLimitMaxWeb: 8, badge: 'beta', disponible: true },
   { nombre: 'NewserAdvanced1.5', descripcion: 'El mas potente. Razonamiento aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Tambien genera imagenes con mas detalle (2 modelos de IA), maximo 2 por hora.', costoCreditos: 10, rateLimitMax: 3, rateLimitMaxWeb: 4, badge: 'pro', disponible: true },
   { nombre: 'NewserPro', descripcion: 'Exclusivo admin. Razonamiento profundo, ejecuta codigo real, busca en la web y genera imagenes en alta calidad. Mismo feature set que NewserAdvanced1.5.', costoCreditos: 0, rateLimitMax: 5, rateLimitMaxWeb: 6, badge: 'admin', disponible: true, soloAdmin: true },
@@ -729,7 +730,7 @@ if (btnAbrirCodes && overlayCodes) {
   btnAbrirCodes.addEventListener('click', () => {
     overlayCodes.classList.remove('oculto');
     mostrarMensajeCodes(codesMensaje, '', '');
-    if (esUsuarioAdmin) cargarListaCodigosAdmin();
+    if (esUsuarioAdmin) { cargarListaCodigosAdmin(); cargarListaAdmins(); }
   });
 }
 if (btnCerrarCodes && overlayCodes) {
@@ -878,6 +879,61 @@ if (btnCrearCodigo) {
       mostrarMensajeCodes(codesAdminMensaje, 'Error de conexion.', 'error');
     }
     btnCrearCodigo.disabled = false;
+  });
+}
+
+// ---------- Administradores (agregar/quitar admins por gmail) ----------
+const adminNuevoEmail = document.getElementById('adminNuevoEmail');
+const btnAgregarAdmin = document.getElementById('btnAgregarAdmin');
+const adminsMensaje = document.getElementById('adminsMensaje');
+const listaAdmins = document.getElementById('listaAdmins');
+
+async function cargarListaAdmins() {
+  if (!listaAdmins) return;
+  try {
+    const r = await fetch('/api/admins');
+    const d = await r.json();
+    if (!r.ok || !Array.isArray(d.admins)) { listaAdmins.innerHTML = ''; return; }
+    listaAdmins.innerHTML = d.admins.map((a) => (
+      '<div class="codigo-admin-item">' +
+        '<span>' + escapeHtml(a.email) + (a.esOwner ? ' — dueño' : '') + '</span>' +
+        (a.esOwner ? '' : '<button class="codigo-admin-item-borrar" data-email="' + escapeHtml(a.email) + '">Quitar</button>') +
+      '</div>'
+    )).join('');
+    listaAdmins.querySelectorAll('.codigo-admin-item-borrar').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await fetch('/api/admins/' + encodeURIComponent(btn.dataset.email), { method: 'DELETE' });
+        cargarListaAdmins();
+      });
+    });
+  } catch (e) {
+    listaAdmins.innerHTML = '';
+  }
+}
+
+if (btnAgregarAdmin) {
+  btnAgregarAdmin.addEventListener('click', async () => {
+    const email = (adminNuevoEmail.value || '').trim();
+    if (!email) { mostrarMensajeCodes(adminsMensaje, 'Escribí un email de Gmail.', 'error'); return; }
+    btnAgregarAdmin.disabled = true;
+    try {
+      const r = await fetch('/api/admins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        mostrarMensajeCodes(adminsMensaje, d.error || 'No se pudo agregar el administrador.', 'error');
+      } else {
+        mostrarMensajeCodes(adminsMensaje, `"${email}" ahora es administrador.`, 'ok');
+        adminNuevoEmail.value = '';
+        cargarListaAdmins();
+      }
+    } catch (e) {
+      mostrarMensajeCodes(adminsMensaje, 'Error de conexion.', 'error');
+    }
+    btnAgregarAdmin.disabled = false;
   });
 }
 
@@ -1166,6 +1222,9 @@ function renderOpcionesModeloEn(contenedor) {
     }
     if (m.badge === 'admin' || m.nombre === 'NewserPro') {
       badges += '<span class="opcion-modelo-badge opcion-modelo-badge-admin">Admin</span>';
+    }
+    if (m.badge === 'eco' || m.nombre === 'NewserLiteCompact') {
+      badges += '<span class="opcion-modelo-badge opcion-modelo-badge-eco">Eco</span>';
     }
     if (m.badge === 'pronto' || !disponible) {
       badges += '<span class="opcion-modelo-badge opcion-modelo-badge-pronto">Pronto</span>';

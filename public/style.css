@@ -1686,10 +1686,15 @@ html.tema-night .opcion-modelo-check { color: var(--chat-activo-noche-borde); }
   letter-spacing: 0.3px;
   border: 1px solid rgba(255, 215, 0, 0.4);
 }
+.opcion-modelo-badge-eco {
+  background: #1f8a70;
+  color: white;
+}
 html.tema-night .opcion-modelo-badge { background: var(--chat-activo-noche-borde); color: var(--texto); }
 html.tema-night .opcion-modelo-badge-beta { background: #2E8B57; color: white; }
 html.tema-night .opcion-modelo-badge-pronto { background: #6c757d; color: white; }
 html.tema-night .opcion-modelo-badge-pro { background: #8033e0; color: white; }
+html.tema-night .opcion-modelo-badge-eco { background: #1f8a70; color: white; }
 html.tema-night .opcion-modelo-badge-admin {
   background: linear-gradient(135deg, #f5d061 0%, #d4af37 50%, #a07e0e 100%);
   color: #1a1a1a;
