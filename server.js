@@ -63,8 +63,13 @@ setInterval(() => {
 // Sistema simple de colas para limitar concurrencia en endpoints críticos
 const queues = new Map();
 const QUEUE_CONCURRENCY = 5; // Aumentado a 5 para mayor concurrencia en imágenes
-const QUEUE_TIMEOUT = 120000; // Aumentado a 120 segundos para imágenes grandes
+const QUEUE_TIMEOUT = 120000; // Timeout de SEGURIDAD (solo cubre espera en cola + margen). La tarea
+// en sí debe autolimitarse a un deadline MENOR a esto (ver generarImagenPollinations) y aceptar
+// una señal de abort — así este timeout casi nunca dispara, y si dispara, cancela de verdad.
 
+// enqueue(queueName, task, opciones?)
+// `task` recibe un AbortSignal como argumento: task(signal). Si el timeout de la cola
+// se cumple, se aborta esa signal para matar el fetch en curso en vez de dejarlo huerfano.
 async function enqueue(queueName, task) {
   if (!queues.has(queueName)) {
     queues.set(queueName, {
@@ -74,17 +79,20 @@ async function enqueue(queueName, task) {
   }
 
   const queue = queues.get(queueName);
-  
+  const abortController = new AbortController();
+
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
-      // Remover de la queue si timeout
+      // Remover de la queue si timeout (si todavia no arranco)
       const idx = queue.queue.indexOf(taskWrapper);
       if (idx > -1) queue.queue.splice(idx, 1);
+      // Si ya estaba corriendo, cancelar el trabajo en curso para no dejarlo huerfano
+      abortController.abort();
       reject(new Error(`Queue timeout para ${queueName}`));
     }, QUEUE_TIMEOUT);
 
     const taskWrapper = {
-      task,
+      task: () => task(abortController.signal),
       resolve: (result) => {
         clearTimeout(timeout);
         resolve(result);
@@ -4461,30 +4469,41 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
   // Lista de modelos fallback para rotar si hay rate limits
   const modelosFallback = ['flux', 'flux-realism', 'turbo', 'flux-cablyai', 'flux-pro'];
   let modeloActual = modeloFinal;
-  
-  // Aumentamos reintentos y timeouts para manejar alta concurrencia
-  const maxIntentos = 8; // Aumentado a 8 para mayor resiliencia
+
+  // DEADLINE TOTAL en vez de timeouts por intento que crecen sin limite. Antes esto podia
+  // sumar minutos (60s+85s+110s+...) y superar el timeout de la cola (QUEUE_TIMEOUT) o el del
+  // proxy/hosting delante del server, cortando la conexion con el cliente mientras el fetch
+  // seguia vivo en el background y terminaba "bien" (por eso el log mostraba exito pero el
+  // usuario veia error de conexion). Ahora TODO el proceso (reintentos incluidos) respeta un
+  // techo fijo, bien por debajo de QUEUE_TIMEOUT (120s), para que siempre responda a tiempo.
+  const DEADLINE_MS = 55000; // Margen de sobra bajo QUEUE_TIMEOUT (120s) y bajo timeouts tipicos de proxy (~60-100s)
+  const timeoutPorIntento = (detallada || enhanceFinal) ? 20000 : 15000;
+  const inicio = Date.now();
+  let intento = 0;
   let ultimoError = null;
 
   // Usar queue para limitar concurrencia de generación de imágenes
-  return await enqueue('pollinations', async () => {
-    for (let intento = 0; intento < maxIntentos; intento++) {
+  return await enqueue('pollinations', async (signal) => {
+    while (Date.now() - inicio < DEADLINE_MS) {
+      const tiempoRestante = DEADLINE_MS - (Date.now() - inicio);
+      if (tiempoRestante < 3000) break; // no vale la pena arrancar un intento con <3s de margen
+      intento++;
       try {
-        // Calcular timeout con backoff exponencial
-        const timeoutBase = (detallada || enhanceFinal) ? 90000 : 60000; // Aumentado a 90s para detallada
-        const timeout = timeoutBase + (intento * 25000); // 60s, 85s, 110s, 135s, 160s, 185s, 210s, 235s
-        
-        // Calcular delay entre reintentos con backoff exponencial + jitter aleatorio
-        if (intento > 0) {
-          const delayBase = Math.min(2000 * Math.pow(2, intento - 1), 15000); // 2s, 4s, 8s, 16s max
-          const jitter = Math.floor(Math.random() * 1000); // Jitter aleatorio 0-1000ms
-          const delay = delayBase + jitter;
-          console.log(`[pollinations] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
-          await new Promise((r) => setTimeout(r, delay));
+        if (signal.aborted) throw new Error('AbortError');
+
+        // Calcular delay entre reintentos con backoff exponencial + jitter, acotado al tiempo restante
+        if (intento > 1) {
+          const delayBase = Math.min(1000 * Math.pow(2, intento - 2), 4000); // 1s, 2s, 4s max
+          const jitter = Math.floor(Math.random() * 400);
+          const delay = Math.min(delayBase + jitter, tiempoRestante - 3000);
+          if (delay > 0) {
+            console.log(`[pollinations] Esperando ${delay}ms antes del reintento ${intento}...`);
+            await new Promise((r) => setTimeout(r, delay));
+          }
         }
 
         // Rotar modelo si hay errores de rate limit o 500
-        if (intento > 0 && ultimoError && (ultimoError.includes('429') || ultimoError.includes('500'))) {
+        if (intento > 1 && ultimoError && (ultimoError.includes('429') || ultimoError.includes('500'))) {
           const idxModelo = modelosFallback.indexOf(modeloActual);
           if (idxModelo < modelosFallback.length - 1) {
             modeloActual = modelosFallback[idxModelo + 1];
@@ -4496,9 +4515,15 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
         // Agregar parámetros adicionales para evitar bloqueos
         const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptLimpio)}?model=${encodeURIComponent(modeloActual)}&width=${anchoFinal}&height=${altoFinal}&seed=${seedFinal}&nologo=true${paramsExtra}&private=true`;
 
-        console.log(`[pollinations] Intento ${intento + 1}/${maxIntentos}${detallada ? ' [alta calidad]' : ''}${opciones.modeloOverride ? ` [modelo=${modeloActual} ${anchoFinal}x${altoFinal}]` : ''} - prompt: "${promptLimpio.slice(0, 50)}..."`);
-        
-        // Headers adicionales para evitar bloqueos
+        // Timeout de este intento: el menor entre el timeout normal y lo que queda del deadline total
+        const timeout = Math.min(timeoutPorIntento, DEADLINE_MS - (Date.now() - inicio));
+
+        console.log(`[pollinations] Intento ${intento} - prompt: "${promptLimpio.slice(0, 50)}..."`);
+
+        // Headers adicionales para evitar bloqueos. Se combina el timeout del intento con la
+        // signal de la cola para poder cancelar de verdad si el deadline global se cumple.
+        const timeoutSignal = AbortSignal.timeout(timeout);
+        const combinedSignal = ('any' in AbortSignal) ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
         const resp = await fetch(url, {
           headers: { 
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -4507,12 +4532,12 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
           },
-          signal: AbortSignal.timeout(timeout),
+          signal: combinedSignal,
         });
 
         if (!resp.ok) {
           ultimoError = `HTTP ${resp.status}`;
-          console.warn(`[pollinations] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
+          console.warn(`[pollinations] Intento ${intento} devolvio HTTP ${resp.status}`);
           
           // Para 429, seguir reintentando con backoff
           if (resp.status === 429) {
@@ -4533,14 +4558,14 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
         const mime = resp.headers.get('content-type') || 'image/jpeg';
         if (!mime.startsWith('image/')) {
           ultimoError = `Content-Type inesperado: ${mime}`;
-          console.warn(`[pollinations] Intento ${intento + 1} devolvio ${mime} (esperaba image/*)`);
+          console.warn(`[pollinations] Intento ${intento} devolvio ${mime} (esperaba image/*)`);
           continue;
         }
 
         const buffer = Buffer.from(await resp.arrayBuffer());
         if (!buffer || buffer.length < 1000) {
           ultimoError = `Respuesta vacia o demasiado chica (${buffer ? buffer.length : 0} bytes)`;
-          console.warn(`[pollinations] Intento ${intento + 1} devolvio ${buffer ? buffer.length : 0} bytes`);
+          console.warn(`[pollinations] Intento ${intento} devolvio ${buffer ? buffer.length : 0} bytes`);
           continue;
         }
 
@@ -4562,7 +4587,11 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
         };
       } catch (e) {
         ultimoError = e.message;
-        console.warn(`[pollinations] Intento ${intento + 1} fallo: ${e.message}`);
+        console.warn(`[pollinations] Intento ${intento} fallo: ${e.message}`);
+        if (signal.aborted) {
+          // La cola cancelo todo (deadline superior alcanzado) - no seguir reintentando
+          break;
+        }
         if (e.name === 'AbortError' || e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT') {
           continue;
         }
@@ -4570,8 +4599,8 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
       }
     }
 
-    console.error(`[pollinations] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
-    return { img: null, error: ultimoError || 'Error desconocido' };
+    console.error(`[pollinations] Se acabo el tiempo o fallaron los intentos (${intento} intentos, ${Date.now() - inicio}ms). Ultimo error: ${ultimoError}`);
+    return { img: null, error: ultimoError || 'Tiempo de espera agotado' };
   });
 }
 
@@ -4589,13 +4618,19 @@ async function editarImagenPollinations(prompt, imagenUrl, opciones = {}) {
   const modeloFinal = 'kontext';
   const maxIntentos = 4;
   let ultimoError = null;
+  // Mismo criterio que generarImagenPollinations: techo total de tiempo para no superar
+  // timeouts de proxy/hosting (antes esto podia sumar hasta 330s solo de timeouts).
+  const DEADLINE_MS_EDIT = 55000;
+  const inicioEdit = Date.now();
 
   for (let intento = 0; intento < maxIntentos; intento++) {
+    const restanteEdit = DEADLINE_MS_EDIT - (Date.now() - inicioEdit);
+    if (restanteEdit < 5000) break;
     try {
-      const timeout = 60000 + (intento * 15000); // 60s, 75s, 90s, 105s
+      const timeout = Math.min(20000, restanteEdit);
       
       if (intento > 0) {
-        const delay = Math.min(1000 * Math.pow(2, intento - 1), 8000);
+        const delay = Math.min(1000 * Math.pow(2, intento - 1), Math.max(0, restanteEdit - timeout));
         console.log(`[pollinations-edit] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
         await new Promise((r) => setTimeout(r, delay));
       }
@@ -5663,7 +5698,15 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         
         // Usar la primera imagen para edición
         const imagenUrl = imagenesGuardadasUrls[0];
-        const resultadoEdicion = await editarImagenPollinations(mensajeOriginal, imagenUrl);
+        const heartbeatEdit = setInterval(() => {
+          if (!res.writableEnded) { try { res.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (e) {} }
+        }, 5000);
+        let resultadoEdicion;
+        try {
+          resultadoEdicion = await editarImagenPollinations(mensajeOriginal, imagenUrl);
+        } finally {
+          clearInterval(heartbeatEdit);
+        }
         
         if (resultadoEdicion.img) {
           chatEdit.mensajes.push({
@@ -5733,7 +5776,15 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         res.write(JSON.stringify({ type: 'chunk', text: '🔍 Analizando imagen para correcciones...' }) + '\n');
         
         const imagenUrl = imagenesGuardadasUrls[0];
-        const resultadoCorreccion = await corregirImperfeccionesImagen(imagenUrl, { tipo: 'general' });
+        const heartbeatFix = setInterval(() => {
+          if (!res.writableEnded) { try { res.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (e) {} }
+        }, 5000);
+        let resultadoCorreccion;
+        try {
+          resultadoCorreccion = await corregirImperfeccionesImagen(imagenUrl, { tipo: 'general' });
+        } finally {
+          clearInterval(heartbeatFix);
+        }
         
         if (resultadoCorreccion.img) {
           chatFix.mensajes.push({
