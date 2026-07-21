@@ -3331,9 +3331,15 @@ Busca en internet.
 
 MODO GAME DEV (2D/3D con canvas) — cuando el usuario pida un juego, motor de juego, o algo tipo Minecraft/Terraria:
 - 2D: usá <canvas> + requestAnimationFrame a mano (sin librerías de por medio salvo que el usuario pida una). Estructura obligatoria: game-loop con delta time, un grid de tiles (array 2D) para el mundo, cámara/viewport que sigue al jugador, capa de colisiones separada de la capa visual. Usá [[TEXTURE::]] para los tiles/sprites en vez de rectángulos de color.
-- 3D: instalá three.js con [[NPM_INSTALL::three]] y cargalo desde esm.sh. Para mundos tipo Minecraft: generá el terreno como una grilla de voxels (array 3D chunk por chunk, ej. 16x16x16), con greedy meshing simple si el usuario pide performance, texturas por cara del cubo con [[TEXTURE::]], e iluminación básica (ambient + directional).
+- 3D: instalá three.js con [[NPM_INSTALL::three]] y cargalo desde esm.sh. Para mundos tipo Minecraft:
+  * NO uses greedy meshing ni generación de mesh custom por chunk: es la fuente #1 de bugs. Usá SIEMPRE 'THREE.InstancedMesh' con un 'THREE.BoxGeometry(1,1,1)' compartido: un InstancedMesh por tipo de bloque, y 'setMatrixAt(i, matrix)' para cada bloque visible. Es mucho más simple, no rompe, y rinde bien hasta varios miles de bloques.
+  * Antes de instanciar bloques: filtrá los bloques que tienen los 6 vecinos ocupados (no se ven, no hace falta dibujarlos). Esto solo, sin greedy meshing, ya resuelve el 90% del problema de performance.
+  * El terreno es un array 3D simple 'mundo[x][y][z] = tipoDeBloque' (0 = aire). Generalo con ruido simple (una función pseudo-perlina a mano de 20-30 líneas, NO npm-instales una librería de noise salvo que el usuario la pida).
+  * Boilerplate three.js que hay que revisar SIEMPRE porque es donde más rompe: (1) el renderer necesita 'renderer.setSize(window.innerWidth, window.innerHeight)' y un listener de 'resize' que actualice tambien 'camera.aspect' + 'camera.updateProjectionMatrix()'; (2) la textura se carga async con 'TextureLoader' — no uses la textura hasta que el callback/onLoad se disparó, si no la caja se ve negra; (3) el raycaster para romper/poner bloques necesita 'raycaster.setFromCamera(pointer, camera)' con 'pointer' en coordenadas normalizadas -1 a 1, error muy común es pasar coordenadas de pixel crudas.
+  * Cámara/movimiento en primera persona: usá 'PointerLockControls' de three (three/examples/jsm/controls/PointerLockControls.js vía esm.sh), no reinventes el mouse-look a mano salvo que el usuario lo pida explícitamente.
 - Audio del juego: siempre real, con Web Audio API ([[AUDIO::]] + el código real en el JS), nunca placeholders de "sonido aquí".
-- Autocrítica de juego: antes de entregar, revisá que el loop no acumule listeners duplicados, que el input funcione con teclado Y táctil, y que el framerate no dependa de la velocidad del CPU (usar delta time siempre).
+- ARCHIVOS CHICOS EN JUEGOS: separá SIEMPRE en mínimo estos archivos: main.js (loop + setup), world.js (generación/datos del mundo), player.js (movimiento/cámara), render.js o blocks.js (InstancedMesh y texturas). Un juego 3D en un solo archivo gigante es la causa #1 de que la respuesta se corte a mitad de camino y el archivo quede roto.
+- Autocrítica de juego (obligatoria antes de entregar, además de la autocrítica general): ¿el resize del canvas/renderer está manejado? ¿las texturas se usan después de cargar, no antes? ¿el raycaster usa coordenadas normalizadas? ¿el loop usa delta time y no un valor fijo? ¿hay algún InstancedMesh con más instancias que las que declaraste en el constructor ('new THREE.InstancedMesh(geo, mat, MAX_INSTANCIAS)')? Si algo de esto está mal, corregilo antes de responder.
 
 REGLAS CRÍTICAS:
 
@@ -3541,6 +3547,12 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     let textoRespuesta = '';
     let modeloUsado = configModelo.modeloOpenRouter;
 
+    // Pedidos de juegos/motores 2D-3D generan MUCHO más código (varios archivos grandes:
+    // motor, mundo, física, render) y son donde más se corta la respuesta. Les damos más
+    // margen de auto-continuación que a un pedido normal.
+    const esPedidoDeJuego = /juego|game|minecraft|terraria|motor.{0,15}(3d|2d)|voxel|canvas.*(juego|game)|three\.js|webgl/i.test(mensaje);
+    const opcionesGeneracion = esPedidoDeJuego ? { maxContinuaciones: 4 } : {};
+
     // 1. Cascada de OpenRouter free — TODOS los modelos la usan primero
     if (OPENROUTER_FREE_ENABLED) {
       const resultadoOR = await llamarModeloGratisConReintentos(
@@ -3548,6 +3560,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         systemPrompt,
         configModelo.modelosOpenRouterTexto,
         () => {},
+        opcionesGeneracion,
       );
       if (resultadoOR.ok) {
         textoRespuesta = stripThinkTags(resultadoOR.texto);
