@@ -10,6 +10,23 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 
+// ============================================================
+// RED DE SEGURIDAD GLOBAL: sin esto, CUALQUIER excepcion no atrapada en
+// CUALQUIER parte del codigo (incluso en una peticion sin relacion, un
+// setInterval, una promesa suelta) mata TODO el proceso Node de golpe,
+// cortando de inmediato TODAS las conexiones activas (incluida cualquier
+// generacion de imagen en curso que iba perfecta). Esto explica errores
+// de "conexion" que no tienen nada que ver con Pollinations ni con
+// timeouts: el log muestra exito porque esa parte SI funciono, pero el
+// proceso murio un instante despues por un error de otro lado.
+// Loguear y seguir vivo es mucho mejor que un crash silencioso en produccion.
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] uncaughtException (el proceso NO se cerro, se sigue ejecutando):', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] unhandledRejection (el proceso NO se cerro, se sigue ejecutando):', reason);
+});
+
 const app = express();
 
 // ============================================================
