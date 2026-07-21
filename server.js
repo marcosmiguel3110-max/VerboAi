@@ -5527,9 +5527,9 @@ async function ejecutarCodigoJudge0(lenguaje, codigo) {
 // Más estable y fácil de usar que Judge0. Soporta múltiples lenguajes.
 // Documentación: https://emkc.org/api/v2/piston
 // Fallbacks alternativos cuando la API principal falla
+// Nota: api.piston.epicb.dev fue eliminado porque el dominio ya no resuelve (ENOTFOUND)
 const PISTON_API_URL = process.env.PISTON_API_URL || 'https://emkc.org/api/v2/piston';
 const PISTON_API_FALLBACKS = [
-  'https://api.piston.epicb.dev',
   'https://piston-api.vercel.app',
   'https://piston.fly.dev'
 ];
