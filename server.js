@@ -5926,11 +5926,26 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
+    const inicioReqGen = Date.now();
     let clienteDesconectadoGen = false;
-    res.on('close', () => { if (!res.writableEnded) clienteDesconectadoGen = true; });
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        clienteDesconectadoGen = true;
+        console.error(`[chat-generar-imagen] CONEXION CERRADA antes de terminar (${Date.now() - inicioReqGen}ms desde que empezo). destroyed=${res.destroyed} writableEnded=${res.writableEnded} req.aborted=${req.aborted}`);
+      }
+    });
+    res.on('error', (err) => {
+      console.error(`[chat-generar-imagen] ERROR EN LA RESPUESTA (${Date.now() - inicioReqGen}ms):`, err.code || err.message, err);
+    });
+    req.on('aborted', () => {
+      console.error(`[chat-generar-imagen] REQUEST ABORTADA POR EL CLIENTE/PROXY (${Date.now() - inicioReqGen}ms desde que empezo)`);
+    });
+    req.on('error', (err) => {
+      console.error(`[chat-generar-imagen] ERROR EN EL REQUEST (${Date.now() - inicioReqGen}ms):`, err.code || err.message, err);
+    });
     const enviarGen = (obj) => {
       if (clienteDesconectadoGen || res.writableEnded) return;
-      try { res.write(JSON.stringify(obj) + '\n'); } catch (e) {  }
+      try { res.write(JSON.stringify(obj) + '\n'); } catch (e) { console.error('[chat-generar-imagen] fallo res.write:', e.code || e.message, e); }
     };
 
     try {
@@ -6531,7 +6546,7 @@ app.get('/api/mongo-status', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+const servidorHttp = app.listen(PORT, () => {
   console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
   try {
     const os = require('os');
@@ -6581,4 +6596,43 @@ app.get('/api/test-btatesters', async (req, res) => {
     console.error('[test-btatesters] Error:', e.message);
     res.json({ ok: false, error: 'Error al conectar con el servicio de IA.' });
   }
+});
+
+// ============================================================
+// APAGADO GRACIOSO (Render, y cualquier plataforma que use SIGTERM en deploys)
+// ============================================================
+// Sin esto, cuando Render (u otra plataforma con zero-downtime deploys) manda
+// SIGTERM a la instancia vieja durante un deploy, Node no hace nada especial:
+// si no le llega SIGKILL antes, sigue viva hasta que se cumple el "shutdown
+// delay" de la plataforma y ahi SI la mata de un tiro, cortando en seco
+// cualquier conexion en curso (por ejemplo una generacion de imagen que
+// estaba a mitad de camino). Con este handler: dejamos de aceptar conexiones
+// NUEVAS de inmediato pero le damos tiempo a las que ya estaban en curso a
+// terminar solas antes de salir.
+let cerrandoServidor = false;
+function apagarGraciosamente(señal) {
+  if (cerrandoServidor) return;
+  cerrandoServidor = true;
+  console.log(`[shutdown] Señal ${señal} recibida. Dejando de aceptar conexiones nuevas, esperando a que terminen las peticiones en curso...`);
+  servidorHttp.close(() => {
+    console.log('[shutdown] Todas las conexiones en curso terminaron. Saliendo limpio.');
+    process.exit(0);
+  });
+  // Red de seguridad: si alguna conexion (ej. una generacion de imagen larga)
+  // no termina sola, no colgar el proceso para siempre - forzar salida antes
+  // de que la plataforma mande SIGKILL de todas formas.
+  setTimeout(() => {
+    console.warn('[shutdown] Todavia quedaban conexiones abiertas despues de 25s. Forzando salida.');
+    process.exit(0);
+  }, 25000).unref();
+}
+process.on('SIGTERM', () => apagarGraciosamente('SIGTERM'));
+process.on('SIGINT', () => apagarGraciosamente('SIGINT'));
+
+// Healthcheck simple y liviano (no toca DB ni APIs externas) para que Render
+// pueda confirmar rapido que la instancia nueva esta lista antes de rutear
+// trafico real hacia ella. Configuralo en Render -> tu servicio -> Settings
+// -> Health Check Path como "/healthz".
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ ok: true });
 });
