@@ -5909,11 +5909,18 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   const mensajeOriginal = (req.body.mensaje || '').trim();
   const chatId = (req.body.chatId || '').trim();
   const modoElegido = (req.body.modo || 'general').trim();
+  const profundidadExtendida = req.body.profundidad === true || req.body.profundidad === 'true';
 
   const usuarioParaModelo = obtenerUsuarioActual(req);
   let configModelo;
   try {
-    configModelo = resolverModelo(req.body.modelo, usuarioParaModelo);
+    // Si profundidad extendida está activa, usar modelos más avanzados automáticamente
+    let modeloSolicitado = req.body.modelo;
+    if (profundidadExtendida && !modeloSolicitado) {
+      // Usar NewserAdvanced1.5 por defecto cuando profundidad está activa
+      modeloSolicitado = 'NewserAdvanced1.5';
+    }
+    configModelo = resolverModelo(modeloSolicitado, usuarioParaModelo);
   } catch (e) {
     if (e.modeloBloqueado) return res.status(e.codigo || 400).json({ error: e.message });
     return res.status(400).json({ error: e.message });

@@ -451,6 +451,34 @@ document.querySelectorAll('.settings-nav-item').forEach((boton) => {
   });
 });
 
+// Toggle de profundidad extendida
+const toggleProfundidad = document.getElementById('toggleProfundidad');
+const indicadorProfundidad = document.getElementById('indicadorProfundidad');
+
+// Cargar estado guardado de profundidad
+const profundidadGuardada = localStorage.getItem('verboAiProfundidad') === 'true';
+if (toggleProfundidad) {
+  toggleProfundidad.checked = profundidadGuardada;
+  actualizarIndicadorProfundidad();
+}
+
+if (toggleProfundidad) {
+  toggleProfundidad.addEventListener('change', () => {
+    const activo = toggleProfundidad.checked;
+    localStorage.setItem('verboAiProfundidad', activo);
+    actualizarIndicadorProfundidad();
+  });
+}
+
+function actualizarIndicadorProfundidad() {
+  if (!indicadorProfundidad || !toggleProfundidad) return;
+  if (toggleProfundidad.checked) {
+    indicadorProfundidad.classList.remove('oculto');
+  } else {
+    indicadorProfundidad.classList.add('oculto');
+  }
+}
+
 let creditosPollingInterval = null;
 let ultimoCreditosNumero = null;
 
@@ -2163,6 +2191,11 @@ elForm.addEventListener('submit', async (ev) => {
   if (chatIdActual) formData.append('chatId', chatIdActual);
   formData.append('modo', modoActual);
   formData.append('modelo', modeloActual);
+  // Agregar parámetro de profundidad extendida si está activo
+  const profundidadActiva = localStorage.getItem('verboAiProfundidad') === 'true';
+  if (profundidadActiva) {
+    formData.append('profundidad', 'true');
+  }
   imagenesSeleccionadas.forEach((f) => formData.append('imagenes', f));
   imagenesSeleccionadas = [];
   elInputImagen.value = '';

@@ -964,6 +964,31 @@
   border-color: var(--vc-accent);
 }
 
+/* Botón de Design — arriba del botón de imagen */
+.vc-chat-btn-design {
+  width: 32px; height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--vc-bg-secondary);
+  color: var(--vc-text-secondary);
+  border: 1px solid var(--vc-border);
+  transition: all 0.15s;
+}
+.vc-chat-btn-design:hover {
+  background: var(--vc-bg-tertiary);
+  color: var(--vc-accent);
+  border-color: var(--vc-accent);
+}
+.vc-chat-btn-design.active {
+  background: var(--vc-accent);
+  color: white;
+  border-color: var(--vc-accent);
+}
+
 .vc-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Loading small */

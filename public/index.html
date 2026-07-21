@@ -125,6 +125,11 @@
 
     <div id="previewNombreImagen" class="preview-imagen"></div>
 
+    <div id="indicadorProfundidad" class="indicador-profundidad oculto">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M4.9 19.1l14.2-14.2" stroke-linecap="round"/></svg>
+      Profundidad extendida
+    </div>
+
     <form id="formChat" class="entrada">
       <label for="inputImagen" class="btn-icono" title="Adjuntar hasta 5 imagenes">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
@@ -250,7 +255,7 @@
         <h2>Settings</h2>
         <button class="settings-nav-item activa" data-seccion="modos">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"/></svg>
-          Modos
+          General
         </button>
         <button class="settings-nav-item" data-seccion="fondo">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke-linecap="round"/></svg>
@@ -264,6 +269,10 @@
         <button class="settings-nav-item" data-seccion="creditos">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v12M9 9h4.5a2.5 2.5 0 010 5H9" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Créditos
+        </button>
+        <button class="settings-nav-item" data-seccion="profundidad">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M4.9 19.1l14.2-14.2" stroke-linecap="round"/></svg>
+          Profundidad
         </button>
       </nav>
 
@@ -597,6 +606,24 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Recargar Creditos
           </button>
+        </section>
+
+        <section class="settings-seccion oculto" data-seccion-panel="profundidad">
+          <h3>Profundidad extendida</h3>
+          <p class="settings-descripcion">Activa el modo de profundidad extendida para ejecutar códigos más avanzados, búsquedas web más profundas y modelos de IA más potentes. Consume más tokens y tiene rate limits más estrictos.</p>
+          <div class="opcion-profundidad">
+            <label class="switch">
+              <input type="checkbox" id="toggleProfundidad">
+              <span class="slider"></span>
+            </label>
+            <div class="opcion-profundidad-info">
+              <strong>Profundidad extendida</strong>
+              <small>Modelos más avanzados, búsquedas más profundas, ejecución de código complejo</small>
+            </div>
+          </div>
+          <p class="settings-descripcion" style="margin-top: 16px; font-size: 12px; color: var(--texto-suave);">
+            Cuando está activo, verás el indicador "Profundidad extendida" en verde arriba del área de chat. Esto también afecta a VerboCode para ejecutar códigos más avanzados.
+          </p>
         </section>
       </div>
     </div>
