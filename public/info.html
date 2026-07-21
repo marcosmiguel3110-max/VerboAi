@@ -245,7 +245,7 @@
 
   <div class="tester">
     <h2 style="margin-top:0">🧪 Probar la API en vivo</h2>
-    <p>Pegá tu token y un mensaje. Podés probar generar imágenes escribiendo "Generame [algo]" con NewserAdvanced.</p>
+    <p>Pegá tu token y un mensaje. Podés probar generar imágenes escribiendo una descripción visual (ej: "un león descansando al atardecer") con NewserAdvanced.</p>
 
     <div class="grid-2">
       <input type="text" id="token" placeholder="verboai-XXXXXXXXXXXX" />
@@ -256,7 +256,7 @@
         <option value="NewserAdvanced1.5">NewserAdvanced1.5 (15 créditos, razonamiento + código + imágenes detalladas)</option>
       </select>
     </div>
-    <textarea id="mensaje" rows="2" placeholder="Escribí tu mensaje acá... (proba: 'Generame un leon descansando' con NewserAdvanced)">Hola, quien eres?</textarea>
+    <textarea id="mensaje" rows="2" placeholder="Escribí tu mensaje acá... (proba: 'un leon descansando al atardecer' con NewserAdvanced)">Hola, quien eres?</textarea>
     <button id="btnProbar">Probar petición</button>
     <button id="btnLimpiar" style="background:#454F6B">Limpiar</button>
 
@@ -368,7 +368,7 @@
 
   <section>
     <h2>4. Generar imágenes con IA 🎨</h2>
-    <p>Si el mensaje empieza con <code>Generame</code>, <code>Genera</code>, <code>Dibujame</code>, etc., se genera una imagen con IA automáticamente (sin pasar por el modelo de texto). Funciona con <strong>NewserAdvanced</strong> y <strong>NewserAdvanced1.5</strong>.</p>
+    <p>La detección de generación de imágenes es automática: si tu mensaje describe algo visual (ej: "un león descansando al atardecer", "un logo para una empresa de tecnología", "un paisaje montañoso con nieve"), se genera una imagen automáticamente. No hace falta usar palabras clave como "Generame" o "Dibujame". Funciona con <strong>NewserAdvanced</strong> y <strong>NewserAdvanced1.5</strong>.</p>
     <p>Con <strong>NewserAdvanced1.5</strong> la imagen sale con más detalle porque se usan 2 modelos de IA (uno mejora el prompt, el otro la renderiza en mayor resolución) — por eso el límite ahí es de <strong>2 imágenes por hora</strong>. Con NewserAdvanced no hay ese límite extra, pero el detalle es menor.</p>
     <ul>
       <li>Consume <strong>+1 crédito</strong> adicional (encima del costo del modelo)</li>
@@ -379,7 +379,7 @@
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
   -d '{
-    "mensaje": "Generame un leon descansando al atardecer",
+    "mensaje": "un leon descansando al atardecer",
     "modelo": "NewserAdvanced"
   }'</code></pre>
     <p><strong>Respuesta:</strong></p>
@@ -428,7 +428,7 @@ const r = await preguntar("Hola, quien eres?", "NewserLite");
 console.log(r.respuesta, "créditos:", r.creditosRestantes);
 
 // Ejemplo: generar imagen
-const r2 = await preguntar("Generame un leon", "NewserAdvanced");
+const r2 = await preguntar("un leon", "NewserAdvanced");
 if (r2.imagen) {
   const url = "https://verboai.duckdns.org" + r2.imagen.url;
   console.log("Imagen:", url);
@@ -459,7 +459,7 @@ r = preguntar("Hola, quien eres?", "NewserLite")
 print(r["respuesta"], "creditos:", r["creditosRestantes"])
 
 # Ejemplo: generar imagen
-r = preguntar("Generame un leon", "NewserAdvanced")
+r = preguntar("un leon", "NewserAdvanced")
 if r.get("imagen"):
     print("Imagen:", "https://verboai.duckdns.org" + r["imagen"]["url"])</code></pre>
     </details>
@@ -511,7 +511,7 @@ curl -X POST https://verboai.duckdns.org/api/v1/chat \
 curl -X POST https://verboai.duckdns.org/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
-  -d '{"mensaje":"Generame un leon","modelo":"NewserAdvanced"}'
+  -d '{"mensaje":"un leon","modelo":"NewserAdvanced"}'
 
 # Info del token (no gasta créditos)
 curl -H "Authorization: Bearer verboai-XXXX" \
