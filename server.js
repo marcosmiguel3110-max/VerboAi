@@ -5567,12 +5567,14 @@ async function ejecutarCodigoJudge0(lenguaje, codigo) {
   }
 }
 
-// Piston API: API de ejecución de código open-source, gratuita y sin API key
-// Más estable y fácil de usar que Judge0. Soporta múltiples lenguajes.
+// Piston API: API de ejecución de código open-source
+// NOTA: Desde Feb 15, 2026, la API pública requiere autorización.
+// Para obtener una API key, contactar a EngineerMan en Discord: https://discord.gg/engineerman
 // Documentación: https://emkc.org/api/v2/piston
 // Fallbacks alternativos cuando la API principal falla
 // Nota: api.piston.epicb.dev fue eliminado porque el dominio ya no resuelve (ENOTFOUND)
 const PISTON_API_URL = process.env.PISTON_API_URL || 'https://emkc.org/api/v2/piston';
+const PISTON_API_KEY = process.env.PISTON_API_KEY || '';
 const PISTON_API_FALLBACKS = [
   'https://piston-api.vercel.app',
   'https://piston.fly.dev'
@@ -5645,7 +5647,10 @@ async function ejecutarCodigoPiston(lenguaje, codigo) {
           ],
         }, {
           timeout,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            ...(PISTON_API_KEY ? { 'Authorization': `Bearer ${PISTON_API_KEY}` } : {}),
+          },
           validateStatus: () => true, // Manejar todos los status codes manualmente
         });
 
@@ -5654,8 +5659,8 @@ async function ejecutarCodigoPiston(lenguaje, codigo) {
           ultimoError = `HTTP ${resp.status}`;
           console.warn(`[piston] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
           
-          // Si es 401, 429, 500, 502, 503, cambiar al siguiente fallback
-          if ([401, 429, 500, 502, 503, 504].includes(resp.status)) {
+          // Si es 401, 403, 404, 429, 500, 502, 503, cambiar al siguiente fallback
+          if ([401, 403, 404, 429, 500, 502, 503, 504].includes(resp.status)) {
             if (fallbackIndex < PISTON_API_FALLBACKS.length - 1) {
               fallbackIndex++;
               console.log(`[piston] HTTP ${resp.status} - cambiando a fallback[${fallbackIndex}]: ${PISTON_API_FALLBACKS[fallbackIndex]}`);
