@@ -643,10 +643,32 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
       
-      const r = await llamarOpenRouterFree(messages, systemPrompt, modelo, opciones);
+      let r = await llamarOpenRouterFree(messages, systemPrompt, modelo, opciones);
       if (r.ok) {
-        console.log(`[llamarModeloGratis] EXITO con ${modelo} (modelo ${modelosProbados}/${lista.length})`);
-        return { ok: true, texto: r.texto, modelo: r.modelo, capa: 'openrouter' };
+        // Si el modelo cortó la respuesta por límite de tokens (finish_reason === 'length'),
+        // el bloque de código que estaba escribiendo puede haber quedado sin cerrar
+        // (ej. un [[FILE_CREATE::...]] sin el ]] final), lo que rompe el regex del
+        // parser y el archivo se pierde entero. En vez de devolver la respuesta cortada,
+        // pedimos hasta 2 continuaciones "desde donde quedó" y las concatenamos.
+        const maxContinuaciones = opciones.maxContinuaciones ?? 2;
+        let continuaciones = 0;
+        let textoAcumulado = r.texto;
+        let ultimoFinish = r.finishReason;
+        while (ultimoFinish === 'length' && continuaciones < maxContinuaciones && !opciones.signal?.aborted) {
+          continuaciones++;
+          console.log(`[llamarModeloGratis] Respuesta cortada por longitud (finish_reason=length), pidiendo continuación ${continuaciones}/${maxContinuaciones} a ${modelo}...`);
+          const mensajesContinuar = [
+            ...messages,
+            { role: 'assistant', content: textoAcumulado },
+            { role: 'user', content: 'Continuá exactamente donde te quedaste. No repitas nada de lo ya escrito, no reinicies archivos ni agregues explicaciones nuevas, seguí el contenido tal cual iba.' },
+          ];
+          const rCont = await llamarOpenRouterFree(mensajesContinuar, systemPrompt, modelo, opciones);
+          if (!rCont.ok || !rCont.texto) break;
+          textoAcumulado += rCont.texto;
+          ultimoFinish = rCont.finishReason;
+        }
+        console.log(`[llamarModeloGratis] EXITO con ${modelo} (modelo ${modelosProbados}/${lista.length})${continuaciones ? ` + ${continuaciones} continuación(es)` : ''}`);
+        return { ok: true, texto: textoAcumulado, modelo: r.modelo, capa: 'openrouter' };
       }
       
       ultimoError = r.error;
@@ -898,6 +920,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
       }
 
       const texto = resp.data?.choices?.[0]?.message?.content || '';
+      const finishReason = resp.data?.choices?.[0]?.finish_reason || null;
       if (!texto || !texto.trim()) {
         console.error('[openrouter-free] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
         if (keyIndex !== null) updateKeyStats(keyIndex, false, false);
@@ -906,8 +929,8 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
       }
 
       if (keyIndex !== null) updateKeyStats(keyIndex, true, false);
-      console.log(`[openrouter-free] OK - ${texto.length} chars por ${model}`);
-      return { ok: true, texto: texto.trim(), modelo: model };
+      console.log(`[openrouter-free] OK - ${texto.length} chars por ${model} (finish_reason: ${finishReason})`);
+      return { ok: true, texto: texto.trim(), modelo: model, finishReason };
     } catch (e) {
       ultimoError = e.message;
       console.warn(`[openrouter-free] Intento ${intento + 1} fallo: ${e.message}`);
@@ -3297,8 +3320,20 @@ Ejecuta código y muestra el resultado. Lenguajes: python, javascript, java, c, 
 [[IMAGE::prompt en inglés]]
 Genera una imagen.
 
+[[TEXTURE::prompt en inglés]]
+Genera una TEXTURA real, tileable (que repite sin costura), lista para usar en un juego 2D o 3D (piso, pared, bloque estilo Minecraft, terreno estilo Terraria, sprite sheet, etc). Se guarda como archivo en la carpeta textures/. Usalo en vez de IMAGE cuando el usuario pida texturas, sprites, o assets visuales para un juego.
+
+[[AUDIO::descripción corta en español]]
+Genera CÓDIGO REAL de Web Audio API (osciladores, envolventes ADSR, ruido filtrado, etc) para un efecto de sonido o música procedural — sin archivos externos, 100% sintetizado en el navegador. Poné el código directamente en el archivo JS correspondiente, esta etiqueta es solo para marcar en el plan que se generó audio.
+
 [[WEB::consulta corta]]
 Busca en internet.
+
+MODO GAME DEV (2D/3D con canvas) — cuando el usuario pida un juego, motor de juego, o algo tipo Minecraft/Terraria:
+- 2D: usá <canvas> + requestAnimationFrame a mano (sin librerías de por medio salvo que el usuario pida una). Estructura obligatoria: game-loop con delta time, un grid de tiles (array 2D) para el mundo, cámara/viewport que sigue al jugador, capa de colisiones separada de la capa visual. Usá [[TEXTURE::]] para los tiles/sprites en vez de rectángulos de color.
+- 3D: instalá three.js con [[NPM_INSTALL::three]] y cargalo desde esm.sh. Para mundos tipo Minecraft: generá el terreno como una grilla de voxels (array 3D chunk por chunk, ej. 16x16x16), con greedy meshing simple si el usuario pide performance, texturas por cara del cubo con [[TEXTURE::]], e iluminación básica (ambient + directional).
+- Audio del juego: siempre real, con Web Audio API ([[AUDIO::]] + el código real en el JS), nunca placeholders de "sonido aquí".
+- Autocrítica de juego: antes de entregar, revisá que el loop no acumule listeners duplicados, que el input funcione con teclado Y táctil, y que el framerate no dependa de la velocidad del CPU (usar delta time siempre).
 
 REGLAS CRÍTICAS:
 
@@ -3392,15 +3427,22 @@ Proyecto: ${proyecto.nombre}`;
       ...(imagenes.length > 0 ? { images: imagenes } : {}),
     });
 
-    // Razonamiento previo (cascada OpenRouter free, solo si el modelo es NewserPro)
+    // Razonamiento previo (cascada OpenRouter free) — ANTES esto solo corría para NewserPro.
+    // Ahora corre para TODOS los modelos de Verbo Code: un análisis interno breve antes de
+    // programar mejora la profundidad de la respuesta (qué archivos hacen falta, qué estructura,
+    // qué errores comunes evitar) sin que el usuario tenga que pedirlo. Para modelos livianos
+    // (NewserAdvanced1.5 no tiene modelosOpenRouterRazonamiento propio) usamos la misma cascada
+    // de texto del modelo como fallback.
     let razonamientoPrevio = '';
-    if (configModelo.modelosOpenRouterRazonamiento && modeloPedido === 'NewserPro') {
+    {
+      const modelosRazonamiento = configModelo.modelosOpenRouterRazonamiento || configModelo.modelosOpenRouterTexto;
       try {
         const respRaz = await llamarModeloGratisConReintentos(
           [{ role: 'user', content: mensaje }],
-          'Sos un modulo de razonamiento interno para Verbo Code. Analizá el pedido del usuario paso a paso: qué archivos necesita crear, qué estructura, qué investigación web hace falta. Plan breve (maximo 150 palabras). No respondas al usuario.',
-          configModelo.modelosOpenRouterRazonamiento,
+          'Sos un modulo de razonamiento interno para Verbo Code. Analizá el pedido del usuario paso a paso: qué archivos necesita crear, qué estructura, qué investigación web hace falta, qué errores comunes hay que evitar, y si aplica, qué decisiones de arquitectura tomar (ej: motor de juego, estructura de datos del mundo, capas de audio). Plan breve (maximo 150 palabras). No respondas al usuario.',
+          modelosRazonamiento,
           () => {},
+          { maxContinuaciones: 0 },
         );
         if (respRaz && respRaz.ok) {
           razonamientoPrevio = stripThinkTags(respRaz.texto);
@@ -3555,6 +3597,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     const reFileEdit = /\[\[FILE_EDIT::([^\]]+?)::([\s\S]*?)\]\]/g;
     const reFileDelete = /\[\[FILE_DELETE::([^\]]+?)\]\]/g;
     const reImage = /\[\[IMAGE::([^\]]+?)\]\]/g;
+    const reTexture = /\[\[TEXTURE::([^\]]+?)\]\]/g;
     const reWeb = /\[\[WEB::([^\]]+?)\]\]/g;
 
     // Procesar FILE_CREATE y FILE_EDIT (mismo efecto: crear/reemplazar archivo)
@@ -3710,6 +3753,37 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       });
     }
 
+    // Procesar TEXTURE (generar texturas reales, tileable, para juegos 2D/3D)
+    let matchTex;
+    while ((matchTex = reTexture.exec(textoRespuesta)) !== null) {
+      const promptUsuario = matchTex[1].trim();
+      // Prompt reforzado para que la textura sea REALMENTE tileable y sirva como asset de juego:
+      // vista frontal/cenital, sin sombras direccionales, bordes que continúan, alta definición.
+      const promptTextura = `${promptUsuario}, seamless tileable game texture, flat top-down lighting, no shadows, no vignette, high detail, repeating pattern, PBR base color map, 4k game asset`;
+      try {
+        const resultado = await generarImagenPollinations(promptTextura, undefined, {
+          detallada: false,
+          modeloOverride: 'flux',
+          anchoOverride: 512,
+          altoOverride: 512,
+        });
+        if (resultado.img) {
+          const nombreTex = `textures/${promptUsuario.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40) || 'textura'}_${acciones.filter(a => a.tipo === 'texture').length + 1}.png`;
+          proyecto.archivos[nombreTex + '.url'] = resultado.img.url;
+          proyectoActualizado = true;
+          acciones.push({
+            tipo: 'texture',
+            nombre: nombreTex,
+            url: resultado.img.url,
+            descripcion: `Textura generada: "${promptUsuario.slice(0, 50)}..." → ${nombreTex}`,
+          });
+        }
+      } catch (e) {
+        console.error('[verbocode] error generando textura:', e.message);
+        acciones.push({ tipo: 'texture', descripcion: `Error generando textura: ${e.message}` });
+      }
+    }
+
     // Procesar IMAGE (generar imágenes)
     let matchImg;
     while ((matchImg = reImage.exec(textoRespuesta)) !== null) {
@@ -3745,6 +3819,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       .replace(reLineEdit, '')
       .replace(reFileDelete, '')
       .replace(reImage, '')
+      .replace(reTexture, '')
       .replace(reWeb, '')
       .replace(reNpm, '')
       .replace(reTest, '')

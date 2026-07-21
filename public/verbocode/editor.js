@@ -1110,9 +1110,14 @@ function renderMensaje(m) {
     div.appendChild(imgDiv);
   }
   
-  // Convertir markdown básico (code blocks, inline code, bold)
+  // Convertir markdown básico (code blocks colapsables, inline code, bold)
+  // Usamos la MISMA función que en el streaming en vivo (formatearMarkdownConColapsado)
+  // para que un mensaje recargado (ej. al reabrir el proyecto) se vea IGUAL que la
+  // primera vez: bloques de código con su header/contenedor propio en vez de un
+  // <pre> plano suelto, que es lo que causaba que el panel se viera "tapado" o
+  // descuadrado la segunda vez que se abría la conversación.
   const contentDiv = document.createElement('div');
-  contentDiv.innerHTML = formatearMarkdown(m.content || '');
+  contentDiv.innerHTML = formatearMarkdownConColapsado(m.content || '');
   div.appendChild(contentDiv);
 
   // Si es mensaje del assistant y tiene modelo, mostrarlo abajo
@@ -1127,7 +1132,7 @@ function renderMensaje(m) {
   if (m.role === 'assistant' && m.plan) {
     const planDiv = document.createElement('div');
     planDiv.className = 'vc-msg-plan';
-    planDiv.innerHTML = '<div class="vc-plan-header"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke-linecap="round" stroke-linejoin="round"/></svg> PLAN DE ACCIÓN</div><pre>' + escapeHtmlPlan(m.plan) + '</pre>';
+    planDiv.innerHTML = '<div class="vc-plan-header"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke-linecap="round" stroke-linejoin="round"/></svg> PLAN DE ACCIÓN</div><pre class="vc-plan-content">' + escapeHtmlPlan(m.plan) + '</pre>';
     div.appendChild(planDiv);
   }
 
@@ -1149,6 +1154,7 @@ function renderAccion(accion) {
     file_edit: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18l-3-3 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     file_delete: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     image: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    texture: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18" stroke-linecap="round"/></svg>',
     web: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" stroke-linecap="round"/></svg>',
     run: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
     npm_install: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
