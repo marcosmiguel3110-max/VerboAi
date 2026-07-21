@@ -3416,7 +3416,51 @@ Proyecto: ${proyecto.nombre}`;
     systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, modeloPedido);
 
     // ============================================================
-    // PASO 0: GENERAR PLAN (antes de responder)
+    // PASO 0: INVESTIGACIÓN WEB REAL (antes del plan)
+    // Si el proyecto requiere información actual o específica, investigar primero
+    // ============================================================
+    enviarSSE({ type: 'status', text: 'Investigando en la web...' });
+    let contextoWeb = '';
+    
+    // Detectar si el pedido requiere investigación web (palabras clave)
+    const requiereInvestigacion = /api|framework|librería|library|tutorial|guía|guide|ejemplo|example|cómo|como|latest|versión|version|actual|actualizado|nuevo|new|2024|2025|2026/i.test(mensaje);
+    
+    if (requiereInvestigacion) {
+      try {
+        // Usar Google Custom Search para investigación (si está configurado) o DuckDuckGo como fallback
+        const queryInvestigacion = mensaje.slice(0, 100); // limitar longitud
+        let resultadosWeb = null;
+        
+        // Intentar con Google CSE primero
+        if (GOOGLE_CSE_API_KEY) {
+          const resultadoGoogle = await buscarWebGoogleReal(queryInvestigacion);
+          if (resultadoGoogle.exito) {
+            resultadosWeb = resultadoGoogle.resultados;
+          }
+        }
+        
+        // Fallback a DuckDuckGo si Google falló o no está configurado
+        if (!resultadosWeb) {
+          const resultadoDDG = await buscarWebDuckDuckGo(queryInvestigacion);
+          if (resultadoDDG.exito) {
+            resultadosWeb = resultadoDDG.resultados;
+          }
+        }
+        
+        if (resultadosWeb && resultadosWeb.length > 0) {
+          contextoWeb = '\n\nINVESTIGACIÓN WEB REAL:\n' + resultadosWeb.slice(0, 3).map(r => 
+            `- ${r.titulo || r.title}: ${r.snippet || r.body}\n  URL: ${r.link || r.url}`
+          ).join('\n');
+          enviarSSE({ type: 'status', text: 'Investigación completada. Creando plan...' });
+        }
+      } catch (e) {
+        console.warn('[verbocode] Investigación web falló:', e.message);
+        // Continuar sin investigación web
+      }
+    }
+
+    // ============================================================
+    // PASO 1: GENERAR PLAN (con contexto de investigación web si existe)
     // El plan se envía INMEDIATAMENTE al cliente vía SSE
     // ============================================================
     enviarSSE({ type: 'status', text: 'Creando plan de acción...' });
@@ -3427,9 +3471,9 @@ PASO 1: ...
 PASO 2: ...
 etc.
 
-Sea conciso. Máximo 5 pasos.`;
+Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investigación web arriba para crear un plan más preciso y actualizado.' : ''}`;
 
-      const planMessages = [{ role: 'user', content: `Pedido del usuario: ${mensaje}\n\nArchivos actuales: ${Object.keys(proyecto.archivos).join(', ') || 'vacío'}` }];
+      const planMessages = [{ role: 'user', content: `Pedido del usuario: ${mensaje}\n\nArchivos actuales: ${Object.keys(proyecto.archivos).join(', ') || 'vacío'}${contextoWeb}` }];
 
       const resultadoPlan = await llamarModeloGratisConReintentos(
         planMessages,
