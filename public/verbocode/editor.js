@@ -724,6 +724,7 @@ async function enviarChat() {
   if (estado.chatEnProgreso) return;
   const input = document.getElementById('vcChatInput');
   const btnEnviar = document.getElementById('btnEnviarChat');
+  const indicadorGenerando = document.getElementById('vcIndicadorGenerando');
   const texto = input.value.trim();
   if (!texto && !estado.imagenPendiente) return;
 
@@ -734,6 +735,8 @@ async function enviarChat() {
     estado.imagenPendiente = null;
     estado.nombreImagenPendiente = null;
     try { input.focus(); } catch(e) {}
+    // Ocultar indicador Generando Code
+    if (indicadorGenerando) indicadorGenerando.classList.add('oculto');
   };
 
   const msgUser = { 
@@ -751,6 +754,9 @@ async function enviarChat() {
   input.disabled = true;
   btnEnviar.disabled = true;
   estado.chatEnProgreso = true;
+
+  // Mostrar indicador Generando Code
+  if (indicadorGenerando) indicadorGenerando.classList.remove('oculto');
 
   // Limpiar elementos de peticiones anteriores que pudieron quedar
   const thinkingViejo = document.getElementById('thinkingIndicator');
