@@ -80,13 +80,11 @@ setInterval(() => {
 // Sistema simple de colas para limitar concurrencia en endpoints críticos
 const queues = new Map();
 const QUEUE_CONCURRENCY = 5; // Default para colas sin override especifico (wikipedia, biblia, piston, etc).
-// Pollinations (imagen.pollinations.ai) tiene su propio limite de rate MUCHO mas estricto que
-// nuestras otras colas (mas que nada en el tier anonimo/sin token): mandarle 5 pedidos en paralelo
-// desde ESTE server ya alcanza para que Pollinations empiece a devolver 429 en cadena, lo cual antes
-// se malinterpretaba como "Pollinations esta caido". Bajamos su concurrencia a un numero mas realista
-// (configurable por env por si el token de Pollinations que se use despues da mas margen).
+// Pollinations (imagen.pollinations.ai) tiene su propio limite de rate. Con las optimizaciones de
+// reintentos, jitter y timeouts aumentados, podemos manejar un poco más de concurrencia.
+// Default aumentado a 3 (antes 2) para mejor throughput sin saturar el rate limit de Pollinations.
 const QUEUE_CONCURRENCY_POR_COLA = {
-  pollinations: parseInt(process.env.POLLINATIONS_CONCURRENCY || '2', 10),
+  pollinations: parseInt(process.env.POLLINATIONS_CONCURRENCY || '3', 10),
 };
 function concurrenciaDeCola(queueName) {
   const override = QUEUE_CONCURRENCY_POR_COLA[queueName];
