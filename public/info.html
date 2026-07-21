@@ -228,9 +228,10 @@
     <div class="grid-2">
       <input type="text" id="token" placeholder="verboai-XXXXXXXXXXXX" />
       <select id="modelo">
-        <option value="NewserLite">NewserLite (1 crédito, rápido)</option>
-        <option value="NewserAdvanced">NewserAdvanced (5 créditos, potente + imágenes)</option>
-        <option value="NewserAdvanced1.5">NewserAdvanced1.5 (10 créditos, razonamiento + código + imágenes detalladas)</option>
+        <option value="NewserLiteCompact">NewserLiteCompact (1 crédito, ultra económico)</option>
+        <option value="NewserLite">NewserLite (2 créditos, rápido)</option>
+        <option value="NewserAdvanced">NewserAdvanced (6 créditos, potente + imágenes)</option>
+        <option value="NewserAdvanced1.5">NewserAdvanced1.5 (15 créditos, razonamiento + código + imágenes detalladas)</option>
       </select>
     </div>
     <textarea id="mensaje" rows="2" placeholder="Escribí tu mensaje acá... (proba: 'Generame un leon descansando' con NewserAdvanced)">Hola, quien eres?</textarea>
@@ -323,16 +324,20 @@
     <h2>3. Modelos disponibles</h2>
     <div class="info-card">
       <div class="item">
+        <div class="num">NewserLiteCompact</div>
+        <div class="label">Ultra económico<br>1 crédito/pedido<br>30 req/min (API)<br>45 req/min (web)</div>
+      </div>
+      <div class="item">
         <div class="num">NewserLite</div>
-        <div class="label">Rápido y liviano<br>1 crédito/pedido<br>20 req/min (API)<br>30 req/min (web)</div>
+        <div class="label">Rápido y liviano<br>2 créditos/pedido<br>24 req/min (API)<br>36 req/min (web)</div>
       </div>
       <div class="item">
         <div class="num">NewserAdvanced</div>
-        <div class="label">Potente + imágenes<br>5 créditos/pedido<br>5 req/min (API)<br>8 req/min (web)</div>
+        <div class="label">Potente + imágenes<br>6 créditos/pedido<br>5 req/min (API)<br>8 req/min (web)</div>
       </div>
       <div class="item">
         <div class="num">NewserAdvanced1.5</div>
-        <div class="label">Nuevo · el más potente<br>Razonamiento profundo + código<br>Imágenes con más detalle (máx. 2/hora)<br>10 créditos/pedido<br>3 req/min (API)<br>4 req/min (web)</div>
+        <div class="label">Nuevo · el más potente<br>Razonamiento profundo + código<br>Imágenes con más detalle (máx. 2/hora)<br>15 créditos/pedido<br>3 req/min (API)<br>4 req/min (web)</div>
       </div>
     </div>
     <p><strong>NewserAdvanced1.5</strong> ya está disponible: agrega un paso de razonamiento interno antes de responder, es el mejor modelo para código (ejecución real + APIs de prueba) y también genera imágenes usando 2 modelos de IA para más detalle — por la carga extra, el límite ahí es de 2 imágenes por hora.</p>
@@ -574,7 +579,12 @@ python verboai.py info</code></pre>
       }
 
       resultado.className = 'tester-result ok';
-      resultado.textContent = JSON.stringify(data, null, 2);
+      // Escapar HTML para evitar inyección
+      const textoLimpio = JSON.stringify(data, null, 2)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      resultado.textContent = textoLimpio;
 
       infoCard.style.display = 'grid';
       document.getElementById('rModelo').textContent = data.modeloUsado || '-';

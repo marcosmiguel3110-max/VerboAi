@@ -2776,7 +2776,7 @@ app.get('/api/v1/info', (req, res) => {
   const creditosGlobales = leerCreditosGlobales(token.propietario);
 
   const modelos = Object.values(MODELOS_DISPONIBLES)
-    .filter((m) => !m.soloAdmin || esAdminToken)
+    .filter((m) => !m.soloAdmin) // Excluir siempre modelos soloAdmin (solo verbocode)
     .map((m) => ({
       nombre: m.nombre,
       descripcion: m.descripcion,
