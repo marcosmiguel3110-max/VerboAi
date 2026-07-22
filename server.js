@@ -469,6 +469,18 @@ const MODELOS_DISPONIBLES = {
       'nvidia/nemotron-3-super-120b-a12b:free',
       'nvidia/nemotron-3-ultra-550b-a55b:free',
     ],
+    // Cascada especifica para Verbo Code (solo se usa cuando el pedido es CODIGO,
+    // no en el chat normal): prioriza los modelos especializados en programacion
+    // por sobre los generalistas, asi la generacion de juegos/apps sale mas prolija.
+    modelosOpenRouterCodigo: [
+      'qwen/qwen3-coder:free',
+      'cohere/north-mini-code:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'nvidia/nemotron-3-nano-30b-a3b:free',
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
+    ],
     modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
     modelosOpenRouterVision: [
       'google/gemma-4-31b-it:free',
@@ -512,6 +524,18 @@ const MODELOS_DISPONIBLES = {
       'qwen/qwen3-coder:free',
       'nvidia/nemotron-3-super-120b-a12b:free',
       'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'poolside/laguna-m.1:free',
+    ],
+    // Cascada especifica de Verbo Code: Admin ya arranca con un modelo de codigo,
+    // pero reforzamos el orden para que ante fallo/rate-limit siga cayendo en
+    // modelos especializados en programacion antes que en generalistas.
+    modelosOpenRouterCodigo: [
+      'cohere/north-mini-code:free',
+      'qwen/qwen3-coder:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'nvidia/nemotron-3-nano-30b-a3b:free',
+      'meta-llama/llama-3.3-70b-instruct:free',
       'poolside/laguna-m.1:free',
     ],
     modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
@@ -3387,6 +3411,15 @@ MODO GAME DEV (2D/3D con canvas) — cuando el usuario pida un juego, motor de j
 - ARCHIVOS CHICOS EN JUEGOS: separá SIEMPRE en mínimo estos archivos: main.js (loop + setup), world.js (generación/datos del mundo), player.js (movimiento/cámara), render.js o blocks.js (InstancedMesh y texturas). Un juego 3D en un solo archivo gigante es la causa #1 de que la respuesta se corte a mitad de camino y el archivo quede roto.
 - Autocrítica de juego (obligatoria antes de entregar, además de la autocrítica general): ¿el resize del canvas/renderer está manejado? ¿las texturas se usan después de cargar, no antes? ¿el raycaster usa coordenadas normalizadas? ¿el loop usa delta time y no un valor fijo? ¿hay algún InstancedMesh con más instancias que las que declaraste en el constructor ('new THREE.InstancedMesh(geo, mat, MAX_INSTANCIAS)')? Si algo de esto está mal, corregilo antes de responder.
 
+DISEÑO VISUAL / "JUICE" (obligatorio, no opcional — un juego funcional pero feo no está terminado):
+- Paleta de colores definida antes de tocar código: 4-6 colores coherentes (base + acento + UI), nunca colores default del navegador ni rectángulos grises sin estilo.
+- HUD/UI del juego (vida, puntaje, inventario) con tipografía legible, contraste correcto y layout prolijo, no texto crudo pegado en la esquina.
+- Feedback visual en cada acción: hit-flash o tint al recibir daño, screen-shake corto en impactos/explosiones, partículas simples (rects o sprites chicos) en golpes/pasos/recolección de items, transición suave (no corte brusco) al cambiar de pantalla o morir.
+- Animación: sprites 2D con al menos 2-4 frames por estado (idle/caminar/atacar) o interpolación de rotación/escala en 3D; nunca un personaje 100% estático.
+- Iluminación 3D: como mínimo una luz ambiental + una direccional/punto con sombras básicas ('renderer.shadowMap.enabled', 'castShadow'/'receiveShadow'); un mundo sin ninguna luz además de la ambiental se ve plano y mal.
+- Menú/pantalla de inicio y pantalla de game-over con estilo propio (no un 'alert()' ni texto sin formato), coherentes con la paleta elegida.
+- Si el usuario no especificó un estilo visual, elegí uno concreto vos mismo (ej: pixel-art retro, low-poly pastel, neón oscuro) y aplicalo consistentemente en vez de dejarlo genérico.
+
 REGLAS CRÍTICAS:
 
 1. SEPARACIÓN OBLIGATORIA: NUNCA pongas CSS o JS dentro del HTML. SIEMPRE separá:
@@ -3560,12 +3593,14 @@ Proyecto: ${proyecto.nombre}`;
     enviarSSE({ type: 'status', text: 'Creando plan de acción...' });
     let planAccion = '';
     try {
+      const esProOAdmin = modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin';
+      const pedidoPareceJuego = /juego|game|minecraft|terraria|motor.{0,15}(3d|2d)|voxel|canvas.*(juego|game)|three\.js|webgl/i.test(mensaje);
       const planSystemPrompt = `Sos ${modeloPedido} de Verbo AI. NUNCA digas ser otro modelo. Estás en MODO VERBO CODE. El usuario te pidió algo. Tu trabajo es crear un PLAN DE ACCIÓN breve (máximo 5 pasos) de qué vas a hacer para resolverlo. No escribas código, solo el plan. Formato:
 PASO 1: ...
 PASO 2: ...
 etc.
 
-Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investigación web arriba para crear un plan más preciso y actualizado.' : ''}`;
+Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investigación web arriba para crear un plan más preciso y actualizado.' : ''}${esProOAdmin ? `\n\nSos el modelo más avanzado disponible: antes de listar los pasos, pensá un instante qué le falta al pedido tal cual está escrito (detalles de diseño visual, UX, mecánicas, estructura de archivos) y sumalo al plan como pasos extra si mejora el resultado sin contradecir lo que pidió el usuario. No preguntes, decidí y agregalo directo al plan.${pedidoPareceJuego ? ' Como es un juego, asegurate de que el plan incluya explícitamente un paso de diseño visual (paleta, UI, feedback/juice, animación) y no solo la lógica del juego.' : ''}` : ''}`;
 
       const planMessages = [{ role: 'user', content: `Pedido del usuario: ${mensaje}\n\nArchivos actuales: ${Object.keys(proyecto.archivos).join(', ') || 'vacío'}${contextoWeb}` }];
 
@@ -3600,11 +3635,16 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     const opcionesGeneracion = esPedidoDeJuego ? { maxContinuaciones: 4 } : {};
 
     // 1. Cascada de OpenRouter free — TODOS los modelos la usan primero
+    // Todo lo que pasa por Verbo Code ES codigo, asi que si el tier tiene una
+    // cascada especializada (modelosOpenRouterCodigo) la usamos en vez de la
+    // generalista: esto es lo que activa los modelos de codigo/diseño mas
+    // fuertes en Pro y Admin, y solo dentro de este flujo (nunca en el chat normal).
+    const modelosParaGenerar = configModelo.modelosOpenRouterCodigo || configModelo.modelosOpenRouterTexto;
     if (OPENROUTER_FREE_ENABLED) {
       const resultadoOR = await llamarModeloGratisConReintentos(
         chatHistorial.slice(-5),
         systemPrompt,
-        configModelo.modelosOpenRouterTexto,
+        modelosParaGenerar,
         () => {},
         opcionesGeneracion,
       );
