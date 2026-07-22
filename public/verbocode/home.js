@@ -48,8 +48,10 @@ async function cargarUsuario() {
     // Guardar esAdmin en localStorage para que el botón Verbo Code del
     // sidebar principal lo detecte correctamente la próxima vez.
     localStorage.setItem('verboAiEsAdmin', d.esAdmin ? 'true' : 'false');
+    localStorage.setItem('verboAiEsAdminVerboCode', d.esAdmin ? 'true' : 'false');
     // También guardarlo en window para que script.js lo lea al instante
     window.esUsuarioAdmin = !!d.esAdmin;
+    window.esUsuarioAdminVerboCode = !!d.esAdmin;
 
     const nombre = d.usuario || 'Usuario';
     document.getElementById('vcPerfilNombre').textContent = nombre;

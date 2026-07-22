@@ -79,7 +79,9 @@ async function cargarUsuario() {
     estado.usuario = await r.json();
     // Guardar en localStorage para que el botón Verbo Code del chat principal lo detecte
     localStorage.setItem('verboAiEsAdmin', estado.usuario.esAdmin ? 'true' : 'false');
+    localStorage.setItem('verboAiEsAdminVerboCode', estado.usuario.esAdmin ? 'true' : 'false');
     window.esUsuarioAdmin = !!estado.usuario.esAdmin;
+    window.esUsuarioAdminVerboCode = !!estado.usuario.esAdmin;
     if (!estado.usuario.esAdmin) {
       alert('Solo las cuentas administrador pueden usar Verbo Code');
       window.location.href = '/';

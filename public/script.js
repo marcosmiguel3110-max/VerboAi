@@ -791,8 +791,10 @@ if (btnMasCodes) {
     const btnVerboCode = document.createElement('button');
     btnVerboCode.id = 'btnVerboCode';
     btnVerboCode.className = 'nav-item nav-item-verbocode';
-    // Detectar admin desde window (seteado por cargarUsuario) o localStorage
-    const esAdminParaVerboCode = !!(window.esUsuarioAdmin || localStorage.getItem('verboAiEsAdmin') === 'true');
+    // Detectar acceso a Verbo Code desde window (seteado por cargarUsuario) o localStorage.
+    // Usa el flag especifico de Verbo Code (esAdminVerboCode), no el de administradores/codigos
+    // (esAdmin), porque las cuentas locales tienen Verbo Code pero NO panel de codigos.
+    const esAdminParaVerboCode = !!(window.esUsuarioAdminVerboCode || localStorage.getItem('verboAiEsAdminVerboCode') === 'true');
     if (esAdminParaVerboCode) {
       btnVerboCode.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg> Verbo Code <span class="badge-prox" style="background:linear-gradient(135deg,#d4af37,#b8860b);color:#1a1a1a;">Admin</span>';
       btnVerboCode.title = 'Abrir Verbo Code en nueva pestaña';
@@ -2483,8 +2485,12 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
       if (elAvatar) elAvatar.textContent = nombre.trim().charAt(0) || '?';
       esUsuarioAdmin = !!d.esAdmin;
       window.esUsuarioAdmin = esUsuarioAdmin;
+      window.esUsuarioAdminVerboCode = !!d.esAdminVerboCode;
       // Guardar en localStorage para que Verbo Code y otras páginas lo detecten
-      try { localStorage.setItem('verboAiEsAdmin', esUsuarioAdmin ? 'true' : 'false'); } catch (e) {}
+      try {
+        localStorage.setItem('verboAiEsAdmin', esUsuarioAdmin ? 'true' : 'false');
+        localStorage.setItem('verboAiEsAdminVerboCode', d.esAdminVerboCode ? 'true' : 'false');
+      } catch (e) {}
       const codesAdmin = document.getElementById('codesAdmin');
       if (codesAdmin) codesAdmin.classList.toggle('oculto', !esUsuarioAdmin);
     })

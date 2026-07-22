@@ -1979,10 +1979,14 @@ app.get('/api/whoami', (req, res) => {
   const usuario = obtenerUsuarioActual(req);
   if (!usuario) return res.json({ usuario: null });
   if (usuario.startsWith('local:')) {
-    return res.json({ usuario: usuario.slice(6), nombre: usuario.slice(6), esAdmin: false });
+    // esAdmin: false a proposito (oculta el panel de codigos/administradores).
+    // esAdminVerboCode: true a proposito (las cuentas locales SI tienen Verbo Code
+    // y modelos admin, ver usuarioEsAdmin()). Antes el frontend usaba "esAdmin" para
+    // las dos cosas, así que ninguna cuenta local podía entrar a Verbo Code por la UI.
+    return res.json({ usuario: usuario.slice(6), nombre: usuario.slice(6), esAdmin: false, esAdminVerboCode: true });
   }
   const cuenta = leerUsuarios()[usuario];
-  res.json({ usuario, nombre: (cuenta && cuenta.nombre) || usuario, esAdmin: esAdmin(usuario) });
+  res.json({ usuario, nombre: (cuenta && cuenta.nombre) || usuario, esAdmin: esAdmin(usuario), esAdminVerboCode: usuarioEsAdmin(usuario) });
 });
 
 app.post('/api/codigos/canjear', (req, res) => {
