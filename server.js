@@ -1326,6 +1326,12 @@ const APP_USER = process.env.APP_USER || 'admin';
 const APP_PASS = process.env.APP_PASS || 'cambia-esta-clave';
 const APP_USER_2 = 'FloppaAdminstrador';
 const APP_PASS_2 = 'ozi67';
+// Cuenta "gogo": acceso a modelos admin + Verbo Code + creditos infinitos (por ser
+// "local:", ver usuarioEsAdmin()), pero SIN permisos de codigos canjeables ni panel
+// de administradores (esos los da esAdmin(), que a proposito devuelve false para
+// cualquier cuenta "local:", ver mas abajo).
+const APP_USER_3 = 'gogo@gmail.com';
+const APP_PASS_3 = '6767';
 const AUTH_SECRET = process.env.AUTH_SECRET || 'cambia-este-secreto-tambien';
 
 if (!process.env.APP_USER || !process.env.APP_PASS) {
@@ -1938,6 +1944,14 @@ app.post('/api/login', (req, res) => {
 
   if (usuario === APP_USER_2 && clave === APP_PASS_2) {
     let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER_2}`))}; HttpOnly; Path=/; SameSite=Lax`;
+    if (req.secure) cookieStr += '; Secure';
+    if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
+    res.setHeader('Set-Cookie', cookieStr);
+    return res.json({ ok: true });
+  }
+
+  if (usuario === APP_USER_3 && clave === APP_PASS_3) {
+    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER_3}`))}; HttpOnly; Path=/; SameSite=Lax`;
     if (req.secure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
