@@ -1021,7 +1021,7 @@ async function llamarPollinationsTexto(messages, systemPrompt, opciones = {}) {
 //   { ok: true, texto, modelo } | { ok: false, error }
 // Si GPT4FREE_URL no esta configurada o esta deshabilitada, devuelve ok:false
 // inmediatamente para que el caller haga fallback a GPT-OSS-120B.
-async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
+async function llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones = {}) {
   if (!GPT4FREE_ENABLED) return { ok: false, error: 'GLM-4 deshabilitado (GPT4FREE_ENABLED_PRO=false)' };
   if (!GPT4FREE_URL) return { ok: false, error: 'GPT4FREE_URL no configurada' };
 
@@ -1040,7 +1040,10 @@ async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
     model: GPT4FREE_MODEL,
     messages: [{ role: 'system', content: systemPrompt }, ...messages],
     temperature: 0.7,
-    max_tokens: 3072,
+    // Antes esto estaba en 3072: para un juego 3D con varios archivos (InstancedMesh,
+    // generación de mundo, controles) eso corta la respuesta casi siempre a mitad de
+    // un archivo. Lo subimos a 8192 (el maximo que suelen aceptar los puentes GLM-4/gratis).
+    max_tokens: 8192,
     stream: false,
   };
 
@@ -1057,17 +1060,42 @@ async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
       return { ok: false, error: `HTTP ${resp.status}` };
     }
     const texto = resp.data?.choices?.[0]?.message?.content || '';
+    const finishReason = resp.data?.choices?.[0]?.finish_reason || null;
     if (!texto || !texto.trim()) {
       console.error('[glm-4] puente devolvio respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
       return { ok: false, error: 'Respuesta vacia del puente GLM-4' };
     }
-    console.log(`[glm-4] OK - ${texto.length} chars devueltos por ${GPT4FREE_MODEL} desde ${url.slice(0, 60)}...`);
-    return { ok: true, texto: texto.trim(), modelo: GPT4FREE_MODEL };
+    console.log(`[glm-4] OK - ${texto.length} chars devueltos por ${GPT4FREE_MODEL} desde ${url.slice(0, 60)}... (finish_reason: ${finishReason})`);
+    return { ok: true, texto: texto.trim(), modelo: GPT4FREE_MODEL, finishReason };
   } catch (e) {
     if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return { ok: false, error: 'cancelado' };
     console.error('[glm-4] fallo la peticion al puente:', e.message);
     return { ok: false, error: e.message };
   }
+}
+
+async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
+  let r = await llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones);
+  if (!r.ok) return r;
+
+  const maxContinuaciones = opciones.maxContinuaciones ?? 2;
+  let continuaciones = 0;
+  let textoAcumulado = r.texto;
+  let ultimoFinish = r.finishReason;
+  while (ultimoFinish === 'length' && continuaciones < maxContinuaciones && !opciones.signal?.aborted) {
+    continuaciones++;
+    console.log(`[glm-4] Respuesta cortada por longitud, pidiendo continuación ${continuaciones}/${maxContinuaciones}...`);
+    const mensajesContinuar = [
+      ...messages,
+      { role: 'assistant', content: textoAcumulado },
+      { role: 'user', content: 'Continuá exactamente donde te quedaste. No repitas nada de lo ya escrito, no reinicies archivos ni agregues explicaciones nuevas, seguí el contenido tal cual iba.' },
+    ];
+    const rCont = await llamarGlm4BridgeUnaVez(mensajesContinuar, systemPrompt, opciones);
+    if (!rCont.ok || !rCont.texto) break;
+    textoAcumulado += rCont.texto;
+    ultimoFinish = rCont.finishReason;
+  }
+  return { ok: true, texto: textoAcumulado, modelo: r.modelo };
 }
 
 // Simula streaming de un texto completo dividiendolo en chunks y emitiendolos
@@ -3300,7 +3328,7 @@ MODO VERBO CODE — ayudás al usuario a construir proyectos de programación.
 HERRAMIENTAS (usá estas etiquetas, una por línea, al FINAL de tu respuesta):
 
 [[FILE_CREATE::nombre.ext::contenido completo]]
-Crea un archivo. Soporta carpetas: css/styles.css, js/app.js.
+Crea un archivo. Soporta carpetas: css/styles.css, js/app.js. Cerrá siempre con ]] al final, en su propia línea si el contenido termina con código.
 
 [[FILE_EDIT::nombre.ext::contenido completo]]
 Edita un archivo existente. Mandá SIEMPRE el contenido COMPLETO.
@@ -3572,7 +3600,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
 
     // 2. Fallback a g4f para NewserPro y NewserAdmin (opcional, si esta configurado)
     if (!textoRespuesta && GPT4FREE_ENABLED && GPT4FREE_URL && (modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin')) {
-      const resultadoGlm = await llamarGlm4Bridge(chatHistorial.slice(-5), systemPrompt);
+      const resultadoGlm = await llamarGlm4Bridge(chatHistorial.slice(-5), systemPrompt, opcionesGeneracion);
       if (resultadoGlm.ok) {
         textoRespuesta = stripThinkTags(resultadoGlm.texto);
         modeloUsado = resultadoGlm.modelo;
@@ -3603,11 +3631,15 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     let proyectoActualizado = false;
 
     // Regex mejorado: soporta nombres con / (carpetas), saltos de línea en contenido,
-    // y caracteres especiales. El delimitador es ]]] (3 corchetes) para evitar
-    // conflictos con código que tenga ]] adentro.
-    // Formato: [[FILE_CREATE::ruta/archivo.ext::contenido completo]]]
-    const reFileCreate = /\[\[FILE_CREATE::([^\]]+?)::([\s\S]*?)\]\]/g;
-    const reFileEdit = /\[\[FILE_EDIT::([^\]]+?)::([\s\S]*?)\]\]/g;
+    // y caracteres especiales. Antes esto cortaba en el PRIMER ]] que apareciera en el
+    // contenido — y código real (arrays anidados tipo [[0,0],[1,1]], tipos TS como
+    // number[][], JSX, etc) tiene ]] sueltos todo el tiempo, así que el archivo se
+    // truncaba a mitad de camino con bastante frecuencia (sobre todo en juegos, donde
+    // los datos del mundo/mapa suelen ser arrays anidados). Ahora el cierre ]] solo
+    // cuenta si le sigue el próximo tag [[ALGO:: o el final del texto — así un ]]
+    // suelto en medio del código no corta nada.
+    const reFileCreate = /\[\[FILE_CREATE::([^\]]+?)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
+    const reFileEdit = /\[\[FILE_EDIT::([^\]]+?)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
     const reFileDelete = /\[\[FILE_DELETE::([^\]]+?)\]\]/g;
     const reImage = /\[\[IMAGE::([^\]]+?)\]\]/g;
     const reTexture = /\[\[TEXTURE::([^\]]+?)\]\]/g;
@@ -3634,7 +3666,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     procesarArchivos(reFileEdit, 'file_edit');
 
     // Procesar LINE_EDIT (cambiar una línea específica)
-    const reLineEdit = /\[\[LINE_EDIT::([^\]]+?)::(\d+)::([\s\S]*?)\]\]/g;
+    const reLineEdit = /\[\[LINE_EDIT::([^\]]+?)::(\d+)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
     let matchLine;
     while ((matchLine = reLineEdit.exec(textoRespuesta)) !== null) {
       const nombre = matchLine[1].trim();
