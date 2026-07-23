@@ -625,11 +625,12 @@ function configurarEventos() {
           codigo = comando.replace(/^js\s+/, '');
         }
 
-        // Ejecutar usando Piston API
+        // Ejecutar: si es un comando de archivos (ls/cat/touch/rm/echo >/mv) se
+        // aplica directo sobre el proyecto real; si no, se manda a Piston.
         const resp = await fetch('/api/verbocode/execute', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lenguaje, codigo }),
+          body: JSON.stringify({ lenguaje, codigo, proyectoId: estado.proyectoId }),
         });
 
         const data = await resp.json();
@@ -645,6 +646,23 @@ function configurarEventos() {
             errorLine.className = 'vc-terminal-line error';
             errorLine.textContent = data.stderr;
             output.appendChild(errorLine);
+          }
+
+          // Si el comando tocó archivos del proyecto (touch/rm/echo>/mv), refrescar
+          // el árbol de archivos y el editor abierto AL INSTANTE, sin esperar a la IA.
+          if (data.archivosActualizados) {
+            estado.archivos = data.archivosActualizados;
+            estado.proyecto.archivos = data.archivosActualizados;
+            renderArchivos();
+            if (estado.archivoActual && !(estado.archivoActual in estado.archivos)) {
+              const restante = Object.keys(estado.archivos)[0];
+              if (restante) abrirArchivo(restante);
+            } else if (estado.archivoActual && estado.monacoModels[estado.archivoActual]) {
+              const nuevoContenido = estado.archivos[estado.archivoActual];
+              if (nuevoContenido !== undefined && estado.monacoModels[estado.archivoActual].getValue() !== nuevoContenido) {
+                estado.monacoModels[estado.archivoActual].setValue(nuevoContenido);
+              }
+            }
           }
         } else {
           const errorLine = document.createElement('div');

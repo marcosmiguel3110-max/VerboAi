@@ -3106,6 +3106,273 @@ app.get('/api/v1/creditos', (req, res) => {
 // Solo los administradores pueden acceder (botón en el sidebar + check
 // en cada endpoint).
 
+// ============================================================
+// SKILLS de Verbo Code — guías especializadas que se inyectan al system
+// prompt SOLO cuando aplican, en vez de tener todo pegado siempre (esto es
+// lo que hace Claude con sus SKILL.md: cada skill declara cuándo dispara, y
+// solo se carga la que corresponde al pedido). Guardadas como .md en
+// /skills en la raíz del proyecto, así agregar una skill nueva (PDF, audio
+// avanzado, mapas, lo que sea) es solo crear un archivo ahí, sin tocar código.
+const SKILLS_DIR = path.join(__dirname, 'skills');
+const SKILLS_CACHE = new Map(); // nombre -> { contenido, trigger }
+
+// Cada entrada define en qué palabras del pedido del usuario dispara, y qué
+// archivo .md cargar. El regex se evalúa contra el mensaje del usuario.
+const SKILLS_REGISTRO = [
+  {
+    archivo: 'gamedev-2d-3d.md',
+    trigger: /juego|game|minecraft|terraria|motor.{0,15}(3d|2d)|voxel|canvas.*(juego|game)|three\.js|webgl/i,
+  },
+  {
+    archivo: 'canvas-2d-visual.md',
+    trigger: /canvas|dashboard|gr[aá]fico|chart|dibuj|pizarra|whiteboard|visualizador|diagrama/i,
+  },
+  {
+    archivo: 'threejs-3d-general.md',
+    trigger: /three\.js|threejs|modelo 3d|escena 3d|configurador|gltf|glb|visor 3d|webgl/i,
+  },
+];
+
+function cargarSkill(archivo) {
+  if (SKILLS_CACHE.has(archivo)) return SKILLS_CACHE.get(archivo);
+  try {
+    const contenido = fs.readFileSync(path.join(SKILLS_DIR, archivo), 'utf8');
+    SKILLS_CACHE.set(archivo, contenido);
+    return contenido;
+  } catch (e) {
+    console.warn(`[skills] No se pudo cargar ${archivo}:`, e.message);
+    return '';
+  }
+}
+
+// Devuelve el texto combinado de las skills que aplican al pedido del usuario
+// (dedupeado, en el orden del registro). Si ninguna aplica, devuelve ''.
+function skillsRelevantes(mensaje) {
+  const texto = (mensaje || '');
+  const aplicables = SKILLS_REGISTRO.filter((s) => s.trigger.test(texto));
+  if (aplicables.length === 0) return '';
+  const bloques = aplicables.map((s) => cargarSkill(s.archivo)).filter(Boolean);
+  if (bloques.length === 0) return '';
+  return '\n\nSKILLS ACTIVAS PARA ESTE PEDIDO (guías especializadas, seguilas al pie de la letra):\n\n' + bloques.join('\n\n---\n\n');
+}
+
+// ============================================================
+// Parser de pasos del plan ("PASO 1: ...", "PASO 2: ...") — separa el plan
+// que ya generábamos en pasos ejecutables individualmente, para que el
+// "agente" de Verbo Code corra paso por paso en vez de todo junto.
+// ============================================================
+function parsearPasosDelPlan(planTexto) {
+  if (!planTexto) return [];
+  const pasos = [];
+  const re = /PASO\s*\d+\s*[:\.]?\s*([^\n]+)/gi;
+  let m;
+  while ((m = re.exec(planTexto)) !== null) {
+    const texto = m[1].trim();
+    if (texto) pasos.push(texto);
+  }
+  return pasos;
+}
+
+// ============================================================
+// Procesa las etiquetas de herramientas ([[FILE_CREATE::]], [[IMAGE::]], etc)
+// de un bloque de texto generado por el modelo, y las aplica al proyecto.
+// A diferencia de antes, cada acción se manda por SSE APENAS se resuelve
+// (incluso las que implican una llamada de red como IMAGE/TEXTURE/WEB), en
+// vez de acumularse todas en un array y mandarse recién al final de toda la
+// respuesta — así el chat muestra "creando archivo X", "generando imagen Y"
+// en tiempo real, como un agente de verdad, y no en silencio hasta el final.
+async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE) {
+  const acciones = [];
+  let textoLimpio = textoRespuesta;
+  let proyectoActualizado = false;
+
+  const emitir = (accion) => {
+    acciones.push(accion);
+    enviarSSE({ type: 'action', accion });
+  };
+
+  const reFileCreate = /\[\[FILE_CREATE::([^\]]+?)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
+  const reFileEdit = /\[\[FILE_EDIT::([^\]]+?)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
+  const reLineEdit = /\[\[LINE_EDIT::([^\]]+?)::(\d+)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
+  const reFileDelete = /\[\[FILE_DELETE::([^\]]+?)\]\]/g;
+  const reImage = /\[\[IMAGE::([^\]]+?)\]\]/g;
+  const reTexture = /\[\[TEXTURE::([^\]]+?)\]\]/g;
+  const reWeb = /\[\[WEB::([^\]]+?)\]\]/g;
+  const reNpm = /\[\[NPM_INSTALL::([^\]]+?)\]\]/g;
+  const reTest = /\[\[TEST::([^:]+?)::([\s\S]*?)\]\]/g;
+
+  const procesarArchivos = (regex, tipo) => {
+    let match;
+    while ((match = regex.exec(textoRespuesta)) !== null) {
+      const nombre = match[1].trim();
+      const contenido = match[2];
+      proyecto.archivos[nombre] = contenido;
+      proyectoActualizado = true;
+      emitir({
+        tipo,
+        nombre,
+        descripcion: `${tipo === 'file_create' ? 'Archivo creado' : 'Archivo editado'}: ${nombre} (${contenido.length} chars)`,
+      });
+    }
+  };
+  procesarArchivos(reFileCreate, 'file_create');
+  procesarArchivos(reFileEdit, 'file_edit');
+
+  let matchLine;
+  while ((matchLine = reLineEdit.exec(textoRespuesta)) !== null) {
+    const nombre = matchLine[1].trim();
+    const numLinea = parseInt(matchLine[2].trim(), 10);
+    const nuevoContenido = matchLine[3].replace(/\n$/, '');
+    if (proyecto.archivos[nombre] && numLinea > 0) {
+      const lineas = proyecto.archivos[nombre].split('\n');
+      if (numLinea <= lineas.length) {
+        lineas[numLinea - 1] = nuevoContenido;
+        proyecto.archivos[nombre] = lineas.join('\n');
+        proyectoActualizado = true;
+        emitir({ tipo: 'file_edit', nombre, descripcion: `Línea ${numLinea} editada en: ${nombre}` });
+      }
+    }
+  }
+
+  let matchDel;
+  while ((matchDel = reFileDelete.exec(textoRespuesta)) !== null) {
+    const nombre = matchDel[1].trim();
+    if (proyecto.archivos[nombre]) {
+      delete proyecto.archivos[nombre];
+      proyectoActualizado = true;
+      emitir({ tipo: 'file_delete', nombre, descripcion: `Archivo eliminado: ${nombre}` });
+    }
+  }
+
+  let matchWeb;
+  let resultadosWebAcumulados = '';
+  while ((matchWeb = reWeb.exec(textoRespuesta)) !== null) {
+    const query = matchWeb[1].trim();
+    enviarSSE({ type: 'status', text: `Buscando en internet: "${query.slice(0, 40)}..."` });
+    enviarSSE({ type: 'investigando', query });
+    enviarSSE({ type: 'investigando_sitio', sitio: 'DuckDuckGo + Google' });
+    try {
+      const resultadoWeb = await buscarWebGoogle(query);
+      enviarSSE({ type: 'investigando_fin' });
+      if (resultadoWeb.exito && resultadoWeb.resultados.length > 0) {
+        const textoResultados = resultadoWeb.resultados.map((r, i) =>
+          `${i + 1}. ${r.titulo}\n   ${r.resumen}\n   ${r.link}`
+        ).join('\n\n');
+        resultadosWebAcumulados += `\n\n**Resultados de búsqueda "${query}":**\n${textoResultados}`;
+        enviarSSE({ type: 'web_result', query, resultados: resultadoWeb.resultados });
+        emitir({
+          tipo: 'web',
+          query,
+          resultados: resultadoWeb.resultados,
+          descripcion: `Búsqueda web: "${query}" → ${resultadoWeb.resultados.length} resultados`,
+        });
+      } else {
+        resultadosWebAcumulados += `\n\nNo se encontraron resultados para "${query}".`;
+        enviarSSE({ type: 'web_result', query, resultados: [] });
+        emitir({ tipo: 'web', descripcion: `Búsqueda web: "${query}" → sin resultados` });
+      }
+    } catch (e) {
+      enviarSSE({ type: 'investigando_fin' });
+      emitir({ tipo: 'web', descripcion: `Búsqueda web: "${query}" → error: ${e.message}` });
+    }
+  }
+  if (resultadosWebAcumulados) textoLimpio += resultadosWebAcumulados;
+
+  let matchNpm;
+  while ((matchNpm = reNpm.exec(textoRespuesta)) !== null) {
+    const paquete = matchNpm[1].trim();
+    let pkgJson = {};
+    try { pkgJson = JSON.parse(proyecto.archivos['package.json'] || '{}'); } catch (e) { pkgJson = {}; }
+    if (!pkgJson.name) pkgJson.name = proyecto.nombre || 'proyecto';
+    if (!pkgJson.version) pkgJson.version = '1.0.0';
+    if (!pkgJson.dependencies) pkgJson.dependencies = {};
+    const [pkgName, pkgVersion] = paquete.split('@');
+    pkgJson.dependencies[pkgName] = pkgVersion || 'latest';
+    proyecto.archivos['package.json'] = JSON.stringify(pkgJson, null, 2);
+    proyectoActualizado = true;
+    const cdnUrl = `https://esm.sh/${paquete}`;
+    emitir({ tipo: 'npm_install', paquete, cdn: cdnUrl, descripcion: `Paquete npm instalado: ${paquete} (CDN: ${cdnUrl})` });
+  }
+
+  let matchTest;
+  while ((matchTest = reTest.exec(textoRespuesta)) !== null) {
+    const lenguaje = matchTest[1].trim().toLowerCase();
+    const codigo = matchTest[2].trim();
+    enviarSSE({ type: 'status', text: `Ejecutando código de prueba (${lenguaje})...` });
+    let resultadoTest = null;
+    try {
+      const resultadoCode = await ejecutarCodigoPiston(lenguaje, codigo);
+      if (resultadoCode.exito) {
+        resultadoTest = { stdout: resultadoCode.stdout || '(sin salida)', stderr: resultadoCode.stderr || '', exitCode: resultadoCode.exitCode };
+      }
+    } catch (e) {
+      resultadoTest = { error: e.message };
+    }
+    emitir({
+      tipo: 'test',
+      lenguaje,
+      codigo: codigo.slice(0, 200) + (codigo.length > 200 ? '...' : ''),
+      resultado: resultadoTest,
+      descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Piston API)'}`,
+    });
+  }
+
+  let matchTex;
+  let contTex = 0;
+  while ((matchTex = reTexture.exec(textoRespuesta)) !== null) {
+    const promptUsuario = matchTex[1].trim();
+    enviarSSE({ type: 'status', text: `Generando textura: "${promptUsuario.slice(0, 40)}..."` });
+    const promptTextura = `${promptUsuario}, seamless tileable game texture, flat top-down lighting, no shadows, no vignette, high detail, repeating pattern, PBR base color map, 4k game asset`;
+    try {
+      const resultado = await generarImagenPollinations(promptTextura, undefined, { detallada: false, modeloOverride: 'flux', anchoOverride: 512, altoOverride: 512 });
+      if (resultado.img) {
+        contTex++;
+        const nombreTex = `textures/${promptUsuario.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40) || 'textura'}_${contTex}.png`;
+        proyecto.archivos[nombreTex + '.url'] = resultado.img.url;
+        proyectoActualizado = true;
+        emitir({ tipo: 'texture', nombre: nombreTex, url: resultado.img.url, descripcion: `Textura generada: "${promptUsuario.slice(0, 50)}..." → ${nombreTex}` });
+      }
+    } catch (e) {
+      console.error('[verbocode] error generando textura:', e.message);
+      emitir({ tipo: 'texture', descripcion: `Error generando textura: ${e.message}` });
+    }
+  }
+
+  let matchImg;
+  let contImg = 0;
+  while ((matchImg = reImage.exec(textoRespuesta)) !== null) {
+    const prompt = matchImg[1].trim();
+    enviarSSE({ type: 'status', text: `Generando imagen: "${prompt.slice(0, 40)}..."` });
+    try {
+      const resultado = await generarImagenPollinations(prompt, undefined, { detallada: false, modeloOverride: 'flux', anchoOverride: 1024, altoOverride: 1024 });
+      if (resultado.img) {
+        contImg++;
+        const nombreImg = `image_${contImg}.png`;
+        proyecto.archivos[nombreImg + '.url'] = resultado.img.url;
+        proyectoActualizado = true;
+        emitir({ tipo: 'image', nombre: nombreImg, url: resultado.img.url, descripcion: `Imagen generada: "${prompt.slice(0, 50)}..." → ${resultado.img.url}` });
+      }
+    } catch (e) {
+      console.error('[verbocode] error generando imagen:', e.message);
+      emitir({ tipo: 'image', descripcion: `Error generando imagen: ${e.message}` });
+    }
+  }
+
+  textoLimpio = textoLimpio
+    .replace(reFileCreate, '')
+    .replace(reFileEdit, '')
+    .replace(reLineEdit, '')
+    .replace(reFileDelete, '')
+    .replace(reImage, '')
+    .replace(reTexture, '')
+    .replace(reWeb, '')
+    .replace(reNpm, '')
+    .replace(reTest, '')
+    .trim();
+
+  return { textoLimpio, acciones, proyectoActualizado };
+}
+
 const VERBOCODE_DIR = path.join(MEMORY_DIR, 'verbocode');
 if (!fs.existsSync(VERBOCODE_DIR)) fs.mkdirSync(VERBOCODE_DIR, { recursive: true });
 
@@ -3309,12 +3576,137 @@ app.delete('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => 
 // ============================================================
 // API: ejecutar código con Piston API (para terminal de Verbo Code)
 // ============================================================
+// ============================================================
+// Terminal de Verbo Code: comandos que tocan el proyecto de verdad
+// ============================================================
+// Antes, TODO lo que se tipeaba en la terminal se mandaba a Piston (un sandbox
+// aislado y descartable). Eso significa que comandos como "mkdir", "touch",
+// "echo x > archivo" o "rm archivo" se ejecutaban en un contenedor que se tira
+// apenas termina, sin ningun contacto con proyecto.archivos: el usuario veia
+// "ejecutado" pero el archivo nunca aparecia en el editor. Esta capa intercepta
+// los comandos que son operaciones de archivo y los aplica directo sobre el
+// proyecto real (persistido con guardarProyectoVerboCode), devolviendo tambien
+// `archivosActualizados` para que el cliente pueda refrescar el arbol sin
+// esperar a que la IA responda. Todo lo que NO es una operacion de archivo
+// (scripts, algoritmos, "python calc.py", etc) sigue yendo a Piston como antes.
+function normalizarRutaProyecto(ruta) {
+  return (ruta || '').trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
+}
+
+function ejecutarComandoProyecto(comando, proyecto) {
+  const partes = comando.trim().match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+  const quitarComillas = (s) => s.replace(/^["']|["']$/g, '');
+  const cmd = (partes[0] || '').toLowerCase();
+  const args = partes.slice(1).map(quitarComillas);
+
+  const listarArchivos = () => Object.keys(proyecto.archivos || {}).sort();
+
+  if (cmd === 'ls' || cmd === 'dir') {
+    const archivos = listarArchivos();
+    return { manejado: true, salida: archivos.length ? archivos.join('\n') : '(el proyecto no tiene archivos todavia)' };
+  }
+
+  if (cmd === 'pwd') {
+    return { manejado: true, salida: `/${proyecto.nombre || 'proyecto'}` };
+  }
+
+  if (cmd === 'cat' || cmd === 'type') {
+    const nombre = normalizarRutaProyecto(args[0]);
+    if (!nombre) return { manejado: true, error: 'Uso: cat <archivo>' };
+    if (!(nombre in (proyecto.archivos || {}))) return { manejado: true, error: `No existe: ${nombre}` };
+    return { manejado: true, salida: proyecto.archivos[nombre] || '(vacio)' };
+  }
+
+  if (cmd === 'rm' || cmd === 'del') {
+    const nombre = normalizarRutaProyecto(args.filter((a) => a !== '-f' && a !== '-rf')[0]);
+    if (!nombre) return { manejado: true, error: 'Uso: rm <archivo>' };
+    if (!(nombre in (proyecto.archivos || {}))) return { manejado: true, error: `No existe: ${nombre}` };
+    delete proyecto.archivos[nombre];
+    return { manejado: true, salida: `Eliminado: ${nombre}`, modifico: true };
+  }
+
+  if (cmd === 'touch') {
+    const nombre = normalizarRutaProyecto(args[0]);
+    if (!nombre) return { manejado: true, error: 'Uso: touch <archivo>' };
+    if (!(nombre in (proyecto.archivos || {}))) proyecto.archivos[nombre] = '';
+    return { manejado: true, salida: `Creado: ${nombre}`, modifico: true };
+  }
+
+  if (cmd === 'mkdir') {
+    // El proyecto usa nombres planos con "/" (ej "css/estilos.css"), no hay
+    // carpetas reales que crear: confirmamos para no confundir al usuario.
+    const nombre = normalizarRutaProyecto(args[0]);
+    return { manejado: true, salida: nombre ? `Carpeta lista: ${nombre}/ (se crea sola al guardar un archivo adentro, ej "${nombre}/archivo.js")` : 'Uso: mkdir <carpeta>' };
+  }
+
+  if (cmd === 'mv' || cmd === 'rename') {
+    const origen = normalizarRutaProyecto(args[0]);
+    const destino = normalizarRutaProyecto(args[1]);
+    if (!origen || !destino) return { manejado: true, error: 'Uso: mv <origen> <destino>' };
+    if (!(origen in (proyecto.archivos || {}))) return { manejado: true, error: `No existe: ${origen}` };
+    proyecto.archivos[destino] = proyecto.archivos[origen];
+    delete proyecto.archivos[origen];
+    return { manejado: true, salida: `Renombrado: ${origen} → ${destino}`, modifico: true };
+  }
+
+  // echo "contenido" > archivo.ext  |  echo "contenido" >> archivo.ext
+  const matchEcho = comando.match(/^echo\s+(.*?)\s*(>>|>)\s*(\S+)\s*$/i);
+  if (matchEcho) {
+    const contenido = quitarComillas(matchEcho[1].trim());
+    const modo = matchEcho[2];
+    const nombre = normalizarRutaProyecto(matchEcho[3]);
+    if (!nombre) return { manejado: true, error: 'Falta el nombre de archivo.' };
+    if (modo === '>>' && (nombre in (proyecto.archivos || {}))) {
+      proyecto.archivos[nombre] = (proyecto.archivos[nombre] || '') + '\n' + contenido;
+    } else {
+      proyecto.archivos[nombre] = contenido;
+    }
+    return { manejado: true, salida: `Escrito en: ${nombre}`, modifico: true };
+  }
+
+  return { manejado: false };
+}
+
 app.post('/api/verbocode/execute', codeRateLimit, requiereAdminVerboCode, async (req, res) => {
   const lenguaje = (req.body?.lenguaje || 'bash').trim().toLowerCase();
   const codigo = (req.body?.codigo || '').trim();
-  
+  const proyectoId = req.body?.proyectoId || null;
+
   if (!codigo) return res.status(400).json({ error: 'Falta el código a ejecutar.' });
-  
+
+  // Si el comando es bash y hay un proyecto activo, intentar resolverlo contra
+  // el proyecto real ANTES de mandarlo a Piston (que es un sandbox descartable
+  // sin acceso al proyecto).
+  if (lenguaje === 'bash' && proyectoId) {
+    const proyecto = leerProyectoVerboCode(proyectoId, req.usuarioVerboCode);
+    if (proyecto) {
+      // Soporta varios comandos separados por && o ;
+      const subcomandos = codigo.split(/\s*(?:&&|;)\s*/).filter(Boolean);
+      const salidas = [];
+      let huboError = false;
+      let modifico = false;
+      let todosManejados = subcomandos.length > 0;
+      for (const sub of subcomandos) {
+        const r = ejecutarComandoProyecto(sub, proyecto);
+        if (!r.manejado) { todosManejados = false; break; }
+        if (r.modifico) modifico = true;
+        if (r.error) { huboError = true; salidas.push(`Error: ${r.error}`); }
+        else if (r.salida !== undefined) salidas.push(r.salida);
+      }
+      if (todosManejados) {
+        if (modifico) guardarProyectoVerboCode(proyecto);
+        return res.json({
+          exito: !huboError,
+          lenguaje: 'proyecto',
+          stdout: salidas.join('\n'),
+          stderr: huboError ? salidas.filter((s) => s.startsWith('Error:')).join('\n') : '',
+          error: huboError ? 'Uno o mas comandos fallaron.' : null,
+          archivosActualizados: modifico ? proyecto.archivos : undefined,
+        });
+      }
+    }
+  }
+
   try {
     const resultado = await ejecutarCodigoPiston(lenguaje, codigo);
     res.json(resultado);
@@ -3357,13 +3749,15 @@ app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => 
     // System prompt COMPLETO de Verbo Code (OpenRouter acepta payloads grandes,
     // a diferencia de Groq que daba HTTP 413 con prompts largos)
     const rolesModelo = {
-      'NewserAdvanced1.5': 'Tu rol: ANALÍTICO. Sos meticuloso y detallista. Pensás paso a paso antes de actuar. Explicás el porqué de cada decisión. Ideal para arquitectura y diseño de sistemas.',
-      'NewserPro': 'Tu rol: CREATIVO VERSÁTIL. Sos veloz y adaptable. Resolvés problemas con soluciones elegantes. Ideal para desarrollo general y prototipado rápido.',
-      'NewserAdmin': 'Tu rol: EXPERTO EN CÓDIGO. Sos un senior developer especializado en código limpio, performance y mejores prácticas. Escribís código de nivel production. Ideal para programación compleja y agentic coding.',
+      'NewserAdvanced1.5': 'Tu rol: ANALÍTICO. Sos meticuloso y detallista. Antes de escribir una sola línea, pensás en silencio: qué pide realmente el usuario (no solo lo literal), qué arquitectura/estructura de datos conviene, y qué puede salir mal. Explicás el porqué de cada decisión importante, pero sin relleno. Si el pedido es ambiguo, elegís la interpretación más razonable y lo aclarás en una frase en vez de tirar una versión genérica. Ideal para arquitectura y diseño de sistemas.',
+      'NewserPro': 'Tu rol: CREATIVO VERSÁTIL. Sos veloz y adaptable, pero no atajás: antes de responder, pensás un instante qué es lo que haría que esto se sienta terminado y no a medias (detalles de UX, casos borde, qué falta aunque no lo hayan pedido) y lo sumás sin preguntar. Resolvés problemas con soluciones elegantes, priorizando que funcione de una sin que el usuario tenga que pedir la corrección. Ideal para desarrollo general y prototipado rápido.',
+      'NewserAdmin': 'Tu rol: EXPERTO EN CÓDIGO. Sos un senior developer especializado en código limpio, performance y mejores prácticas. Antes de entregar, revisás tu propio código como lo haría un revisor exigente: nombres de variables, manejo de errores, edge cases, y si hay una forma más simple de lograr lo mismo, la usás. Escribís código de nivel production, no una primera versión que "probablemente" funciona. Ideal para programación compleja y agentic coding.',
     };
     const rolModelo = rolesModelo[modeloPedido] || rolesModelo['NewserPro'];
 
     let systemPrompt = `Sos ${modeloPedido} de Verbo AI, creado por VerboAITeams. NUNCA digas ser otro modelo (ChatGPT, Qwen, OpenAI, Llama, etc.). ${rolModelo}
+
+Regla general de calidad: no le devuelvas al usuario un problema que vos mismo podrías haber detectado. Si algo que escribiste tiene una falla obvia (variable sin declarar, import que falta, caso que rompe con input vacío), arreglalo ANTES de entregar, no después de que el usuario se queje.
 
 MODO VERBO CODE — ayudás al usuario a construir proyectos de programación.
 
@@ -3399,26 +3793,7 @@ Genera CÓDIGO REAL de Web Audio API (osciladores, envolventes ADSR, ruido filtr
 [[WEB::consulta corta]]
 Busca en internet.
 
-MODO GAME DEV (2D/3D con canvas) — cuando el usuario pida un juego, motor de juego, o algo tipo Minecraft/Terraria:
-- 2D: usá <canvas> + requestAnimationFrame a mano (sin librerías de por medio salvo que el usuario pida una). Estructura obligatoria: game-loop con delta time, un grid de tiles (array 2D) para el mundo, cámara/viewport que sigue al jugador, capa de colisiones separada de la capa visual. Usá [[TEXTURE::]] para los tiles/sprites en vez de rectángulos de color.
-- 3D: instalá three.js con [[NPM_INSTALL::three]] y cargalo desde esm.sh. Para mundos tipo Minecraft:
-  * NO uses greedy meshing ni generación de mesh custom por chunk: es la fuente #1 de bugs. Usá SIEMPRE 'THREE.InstancedMesh' con un 'THREE.BoxGeometry(1,1,1)' compartido: un InstancedMesh por tipo de bloque, y 'setMatrixAt(i, matrix)' para cada bloque visible. Es mucho más simple, no rompe, y rinde bien hasta varios miles de bloques.
-  * Antes de instanciar bloques: filtrá los bloques que tienen los 6 vecinos ocupados (no se ven, no hace falta dibujarlos). Esto solo, sin greedy meshing, ya resuelve el 90% del problema de performance.
-  * El terreno es un array 3D simple 'mundo[x][y][z] = tipoDeBloque' (0 = aire). Generalo con ruido simple (una función pseudo-perlina a mano de 20-30 líneas, NO npm-instales una librería de noise salvo que el usuario la pida).
-  * Boilerplate three.js que hay que revisar SIEMPRE porque es donde más rompe: (1) el renderer necesita 'renderer.setSize(window.innerWidth, window.innerHeight)' y un listener de 'resize' que actualice tambien 'camera.aspect' + 'camera.updateProjectionMatrix()'; (2) la textura se carga async con 'TextureLoader' — no uses la textura hasta que el callback/onLoad se disparó, si no la caja se ve negra; (3) el raycaster para romper/poner bloques necesita 'raycaster.setFromCamera(pointer, camera)' con 'pointer' en coordenadas normalizadas -1 a 1, error muy común es pasar coordenadas de pixel crudas.
-  * Cámara/movimiento en primera persona: usá 'PointerLockControls' de three (three/examples/jsm/controls/PointerLockControls.js vía esm.sh), no reinventes el mouse-look a mano salvo que el usuario lo pida explícitamente.
-- Audio del juego: siempre real, con Web Audio API ([[AUDIO::]] + el código real en el JS), nunca placeholders de "sonido aquí".
-- ARCHIVOS CHICOS EN JUEGOS: separá SIEMPRE en mínimo estos archivos: main.js (loop + setup), world.js (generación/datos del mundo), player.js (movimiento/cámara), render.js o blocks.js (InstancedMesh y texturas). Un juego 3D en un solo archivo gigante es la causa #1 de que la respuesta se corte a mitad de camino y el archivo quede roto.
-- Autocrítica de juego (obligatoria antes de entregar, además de la autocrítica general): ¿el resize del canvas/renderer está manejado? ¿las texturas se usan después de cargar, no antes? ¿el raycaster usa coordenadas normalizadas? ¿el loop usa delta time y no un valor fijo? ¿hay algún InstancedMesh con más instancias que las que declaraste en el constructor ('new THREE.InstancedMesh(geo, mat, MAX_INSTANCIAS)')? Si algo de esto está mal, corregilo antes de responder.
-
-DISEÑO VISUAL / "JUICE" (obligatorio, no opcional — un juego funcional pero feo no está terminado):
-- Paleta de colores definida antes de tocar código: 4-6 colores coherentes (base + acento + UI), nunca colores default del navegador ni rectángulos grises sin estilo.
-- HUD/UI del juego (vida, puntaje, inventario) con tipografía legible, contraste correcto y layout prolijo, no texto crudo pegado en la esquina.
-- Feedback visual en cada acción: hit-flash o tint al recibir daño, screen-shake corto en impactos/explosiones, partículas simples (rects o sprites chicos) en golpes/pasos/recolección de items, transición suave (no corte brusco) al cambiar de pantalla o morir.
-- Animación: sprites 2D con al menos 2-4 frames por estado (idle/caminar/atacar) o interpolación de rotación/escala en 3D; nunca un personaje 100% estático.
-- Iluminación 3D: como mínimo una luz ambiental + una direccional/punto con sombras básicas ('renderer.shadowMap.enabled', 'castShadow'/'receiveShadow'); un mundo sin ninguna luz además de la ambiental se ve plano y mal.
-- Menú/pantalla de inicio y pantalla de game-over con estilo propio (no un 'alert()' ni texto sin formato), coherentes con la paleta elegida.
-- Si el usuario no especificó un estilo visual, elegí uno concreto vos mismo (ej: pixel-art retro, low-poly pastel, neón oscuro) y aplicalo consistentemente en vez de dejarlo genérico.
+${skillsRelevantes(mensaje)}
 
 REGLAS CRÍTICAS:
 
@@ -3641,13 +4016,43 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     // fuertes en Pro y Admin, y solo dentro de este flujo (nunca en el chat normal).
     const modelosParaGenerar = configModelo.modelosOpenRouterCodigo || configModelo.modelosOpenRouterTexto;
     if (OPENROUTER_FREE_ENABLED) {
-      const resultadoOR = await llamarModeloGratisConReintentos(
-        chatHistorial.slice(-5),
-        systemPrompt,
-        modelosParaGenerar,
-        () => {},
-        opcionesGeneracion,
-      );
+      // La llamada al modelo es bloqueante (no hay streaming token a token) y en
+      // pedidos grandes (juegos, varios archivos) puede tardar 30-60s+. Antes el
+      // usuario solo veía "Desarrollando código..." fijo y nada más hasta que
+      // terminaba TODO — parecía que la IA se había colgado. Este heartbeat manda
+      // un status cada pocos segundos mientras se sigue esperando, para que quede
+      // claro que sigue trabajando (y no silencio total).
+      const mensajesHeartbeat = [
+        'Escribiendo el código...',
+        'Sigo generando los archivos...',
+        'Esto puede tardar un poco en pedidos grandes...',
+        'Revisando la estructura del proyecto...',
+        'Casi listo, terminando de escribir...',
+      ];
+      let heartbeatIdx = 0;
+      const heartbeat = setInterval(() => {
+        enviarSSE({ type: 'status', text: mensajesHeartbeat[heartbeatIdx % mensajesHeartbeat.length] });
+        heartbeatIdx++;
+      }, 4000);
+
+      let resultadoOR;
+      try {
+        resultadoOR = await llamarModeloGratisConReintentos(
+          chatHistorial.slice(-5),
+          systemPrompt,
+          modelosParaGenerar,
+          (evt) => {
+            // Reenviar reintentos/cambios de modelo como status visibles en vez
+            // de tragarlos en silencio (antes se pasaba `() => {}`).
+            if (evt && evt.type === 'retry') {
+              enviarSSE({ type: 'status', text: `Reintentando con ${evt.modelo}...` });
+            }
+          },
+          opcionesGeneracion,
+        );
+      } finally {
+        clearInterval(heartbeat);
+      }
       if (resultadoOR.ok) {
         textoRespuesta = stripThinkTags(resultadoOR.texto);
         modeloUsado = resultadoOR.modelo;
@@ -3810,7 +4215,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       try {
         pkgJson = JSON.parse(proyecto.archivos['package.json'] || '{}');
       } catch (e) { pkgJson = {}; }
-      if (!pkgJson.name) pkgJson.name = estado.proyecto?.nombre || 'proyecto';
+      if (!pkgJson.name) pkgJson.name = proyecto.nombre || 'proyecto';
       if (!pkgJson.version) pkgJson.version = '1.0.0';
       if (!pkgJson.dependencies) pkgJson.dependencies = {};
       // Separar nombre y versión: "axios@1.6.0" → { axios: "1.6.0" }
