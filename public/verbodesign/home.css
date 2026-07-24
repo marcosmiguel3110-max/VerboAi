@@ -1,0 +1,170 @@
+/* ============================================================
+   Verbo AI Design — home page styles
+   ============================================================ */
+
+.vd-page { padding-bottom: 0; }
+
+.vd-modelo-select {
+  background: var(--vc-bg-tertiary);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-sm);
+  color: var(--vc-text);
+  font-family: var(--vc-font);
+  font-size: 13px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.vd-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.vd-bienvenida {
+  max-width: 560px;
+  margin: 40px auto;
+  text-align: center;
+  color: var(--vc-text-secondary);
+}
+
+.vd-bienvenida-icon {
+  width: 64px; height: 64px;
+  border-radius: 16px;
+  background: var(--vc-accent-light);
+  color: var(--vc-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+}
+
+.vd-bienvenida h1 { color: var(--vc-text); font-size: 22px; margin-bottom: 8px; }
+.vd-bienvenida p { font-size: 14px; line-height: 1.6; }
+
+.vd-modelos-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+  text-align: left;
+}
+
+.vd-modelo-card {
+  background: var(--vc-bg-secondary);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.vd-modelo-card strong { color: var(--vc-accent); }
+
+.vd-modelo-card .vd-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--vc-accent);
+  color: white;
+  vertical-align: middle;
+}
+
+.vd-galeria {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.vd-card {
+  background: var(--vc-bg-tertiary);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.vd-card img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  background: var(--vc-bg-secondary);
+}
+
+.vd-card-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vd-card-prompt {
+  font-size: 12px;
+  color: var(--vc-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.vd-card-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--vc-text-muted);
+}
+
+.vd-card-actions a {
+  color: var(--vc-accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.vd-card.vd-loading {
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  gap: 10px;
+  color: var(--vc-text-secondary);
+  font-size: 12px;
+}
+
+.vd-footer {
+  border-top: 1px solid var(--vc-border);
+  background: var(--vc-bg);
+  padding: 14px 24px;
+}
+
+.vd-input-wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  background: var(--vc-bg-tertiary);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  padding: 8px 8px 8px 14px;
+}
+
+.vd-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--vc-text);
+  font-family: var(--vc-font);
+  font-size: 14px;
+  resize: none;
+  max-height: 140px;
+  outline: none;
+  padding: 8px 0;
+}
+
+.vd-btn-generar { white-space: nowrap; }

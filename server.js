@@ -3574,6 +3574,71 @@ app.delete('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => 
 });
 
 // ============================================================
+// VERBO DESIGN — hermano de Verbo Code, pero para generar imagenes/mockups
+// de diseño en vez de código. Reutiliza generarImagenPollinations (la misma
+// función robusta con cola, reintentos, rotación de modelo en rate-limit y
+// deadline que ya usa el resto de Verbo AI para imágenes) en vez de duplicar
+// esa lógica, así el manejo de escala/rate-limit es el mismo que ya está
+// probado en producción para todo el resto de la app.
+// ============================================================
+const MODELOS_VERBO_DESIGN = {
+  DesignLite: {
+    nombre: 'DesignLite',
+    descripcion: 'Rápido, ideal para bocetos e iteración rápida.',
+    badge: 'Rápido',
+    opciones: { modeloOverride: 'flux', anchoOverride: 1024, altoOverride: 1024, enhanceOverride: false },
+  },
+  'Design1.5': {
+    nombre: 'Design1.5',
+    descripcion: 'Más resolución y un paso extra de mejora de prompt (enhance).',
+    badge: null,
+    opciones: { modeloOverride: 'flux', anchoOverride: 1536, altoOverride: 1536, enhanceOverride: true, detallada: true },
+  },
+  DesignPro: {
+    nombre: 'DesignPro',
+    descripcion: 'Máxima calidad: flux-realism en 16:9, pensado para mockups web/apps.',
+    badge: 'Pro',
+    opciones: { modeloOverride: 'flux-realism', anchoOverride: 1536, altoOverride: 864, enhanceOverride: true, detallada: true },
+  },
+};
+
+app.get('/verbodesign/home/', requiereAdminVerboCode, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'verbodesign', 'home.html'));
+});
+app.get('/verbodesign/home', (req, res) => res.redirect(301, '/verbodesign/home/'));
+
+app.get('/api/verbodesign/models', requiereAdminVerboCode, (req, res) => {
+  const modelos = Object.values(MODELOS_VERBO_DESIGN).map((m) => ({
+    nombre: m.nombre,
+    descripcion: m.descripcion,
+    badge: m.badge || null,
+  }));
+  res.json({ ok: true, modelos });
+});
+
+app.post('/api/verbodesign/generate', requiereAdminVerboCode, async (req, res) => {
+  try {
+    const prompt = (req.body?.prompt || '').trim();
+    const modeloId = (req.body?.modelo || 'DesignLite').trim();
+    if (!prompt) return res.status(400).json({ error: 'Falta describir qué querés generar.' });
+
+    const modelo = MODELOS_VERBO_DESIGN[modeloId];
+    if (!modelo) {
+      return res.status(400).json({ error: `Modelo "${modeloId}" no existe. Usa: ${Object.keys(MODELOS_VERBO_DESIGN).join(', ')}.` });
+    }
+
+    const resultado = await generarImagenPollinations(prompt, null, modelo.opciones);
+    if (!resultado.img) {
+      return res.status(502).json({ error: resultado.error || 'No se pudo generar la imagen. Probá de nuevo en unos segundos.' });
+    }
+    res.json({ ok: true, imagen: resultado.img, modelo: modeloId });
+  } catch (e) {
+    console.error('[verbodesign] Error generando:', e.message);
+    res.status(500).json({ error: 'Error interno generando el diseño.' });
+  }
+});
+
+// ============================================================
 // API: ejecutar código con Piston API (para terminal de Verbo Code)
 // ============================================================
 // ============================================================
@@ -6074,10 +6139,12 @@ function describirCodigoClima(code) {
   return mapa[code] || 'condiciones desconocidas';
 }
 
-// Judge0: soporta tanto una instancia propia (self-hosted, sin API key) como
-// la version hosteada de RapidAPI (necesita JUDGE0_API_KEY). Se detecta sola
-// segun la URL configurada en JUDGE0_API_URL.
-const JUDGE0_API_URL = (process.env.JUDGE0_API_URL || 'https://judge0-ce.p.rapidapi.com').replace(/\/+$/, '');
+// Judge0: soporta tanto una instancia propia (self-hosted, sin API key), la
+// instancia pública gratuita ce.judge0.com (sin API key, es el default), como
+// la version hosteada de RapidAPI (necesita JUDGE0_API_KEY, se usa solo si se
+// configura JUDGE0_API_URL apuntando a *.rapidapi.com). Se detecta sola segun
+// la URL configurada en JUDGE0_API_URL.
+const JUDGE0_API_URL = (process.env.JUDGE0_API_URL || 'https://ce.judge0.com').replace(/\/+$/, '');
 const JUDGE0_API_KEY = process.env.JUDGE0_API_KEY || '';
 const JUDGE0_ES_RAPIDAPI = /rapidapi\.com$/i.test(new URL(JUDGE0_API_URL).hostname);
 const JUDGE0_API_HOST = process.env.JUDGE0_API_HOST || new URL(JUDGE0_API_URL).hostname;
@@ -6151,17 +6218,20 @@ async function ejecutarCodigoJudge0(lenguaje, codigo) {
 }
 
 // Piston API: API de ejecución de código open-source
-// NOTA: Desde Feb 15, 2026, la API pública requiere autorización.
-// Para obtener una API key, contactar a EngineerMan en Discord: https://discord.gg/engineerman
-// Documentación: https://emkc.org/api/v2/piston
-// Fallbacks alternativos cuando la API principal falla
-// Nota: api.piston.epicb.dev fue eliminado porque el dominio ya no resuelve (ENOTFOUND)
+// NOTA (jul 2026): Desde el 15 feb 2026 la API pública de emkc.org exige
+// autorización (401 sin key). Los fallbacks viejos (piston-api.vercel.app,
+// piston.fly.dev) están muertos (404 / timeout permanente) — probablemente
+// mirrors comunitarios abandonados. Se reemplazan por Judge0 CE
+// (https://ce.judge0.com), que es publica, gratuita, y NO requiere API key
+// (confirmado: "Authentication is not required to access the Judge0 CE API").
+// Si en el futuro conseguís una API key de emkc.org (pedila por Discord a
+// EngineerMan) o levantás tu propio Piston con Docker, esta va a seguir
+// siendo la opción mas robusta a largo plazo porque no depende de terceros.
 const PISTON_API_URL = process.env.PISTON_API_URL || 'https://emkc.org/api/v2/piston';
 const PISTON_API_KEY = process.env.PISTON_API_KEY || '';
-const PISTON_API_FALLBACKS = [
-  'https://piston-api.vercel.app',
-  'https://piston.fly.dev'
-];
+// URL de una instancia propia de Piston (self-hosted), si la configurás via env.
+// Si existe, se prueba ANTES que Judge0 porque tiene prioridad (es tuya, sin límites).
+const PISTON_SELF_HOSTED_URL = process.env.PISTON_SELF_HOSTED_URL || '';
 
 // Mapeo de lenguajes para Piston API
 const PISTON_LANGUAGE_MAP = {
@@ -6185,6 +6255,48 @@ const PISTON_LANGUAGE_MAP = {
   r: { language: 'r', version: '4.3.1' },
 };
 
+// Ejecuta contra una instancia de Piston (self-hosted o emkc.org)
+async function ejecutarEnPiston(apiUrl, lang, langConfig, fuente, apiKey, timeout) {
+  const resp = await axios.post(`${apiUrl}/execute`, {
+    language: langConfig.language,
+    version: langConfig.version,
+    files: [{ name: 'main', content: fuente }],
+  }, {
+    timeout,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}),
+    },
+    validateStatus: () => true,
+  });
+
+  if (resp.status !== 200) {
+    return { exito: false, error: `HTTP ${resp.status}` };
+  }
+
+  const data = resp.data;
+  const run = data.run || {};
+  const compile = data.compile || {};
+  const stdout = run.stdout || '';
+  const stderr = run.stderr || '';
+  const compileStderr = compile.stderr || '';
+  const compileStdout = compile.stdout || '';
+  const salidaCompleta = [compileStdout, compileStderr, stdout, stderr].filter(Boolean).join('\n');
+  const error = (run.code !== null && run.code !== 0) ? `Exit code: ${run.code}` : null;
+
+  return {
+    exito: true,
+    lenguaje: lang,
+    version: `${langConfig.language} ${langConfig.version}`,
+    stdout: salidaCompleta || '(sin salida)',
+    stderr: stderr || compileStderr || '',
+    tiempo: run.cpu_time || 0,
+    memoria: run.memory || 0,
+    exitCode: run.code,
+    error,
+  };
+}
+
 async function ejecutarCodigoPiston(lenguaje, codigo) {
   const lang = (lenguaje || '').trim().toLowerCase();
   const fuente = (codigo || '').replace(/\\n/g, '\n');
@@ -6192,116 +6304,80 @@ async function ejecutarCodigoPiston(lenguaje, codigo) {
   if (fuente.length > 10000) return { exito: false, error: 'El codigo es demasiado largo (max 10000 caracteres).' };
 
   const langConfig = PISTON_LANGUAGE_MAP[lang];
+  const judge0LangId = JUDGE0_LANGUAGE_IDS[lang];
   if (!langConfig) {
     return { exito: false, error: `Lenguaje "${lang}" no soportado por Piston. Usa: ${Object.keys(PISTON_LANGUAGE_MAP).join(', ')}.` };
   }
 
+  // Cadena de proveedores a probar, en orden de prioridad. Se arma dinámicamente:
+  // solo se intenta emkc.org si hay API key configurada (si no, un 401 es 100% seguro
+  // y no vale la pena gastar tiempo/timeout en eso).
+  const proveedores = [];
+  if (PISTON_SELF_HOSTED_URL) {
+    proveedores.push({ nombre: 'self-hosted', tipo: 'piston', url: PISTON_SELF_HOSTED_URL, key: '' });
+  }
+  if (PISTON_API_KEY) {
+    proveedores.push({ nombre: 'emkc.org', tipo: 'piston', url: PISTON_API_URL, key: PISTON_API_KEY });
+  }
+  if (judge0LangId) {
+    proveedores.push({ nombre: 'judge0', tipo: 'judge0' });
+  }
+
+  if (proveedores.length === 0) {
+    return { exito: false, error: `Lenguaje "${lang}" no tiene ningún proveedor de ejecución disponible.` };
+  }
+
   // Usar queue para limitar concurrencia de ejecución de código
   return await enqueue('piston', async () => {
-    // Reintentos con backoff exponencial para manejar alta concurrencia
-    const maxIntentos = 4;
     let ultimoError = null;
-    let fallbackIndex = -1; // -1 = API principal, 0+ = fallbacks
 
-    for (let intento = 0; intento < maxIntentos; intento++) {
+    for (let i = 0; i < proveedores.length; i++) {
+      const prov = proveedores[i];
+      // Timeout corto y fijo por proveedor: si un servicio no responde en 8s
+      // no vale la pena esperar mas, mejor pasar rápido al siguiente.
+      const timeout = 8000;
+
+      if (i > 0) {
+        await new Promise((r) => setTimeout(r, 300));
+      }
+
       try {
-        // Timeout con backoff: 15s, 20s, 25s, 30s
-        const timeout = 15000 + (intento * 5000);
-        
-        // Delay entre reintentos con backoff exponencial
-        if (intento > 0) {
-          const delay = Math.min(500 * Math.pow(2, intento - 1), 3000); // 500ms, 1s, 2s max
-          console.log(`[piston] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
-          await new Promise((r) => setTimeout(r, delay));
+        console.log(`[piston] Intento ${i + 1}/${proveedores.length} - lenguaje: ${lang}, timeout: ${timeout}ms, proveedor: ${prov.nombre}`);
+
+        const resultado = prov.tipo === 'judge0'
+          ? await (async () => {
+              const r = await ejecutarCodigoJudge0(lang, fuente);
+              if (!r.exito) return r;
+              // Adaptar forma de ejecutarCodigoJudge0 a la forma comun de este pipeline
+              return {
+                exito: true,
+                lenguaje: r.lenguaje,
+                version: r.version,
+                stdout: r.stdout || '(sin salida)',
+                stderr: r.stderr || '',
+                tiempo: 0,
+                memoria: 0,
+                exitCode: r.codigoSalida,
+                error: null,
+              };
+            })()
+          : await ejecutarEnPiston(prov.url, lang, langConfig, fuente, prov.key, timeout);
+
+        if (resultado.exito) {
+          console.log(`[piston] OK - lenguaje: ${lang}, proveedor: ${prov.nombre}, tiempo: ${resultado.tiempo}ms`);
+          return resultado;
         }
 
-        const apiUrl = fallbackIndex === -1 ? PISTON_API_URL : PISTON_API_FALLBACKS[fallbackIndex];
-        const apiName = fallbackIndex === -1 ? 'primary' : `fallback[${fallbackIndex}]`;
-        console.log(`[piston] Intento ${intento + 1}/${maxIntentos} - lenguaje: ${lang}, timeout: ${timeout}ms, API: ${apiName}`);
-        
-        const resp = await axios.post(`${apiUrl}/execute`, {
-          language: langConfig.language,
-          version: langConfig.version,
-          files: [
-            {
-              name: 'main',
-              content: fuente,
-            },
-          ],
-        }, {
-          timeout,
-          headers: { 
-            'Content-Type': 'application/json',
-            ...(PISTON_API_KEY ? { 'Authorization': `Bearer ${PISTON_API_KEY}` } : {}),
-          },
-          validateStatus: () => true, // Manejar todos los status codes manualmente
-        });
-
-        // Manejo específico de errores HTTP
-        if (resp.status !== 200) {
-          ultimoError = `HTTP ${resp.status}`;
-          console.warn(`[piston] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
-          
-          // Si es 401, 403, 404, 429, 500, 502, 503, cambiar al siguiente fallback
-          if ([401, 403, 404, 429, 500, 502, 503, 504].includes(resp.status)) {
-            if (fallbackIndex < PISTON_API_FALLBACKS.length - 1) {
-              fallbackIndex++;
-              console.log(`[piston] HTTP ${resp.status} - cambiando a fallback[${fallbackIndex}]: ${PISTON_API_FALLBACKS[fallbackIndex]}`);
-              continue;
-            } else if (fallbackIndex === -1) {
-              fallbackIndex = 0;
-              console.log(`[piston] HTTP ${resp.status} - cambiando a primer fallback: ${PISTON_API_FALLBACKS[0]}`);
-              continue;
-            }
-          }
-          
-          // Para otros 4xx, no reintentar
-          if (resp.status >= 400 && resp.status < 500 && resp.status !== 401 && resp.status !== 429) {
-            break;
-          }
-          continue;
-        }
-
-        const data = resp.data;
-        const run = data.run || {};
-        const compile = data.compile || {};
-
-        const stdout = run.stdout || '';
-        const stderr = run.stderr || '';
-        const compileStderr = compile.stderr || '';
-        const compileStdout = compile.stdout || '';
-
-        const salidaCompleta = [compileStdout, compileStderr, stdout, stderr].filter(Boolean).join('\n');
-        const error = (run.code !== null && run.code !== 0) ? `Exit code: ${run.code}` : null;
-
-        console.log(`[piston] OK - lenguaje: ${lang}, tiempo: ${run.cpu_time}ms, memoria: ${run.memory}KB`);
-        
-        return {
-          exito: true,
-          lenguaje: lang,
-          version: `${langConfig.language} ${langConfig.version}`,
-          stdout: salidaCompleta || '(sin salida)',
-          stderr: stderr || compileStderr || '',
-          tiempo: run.cpu_time || 0,
-          memoria: run.memory || 0,
-          exitCode: run.code,
-          error,
-        };
+        ultimoError = resultado.error;
+        console.warn(`[piston] Intento ${i + 1} (${prov.nombre}) devolvio ${resultado.error}`);
       } catch (e) {
         ultimoError = e.message;
-        console.warn(`[piston] Intento ${intento + 1} fallo: ${e.message}`);
-        
-        // Reintentar en errores de red/timeout
-        if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
-          continue;
-        }
-        // Para otros errores, no reintentar
-        break;
+        console.warn(`[piston] Intento ${i + 1} (${prov.nombre}) fallo: ${e.message}`);
       }
     }
 
-    console.error(`[piston] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
-    return { exito: false, error: ultimoError || 'Piston fallo' };
+    console.error(`[piston] Todos los proveedores fallaron. Ultimo error: ${ultimoError}`);
+    return { exito: false, error: ultimoError || 'Todos los proveedores de ejecución de código fallaron.' };
   });
 }
 

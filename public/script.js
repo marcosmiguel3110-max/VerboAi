@@ -791,10 +791,8 @@ if (btnMasCodes) {
     const btnVerboCode = document.createElement('button');
     btnVerboCode.id = 'btnVerboCode';
     btnVerboCode.className = 'nav-item nav-item-verbocode';
-    // Detectar acceso a Verbo Code desde window (seteado por cargarUsuario) o localStorage.
-    // Usa el flag especifico de Verbo Code (esAdminVerboCode), no el de administradores/codigos
-    // (esAdmin), porque las cuentas locales tienen Verbo Code pero NO panel de codigos.
-    const esAdminParaVerboCode = !!(window.esUsuarioAdminVerboCode || localStorage.getItem('verboAiEsAdminVerboCode') === 'true');
+    // Detectar admin desde window (seteado por cargarUsuario) o localStorage
+    const esAdminParaVerboCode = !!(window.esUsuarioAdmin || localStorage.getItem('verboAiEsAdmin') === 'true');
     if (esAdminParaVerboCode) {
       btnVerboCode.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" stroke-linecap="round" stroke-linejoin="round"/></svg> Verbo Code <span class="badge-prox" style="background:linear-gradient(135deg,#d4af37,#b8860b);color:#1a1a1a;">Admin</span>';
       btnVerboCode.title = 'Abrir Verbo Code en nueva pestaña';
@@ -810,6 +808,26 @@ if (btnMasCodes) {
       });
     }
     panel.appendChild(btnVerboCode);
+
+    const btnVerboDesign = document.createElement('button');
+    btnVerboDesign.id = 'btnVerboDesign';
+    btnVerboDesign.className = 'nav-item nav-item-verbodesign';
+    const esAdminParaVerboDesign = !!(window.esUsuarioAdmin || localStorage.getItem('verboAiEsAdmin') === 'true');
+    if (esAdminParaVerboDesign) {
+      btnVerboDesign.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg> Verbo Design <span class="badge-prox" style="background:linear-gradient(135deg,#d4af37,#b8860b);color:#1a1a1a;">Admin</span>';
+      btnVerboDesign.title = 'Abrir Verbo Design en nueva pestaña';
+      btnVerboDesign.addEventListener('click', () => {
+        window.open('/verbodesign/home/', '_blank');
+      });
+    } else {
+      btnVerboDesign.disabled = true;
+      btnVerboDesign.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg> Verbo Design <span class="badge-prox">Admin</span>';
+      btnVerboDesign.title = 'Solo disponible para cuentas administrador';
+      btnVerboDesign.addEventListener('click', () => {
+        alert('Verbo Design está disponible solo para cuentas administrador.');
+      });
+    }
+    panel.appendChild(btnVerboDesign);
 
     document.body.appendChild(panel);
 
@@ -2193,11 +2211,6 @@ elForm.addEventListener('submit', async (ev) => {
   if (chatIdActual) formData.append('chatId', chatIdActual);
   formData.append('modo', modoActual);
   formData.append('modelo', modeloActual);
-  // Agregar parámetro de profundidad extendida si está activo
-  const profundidadActiva = localStorage.getItem('verboAiProfundidad') === 'true';
-  if (profundidadActiva) {
-    formData.append('profundidad', 'true');
-  }
   imagenesSeleccionadas.forEach((f) => formData.append('imagenes', f));
   imagenesSeleccionadas = [];
   elInputImagen.value = '';
@@ -2485,12 +2498,8 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
       if (elAvatar) elAvatar.textContent = nombre.trim().charAt(0) || '?';
       esUsuarioAdmin = !!d.esAdmin;
       window.esUsuarioAdmin = esUsuarioAdmin;
-      window.esUsuarioAdminVerboCode = !!d.esAdminVerboCode;
       // Guardar en localStorage para que Verbo Code y otras páginas lo detecten
-      try {
-        localStorage.setItem('verboAiEsAdmin', esUsuarioAdmin ? 'true' : 'false');
-        localStorage.setItem('verboAiEsAdminVerboCode', d.esAdminVerboCode ? 'true' : 'false');
-      } catch (e) {}
+      try { localStorage.setItem('verboAiEsAdmin', esUsuarioAdmin ? 'true' : 'false'); } catch (e) {}
       const codesAdmin = document.getElementById('codesAdmin');
       if (codesAdmin) codesAdmin.classList.toggle('oculto', !esUsuarioAdmin);
     })

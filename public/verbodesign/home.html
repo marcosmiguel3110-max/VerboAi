@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verbo AI Design</title>
+  <link rel="icon" href="/favicon.ico">
+  <!-- Cargar style.css de Verbo AI PRIMERO (tiene los fondos y variables) -->
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/verbocode/shared.css">
+  <link rel="stylesheet" href="/verbodesign/home.css">
+</head>
+<body class="vc-page vd-page">
+  <!-- Header -->
+  <header class="vc-header">
+    <div class="vc-header-left">
+      <a href="/" class="vc-back-btn" title="Volver a Verbo AI">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <div class="vc-logo">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+        <span>Verbo AI Design</span>
+      </div>
+    </div>
+    <div class="vc-header-right">
+      <select id="vdModeloSelect" class="vd-modelo-select" title="Elegí el modelo de diseño"></select>
+      <div class="vc-perfil" id="vcPerfil">
+        <div class="vc-perfil-avatar" id="vcPerfilAvatar">?</div>
+        <span id="vcPerfilNombre">Cargando...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="vd-main">
+    <div id="vdBienvenida" class="vd-bienvenida">
+      <div class="vd-bienvenida-icon">
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+      </div>
+      <h1>Verbo AI Design</h1>
+      <p>Describí lo que querés diseñar (una landing, un ícono, un mockup de app, una paleta visual) y elegí el modelo. Cuanto más detalle, mejor sale.</p>
+      <div class="vd-modelos-info" id="vdModelosInfo"></div>
+    </div>
+
+    <div id="vdGaleria" class="vd-galeria"></div>
+  </main>
+
+  <!-- Input -->
+  <footer class="vd-footer">
+    <div class="vd-input-wrap">
+      <textarea id="vdPrompt" class="vd-input" placeholder="Ej: landing page minimalista para una app de finanzas, paleta azul y blanco..." rows="1"></textarea>
+      <button id="vdBtnGenerar" class="vc-btn-primary vd-btn-generar" title="Generar (Enter)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7Z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Generar
+      </button>
+    </div>
+  </footer>
+
+  <!-- Toast -->
+  <div id="vdToast" class="vc-toast oculto"></div>
+
+  <script src="/verbodesign/home.js"></script>
+</body>
+</html>
