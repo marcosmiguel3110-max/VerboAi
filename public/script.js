@@ -59,6 +59,47 @@ function alternarSidebar() {
 btnToggleSidebar.addEventListener('click', alternarSidebar);
 elFondoSidebar.addEventListener('click', cerrarSidebarMovil);
 
+// Sidebar redimensionable arrastrando la barra divisoria (igual que en Verbo Code)
+(function initResizerSidebarNormal() {
+  const resizer = document.getElementById('resizerSidebar');
+  if (!resizer || !elSidebar) return;
+
+  const anchoGuardado = parseFloat(localStorage.getItem('verboAiAnchoSidebar') || '260');
+  if (!elSidebar.classList.contains('sidebar-colapsado')) {
+    elSidebar.style.width = anchoGuardado + 'px';
+  }
+
+  let arrastrando = false;
+  let inicioX = 0;
+  let inicioAncho = 0;
+
+  resizer.addEventListener('mousedown', (e) => {
+    if (esVistaMovil() || elSidebar.classList.contains('sidebar-colapsado')) return;
+    arrastrando = true;
+    inicioX = e.clientX;
+    inicioAncho = elSidebar.getBoundingClientRect().width;
+    resizer.classList.add('resizer-activo');
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!arrastrando) return;
+    const delta = e.clientX - inicioX;
+    const nuevoAncho = Math.min(420, Math.max(180, inicioAncho + delta));
+    elSidebar.style.width = nuevoAncho + 'px';
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!arrastrando) return;
+    arrastrando = false;
+    resizer.classList.remove('resizer-activo');
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    localStorage.setItem('verboAiAnchoSidebar', parseFloat(elSidebar.style.width));
+  });
+})();
+
 const elLightbox = document.getElementById('lightbox');
 const elLightboxImg = document.getElementById('lightboxImg');
 const elLightboxCaption = document.getElementById('lightboxCaption');

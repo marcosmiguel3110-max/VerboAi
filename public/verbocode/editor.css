@@ -114,8 +114,31 @@
 .vc-editor-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 200px 1fr 360px;
+  grid-template-columns: 200px 6px 1fr 6px 360px;
   overflow: hidden;
+}
+
+/* Barras para redimensionar el sidebar y el chat arrastrando con el mouse.
+   El ancho real de cada columna lo pone JS (ver initResizers en editor.js),
+   guardado en localStorage para que quede como lo dejaste la próxima vez. */
+.vc-resizer {
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 5;
+}
+.vc-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: var(--vc-border);
+  transition: background 0.15s;
+}
+.vc-resizer:hover::after,
+.vc-resizer.vc-resizer-activo::after {
+  background: var(--vc-accent);
 }
 
 /* ============================================================
@@ -894,6 +917,21 @@
   align-items: flex-end;
 }
 
+/* Grid 2x2 de botones: Terminal (arriba-izq) / Design-Canvas (arriba-der)
+   Imagen (abajo-izq) / Enviar (abajo-der). Así Terminal queda arriba de
+   Imagen, y Design/Canvas queda arriba de Enviar. */
+.vc-chat-btn-grid {
+  display: grid;
+  grid-template-columns: 32px 32px;
+  grid-template-rows: 32px 32px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.vc-chat-btn-grid #btnTerminal { grid-column: 1; grid-row: 1; }
+.vc-chat-btn-grid #btnDesign { grid-column: 2; grid-row: 1; }
+.vc-chat-btn-grid #btnImagenChat { grid-column: 1; grid-row: 2; }
+.vc-chat-btn-grid #btnEnviarChat { grid-column: 2; grid-row: 2; }
+
 .vc-chat-input {
   flex: 1;
   padding: 8px 12px;
@@ -957,11 +995,51 @@
   color: var(--vc-text-secondary);
   border: 1px solid var(--vc-border);
   transition: all 0.15s;
+  position: relative;
 }
 .vc-chat-btn-terminal:hover {
   background: var(--vc-bg-tertiary);
   color: var(--vc-accent);
   border-color: var(--vc-accent);
+}
+
+/* Punto rojo: se prende SOLO mientras hay una ejecución real en curso
+   (comando de terminal, npm install, test) — no es decorativo, refleja
+   estado real de estado.ejecucionEnCurso. */
+.vc-terminal-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e0333f;
+  box-shadow: 0 0 0 rgba(224, 51, 63, 0.6);
+  animation: vcPulseRojo 1.2s infinite;
+}
+.vc-terminal-dot.oculto { display: none; }
+@keyframes vcPulseRojo {
+  0% { box-shadow: 0 0 0 0 rgba(224, 51, 63, 0.6); }
+  70% { box-shadow: 0 0 0 6px rgba(224, 51, 63, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(224, 51, 63, 0); }
+}
+
+/* Badge de porcentaje real junto a "Generando Code" / "Compactando" */
+.vc-indicador-pct {
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.vc-indicador-pct.oculto { display: none; }
+
+/* Acción que en verdad falló al verificarse contra la web/CDN real
+   (ej. npm_install o sound_download que no resolvieron) */
+.vc-msg-accion.vc-accion-fallida {
+  color: #e0333f;
+  border-left: 2px solid #e0333f;
+  padding-left: 6px;
 }
 
 /* Botón de Design — arriba del botón de imagen */
@@ -1163,7 +1241,7 @@
    Responsive
    ============================================================ */
 @media (max-width: 1100px) {
-  .vc-editor-layout { grid-template-columns: 170px 1fr 320px; }
+  .vc-editor-layout { grid-template-columns: 170px 6px 1fr 6px 320px; }
 }
 
 @media (max-width: 900px) {
@@ -1177,4 +1255,5 @@
     border-bottom: 1px solid var(--vc-border);
   }
   .vc-chat { border-bottom: none; border-top: 1px solid var(--vc-border); }
+  .vc-resizer { display: none; }
 }

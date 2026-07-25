@@ -17,7 +17,82 @@ const estado = {
   imagenPendiente: null,        // base64 de imagen adjunta
   nombreImagenPendiente: null,  // nombre del archivo de imagen
   modoDesign: false,            // modo Design (Canvas/3D) activado desde el botón del chat
+  ejecucionEnCurso: 0,          // contador de operaciones reales en curso (terminal, npm, test)
+  totalCharsRespuesta: 0,       // largo real de la respuesta que se está transmitiendo (para el %)
 };
+
+// Prende/apaga el punto rojo del botón de terminal según haya o no una
+// ejecución real en curso (comando de terminal, npm install, test). Es un
+// contador porque puede haber más de una operación real superpuesta.
+function marcarEjecucionInicio() {
+  estado.ejecucionEnCurso++;
+  const dot = document.getElementById('vcTerminalDot');
+  if (dot) dot.classList.remove('oculto');
+}
+function marcarEjecucionFin() {
+  estado.ejecucionEnCurso = Math.max(0, estado.ejecucionEnCurso - 1);
+  if (estado.ejecucionEnCurso === 0) {
+    const dot = document.getElementById('vcTerminalDot');
+    if (dot) dot.classList.add('oculto');
+  }
+}
+
+// Sidebars/panel de chat redimensionables arrastrando las barras divisoras.
+// El ancho elegido se guarda en localStorage para que persista entre sesiones.
+function initResizers() {
+  const layout = document.querySelector('.vc-editor-layout');
+  if (!layout) return;
+
+  const guardado = JSON.parse(localStorage.getItem('vcAnchoPaneles') || '{}');
+  const anchoSidebar = guardado.sidebar || 200;
+  const anchoChat = guardado.chat || 360;
+  layout.style.gridTemplateColumns = `${anchoSidebar}px 6px 1fr 6px ${anchoChat}px`;
+
+  function setup(resizerId, propiedad, minimo, maximo, invertido) {
+    const resizer = document.getElementById(resizerId);
+    if (!resizer) return;
+    let arrastrando = false;
+    let inicioX = 0;
+    let inicioAncho = 0;
+
+    resizer.addEventListener('mousedown', (e) => {
+      arrastrando = true;
+      inicioX = e.clientX;
+      const cols = getComputedStyle(layout).gridTemplateColumns.split(' ');
+      inicioAncho = propiedad === 'sidebar' ? parseFloat(cols[0]) : parseFloat(cols[4]);
+      resizer.classList.add('vc-resizer-activo');
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!arrastrando) return;
+      const delta = e.clientX - inicioX;
+      let nuevoAncho = inicioAncho + (invertido ? -delta : delta);
+      nuevoAncho = Math.min(maximo, Math.max(minimo, nuevoAncho));
+      const cols = getComputedStyle(layout).gridTemplateColumns.split(' ');
+      if (propiedad === 'sidebar') cols[0] = `${nuevoAncho}px`;
+      else cols[4] = `${nuevoAncho}px`;
+      layout.style.gridTemplateColumns = cols.join(' ');
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!arrastrando) return;
+      arrastrando = false;
+      resizer.classList.remove('vc-resizer-activo');
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      const cols = getComputedStyle(layout).gridTemplateColumns.split(' ');
+      const actual = JSON.parse(localStorage.getItem('vcAnchoPaneles') || '{}');
+      actual.sidebar = parseFloat(cols[0]);
+      actual.chat = parseFloat(cols[4]);
+      localStorage.setItem('vcAnchoPaneles', JSON.stringify(actual));
+    });
+  }
+
+  setup('vcResizerSidebar', 'sidebar', 140, 420, false);
+  setup('vcResizerChat', 'chat', 260, 560, true);
+}
 
 // ============================================================
 // Inicialización
@@ -38,6 +113,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await cargarModelos();
   await initMonaco();
   configurarEventos();
+  initResizers();
   configurarChatInput();
 
   // Guardar todo antes de cerrar la pestaña
@@ -626,6 +702,7 @@ function configurarEventos() {
 
       input.value = '';
       input.disabled = true;
+      marcarEjecucionInicio();
 
       try {
         // Detectar lenguaje del comando
@@ -697,6 +774,7 @@ function configurarEventos() {
         input.disabled = false;
         input.focus();
         output.scrollTop = output.scrollHeight;
+        marcarEjecucionFin();
       }
     }
   });
@@ -775,6 +853,7 @@ async function enviarChat() {
     try { input.focus(); } catch(e) {}
     // Ocultar indicador Generando Code
     if (indicadorGenerando) indicadorGenerando.classList.add('oculto');
+    marcarEjecucionFin();
   };
 
   const msgUser = { 
@@ -795,6 +874,12 @@ async function enviarChat() {
 
   // Mostrar indicador Generando Code
   if (indicadorGenerando) indicadorGenerando.classList.remove('oculto');
+  estado.totalCharsRespuesta = 0;
+  const textoIndEl = document.getElementById('vcIndicadorGenerandoTexto');
+  const pctIndEl = document.getElementById('vcIndicadorGenerandoPct');
+  if (textoIndEl) textoIndEl.textContent = 'Generando Code...';
+  if (pctIndEl) pctIndEl.classList.add('oculto');
+  marcarEjecucionInicio();
 
   // Limpiar elementos de peticiones anteriores que pudieron quedar
   const thinkingViejo = document.getElementById('thinkingIndicator');
@@ -868,6 +953,20 @@ async function enviarChat() {
           if (thinkingEl && thinkingEl.parentNode) {
             thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> ' + evt.text;
           }
+        } else if (evt.type === 'meta') {
+          // Largo real de la respuesta ya generada (no una estimación). Con
+          // esto el % que se muestra es real: charsRecibidos / totalChars.
+          estado.totalCharsRespuesta = evt.totalChars || 0;
+          const textoEl = document.getElementById('vcIndicadorGenerandoTexto');
+          const pctEl = document.getElementById('vcIndicadorGenerandoPct');
+          const UMBRAL_COMPACTANDO = 4000; // chars: a partir de acá se considera "script grande"
+          if (textoEl) {
+            textoEl.textContent = estado.totalCharsRespuesta > UMBRAL_COMPACTANDO ? 'Compactando código...' : 'Generando Code...';
+          }
+          if (pctEl) {
+            pctEl.classList.toggle('oculto', estado.totalCharsRespuesta <= 0);
+            pctEl.textContent = '0%';
+          }
         } else if (evt.type === 'plan') {
           planRecibido = evt.plan;
           if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
@@ -892,6 +991,15 @@ async function enviarChat() {
           }, 8);
         } else if (evt.type === 'chunk') {
           textoRespuesta += evt.text;
+          // % real: caracteres ya recibidos sobre el largo real total (evt de 'meta').
+          if (estado.totalCharsRespuesta > 0) {
+            const pctEl = document.getElementById('vcIndicadorGenerandoPct');
+            if (pctEl) {
+              const pct = Math.min(100, Math.round((textoRespuesta.length / estado.totalCharsRespuesta) * 100));
+              pctEl.textContent = pct + '%';
+              pctEl.classList.remove('oculto');
+            }
+          }
           // Mostrar línea por línea: solo mostrar hasta el último salto de línea completo
           // Las líneas incompletas se guardan y se muestran cuando se completen
           const ultimaLinea = textoRespuesta.lastIndexOf('\n');
@@ -1198,8 +1306,13 @@ function renderAccion(accion) {
     run: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
     npm_install: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     test: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    sound_download: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
   };
   const icono = iconos[accion.tipo] || '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+  // Si la acción trae exito:false (npm_install/sound_download que en verdad
+  // fallaron al verificar contra la web real), marcarla como error en vez de
+  // mostrarla como si hubiese funcionado.
+  if (accion.exito === false) div.classList.add('vc-accion-fallida');
   div.innerHTML = `${icono} <span>${accion.descripcion}</span>`;
   cont.appendChild(div);
 

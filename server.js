@@ -1128,6 +1128,9 @@ async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
 async function emitirTextoComoStream(texto, enviar, signal) {
   const TAMANO_CHUNK = 12; // ~12 chars por tick
   const DELAY_MS = 25;
+  // totalChars real (no inventado): el cliente usa esto para calcular el % de
+  // progreso real de la respuesta ya generada que se está transmitiendo.
+  enviar({ type: 'meta', totalChars: texto.length });
   for (let i = 0; i < texto.length; i += TAMANO_CHUNK) {
     if (signal?.aborted) return false;
     enviar({ type: 'chunk', text: texto.slice(i, i + TAMANO_CHUNK) });
@@ -1274,6 +1277,14 @@ app.use(helmet({
       scriptSrc: [
         "'self'",
         "'unsafe-inline'",
+        // 'unsafe-eval': VerboCode/VerboDesign arman funciones dinámicas en el
+        // navegador (ej. reproducirSonido() con `new Function`) para poder
+        // ejecutar el código que genera la IA. Sin esto el navegador bloquea
+        // esa ejecución y el sonido/efectos no corren. Alcance: sólo afecta
+        // scripts que ya pasaron el resto del CSP; no habilita cargar JS ajeno.
+        "'unsafe-eval'",
+        'https://cdn.jsdelivr.net',
+        'https://esm.sh',
         'https://pagead2.googlesyndication.com',
         'https://googleads.g.doubleclick.net',
         'https://www.googletagservices.com',
@@ -1285,6 +1296,8 @@ app.use(helmet({
       scriptSrcElem: [
         "'self'",
         "'unsafe-inline'",
+        'https://cdn.jsdelivr.net',
+        'https://esm.sh',
         'https://pagead2.googlesyndication.com',
         'https://googleads.g.doubleclick.net',
         'https://www.googletagservices.com',
@@ -1297,8 +1310,10 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-      connectSrc: ["'self'", 'https:'],
-      frameSrc: ['https://googleads.g.doubleclick.net', 'https://tpc.googlesyndication.com', 'https://*.google.com', 'https://*.adtrafficquality.google'],
+      mediaSrc: ["'self'", 'data:', 'blob:', 'https:'],
+      connectSrc: ["'self'", 'https:', 'blob:'],
+      workerSrc: ["'self'", 'blob:'],
+      frameSrc: ["'self'", 'blob:', 'https://googleads.g.doubleclick.net', 'https://tpc.googlesyndication.com', 'https://*.google.com', 'https://*.adtrafficquality.google'],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
     },
@@ -3366,7 +3381,29 @@ async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE
     proyecto.archivos['package.json'] = JSON.stringify(pkgJson, null, 2);
     proyectoActualizado = true;
     const cdnUrl = `https://esm.sh/${paquete}`;
-    emitir({ tipo: 'npm_install', paquete, cdn: cdnUrl, descripcion: `Paquete npm instalado: ${paquete} (CDN: ${cdnUrl})` });
+    enviarSSE({ type: 'status', text: `Instalando ${paquete}...` });
+    // VerboCode corre en el navegador (sin Node real), asi que "npm install" se
+    // resuelve como un paquete servido por esm.sh en vez de un node_modules local.
+    // Esto SI hace una petición HTTP real al CDN para confirmar que el paquete
+    // existe y responde, en vez de asumir éxito a ciegas.
+    let npmOk = false;
+    let npmError = null;
+    try {
+      const check = await axios.head(cdnUrl, { timeout: 8000, validateStatus: () => true });
+      npmOk = check.status >= 200 && check.status < 400;
+      if (!npmOk) npmError = `HTTP ${check.status}`;
+    } catch (e) {
+      npmError = e.message;
+    }
+    emitir({
+      tipo: 'npm_install',
+      paquete,
+      cdn: cdnUrl,
+      exito: npmOk,
+      descripcion: npmOk
+        ? `Paquete npm instalado: ${paquete} (CDN verificado: ${cdnUrl})`
+        : `No se pudo instalar ${paquete}: el CDN no respondió (${npmError})`,
+    });
   }
 
   let matchTest;
@@ -4617,6 +4654,56 @@ app.post('/api/verbocode/execute', codeRateLimit, requiereAdminVerboCode, async 
 });
 
 // ============================================================
+// API: descargar un sonido real desde otra web (para VerboCode/VerboDesign)
+// ============================================================
+const EXTENSIONES_AUDIO_PERMITIDAS = ['mp3', 'wav', 'ogg', 'oga', 'm4a', 'webm', 'flac'];
+app.post('/api/verbocode/download-sound', codeRateLimit, requiereAdminVerboCode, async (req, res) => {
+  const url = (req.body?.url || '').trim();
+  if (!url) return res.status(400).json({ exito: false, error: 'Falta la url del sonido.' });
+
+  let parsed;
+  try {
+    parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('protocolo invalido');
+  } catch (e) {
+    return res.status(400).json({ exito: false, error: 'URL invalida.' });
+  }
+
+  try {
+    const respuesta = await axios.get(url, {
+      responseType: 'arraybuffer',
+      timeout: 15000,
+      maxContentLength: 15 * 1024 * 1024, // 15MB
+      headers: { 'User-Agent': 'Mozilla/5.0 (VerboCode sound fetcher)' },
+      validateStatus: () => true,
+    });
+
+    if (respuesta.status < 200 || respuesta.status >= 300) {
+      return res.status(502).json({ exito: false, error: `La web respondió ${respuesta.status}.` });
+    }
+
+    const contentType = (respuesta.headers['content-type'] || '').toLowerCase();
+    let ext = (path.extname(parsed.pathname).replace('.', '') || '').toLowerCase();
+    if (!EXTENSIONES_AUDIO_PERMITIDAS.includes(ext)) {
+      // Si la extension de la URL no ayuda, deducir por el content-type real.
+      const porTipo = contentType.split('/')[1]?.split(';')[0];
+      ext = EXTENSIONES_AUDIO_PERMITIDAS.includes(porTipo) ? porTipo : null;
+    }
+    if (!contentType.startsWith('audio/') && !ext) {
+      return res.status(415).json({ exito: false, error: 'La URL no parece ser un archivo de audio (content-type: ' + (contentType || 'desconocido') + ').' });
+    }
+    if (!ext) ext = 'mp3';
+
+    const nombreArchivo = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
+    fs.writeFileSync(path.join(UPLOADS_DIR, nombreArchivo), Buffer.from(respuesta.data));
+
+    res.json({ exito: true, url: `/uploads/${nombreArchivo}`, bytes: respuesta.data.byteLength });
+  } catch (e) {
+    res.status(500).json({ exito: false, error: 'No se pudo descargar el sonido: ' + e.message });
+  }
+});
+
+// ============================================================
 // API: chat con IA (con herramientas)
 // ============================================================
 app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => {
@@ -5130,12 +5217,58 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       proyecto.archivos['package.json'] = JSON.stringify(pkgJson, null, 2);
       proyectoActualizado = true;
       const cdnUrl = `https://esm.sh/${paquete}`;
+      enviarSSE({ type: 'status', text: `Instalando ${paquete}...` });
+      // VerboCode corre en el navegador (no hay Node real ni node_modules), asi
+      // que el "npm install" real que se puede hacer es resolver el paquete
+      // contra un CDN (esm.sh). Esto SI hace una petición HTTP real para
+      // confirmar que el paquete existe, en vez de asumir éxito a ciegas.
+      let npmOk = false;
+      let npmError = null;
+      try {
+        const check = await axios.head(cdnUrl, { timeout: 8000, validateStatus: () => true });
+        npmOk = check.status >= 200 && check.status < 400;
+        if (!npmOk) npmError = `HTTP ${check.status}`;
+      } catch (e) {
+        npmError = e.message;
+      }
       acciones.push({
         tipo: 'npm_install',
         paquete: paquete,
         cdn: cdnUrl,
-        descripcion: `Paquete npm instalado: ${paquete} (CDN: ${cdnUrl})`,
+        exito: npmOk,
+        descripcion: npmOk
+          ? `Paquete npm instalado: ${paquete} (CDN verificado: ${cdnUrl})`
+          : `No se pudo instalar ${paquete}: el CDN no respondió (${npmError})`,
       });
+    }
+
+    // Procesar SOUND_DOWNLOAD (descargar un sonido real de otra web)
+    const reSoundDownload = /\[\[SOUND_DOWNLOAD::([^\]]+?)\]\]/g;
+    let matchSound;
+    while ((matchSound = reSoundDownload.exec(textoRespuesta)) !== null) {
+      const soundUrl = matchSound[1].trim();
+      enviarSSE({ type: 'status', text: `Descargando sonido: "${soundUrl.slice(0, 50)}..."` });
+      try {
+        const resp = await axios.get(soundUrl, {
+          responseType: 'arraybuffer',
+          timeout: 15000,
+          maxContentLength: 15 * 1024 * 1024,
+          headers: { 'User-Agent': 'Mozilla/5.0 (VerboCode sound fetcher)' },
+          validateStatus: () => true,
+        });
+        if (resp.status >= 200 && resp.status < 300) {
+          let ext = (path.extname(new URL(soundUrl).pathname).replace('.', '') || 'mp3').toLowerCase();
+          if (!['mp3', 'wav', 'ogg', 'oga', 'm4a', 'webm', 'flac'].includes(ext)) ext = 'mp3';
+          const nombreSonido = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
+          fs.writeFileSync(path.join(UPLOADS_DIR, nombreSonido), Buffer.from(resp.data));
+          const urlGuardada = `/uploads/${nombreSonido}`;
+          acciones.push({ tipo: 'sound_download', url: urlGuardada, origen: soundUrl, descripcion: `Sonido descargado desde ${soundUrl} → ${urlGuardada}` });
+        } else {
+          acciones.push({ tipo: 'sound_download', exito: false, descripcion: `No se pudo descargar el sonido (HTTP ${resp.status}): ${soundUrl}` });
+        }
+      } catch (e) {
+        acciones.push({ tipo: 'sound_download', exito: false, descripcion: `Error descargando sonido: ${e.message}` });
+      }
     }
 
     // Procesar TEST (ejecutar código con Piston API)
@@ -5246,8 +5379,10 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     if (proyecto.chat.length > 50) proyecto.chat = proyecto.chat.slice(-50);
     guardarProyectoVerboCode(proyecto);
 
-    // Enviar respuesta como chunks (simulando streaming para que se vea progresivo)
+    // Enviar respuesta como chunks. totalChars es el largo real del texto ya
+    // generado (no una estimación), asi el % que ve el usuario es real.
     if (textoLimpio && !clienteDesconectado) {
+      enviarSSE({ type: 'meta', totalChars: textoLimpio.length });
       const chunkSize = 15;
       for (let i = 0; i < textoLimpio.length; i += chunkSize) {
         if (clienteDesconectado) break;

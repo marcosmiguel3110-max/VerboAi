@@ -150,6 +150,32 @@ input:checked + .slider:before {
   height: 100vh;
 }
 
+/* Barra para redimensionar la sidebar del chat normal arrastrando con el
+   mouse (igual idea que en Verbo Code). Ancho persistido en localStorage. */
+.resizer-sidebar {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  position: relative;
+  z-index: 5;
+}
+.resizer-sidebar::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: var(--borde);
+  transition: background 0.15s;
+}
+.resizer-sidebar:hover::after,
+.resizer-sidebar.resizer-activo::after {
+  background: var(--acento, #b5651d);
+}
+@media (max-width: 900px) {
+  .resizer-sidebar { display: none; }
+}
+
 /* ---------- Sidebar ---------- */
 .sidebar {
   width: 260px;
