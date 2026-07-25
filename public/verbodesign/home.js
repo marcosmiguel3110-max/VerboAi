@@ -206,16 +206,40 @@
     });
   }
 
+  // Colorcito por categoría, solo para que las tarjetas no se vean todas
+  // iguales y sea más fácil escanear el grid de un vistazo.
+  const COLOR_CATEGORIA = {
+    Landing: '#6d5efc',
+    Portfolio: '#e8664a',
+    Dashboard: '#3fb950',
+    Formulario: '#4f46e5',
+    'Autenticación': '#5b8cff',
+    'E-commerce': '#f59e0b',
+    Blog: '#ec4899',
+    Estado: '#8b5cf6',
+    Componentes: '#14b8a6',
+  };
+
+  function escaparParaAtributo(html) {
+    return html.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  }
+
   function renderGridPlantillas() {
     const grid = $('vdPlantillasGrid');
     const filtradas = categoriaActiva === 'Todas' ? plantillasData : plantillasData.filter((p) => p.categoria === categoriaActiva);
     grid.innerHTML = '';
     filtradas.forEach((p) => {
+      const color = COLOR_CATEGORIA[p.categoria] || 'var(--vc-accent)';
       const card = document.createElement('div');
       card.className = 'vd-plantilla-card';
+      card.style.setProperty('--cat-color', color);
       card.innerHTML = `
-        <div class="vd-plantilla-preview" data-id="${p.id}"><span>${p.categoria}</span></div>
+        <div class="vd-plantilla-preview" data-id="${p.id}" title="Click para ver completa">
+          <iframe class="vd-plantilla-iframe" srcdoc="${escaparParaAtributo(p.html)}" sandbox="allow-scripts" tabindex="-1" loading="lazy"></iframe>
+          <div class="vd-plantilla-preview-overlay"><span>Ver completa</span></div>
+        </div>
         <div class="vd-plantilla-body">
+          <span class="vd-plantilla-tag" style="color:${color};background:${color}1a;border-color:${color}40">${p.categoria}</span>
           <h3>${p.nombre}</h3>
           <p>${p.descripcion}</p>
           <div class="vd-plantilla-actions">
@@ -226,6 +250,9 @@
       `;
       grid.appendChild(card);
     });
+    grid.querySelectorAll('.vd-plantilla-preview').forEach((prev) => {
+      prev.addEventListener('click', () => verPlantilla(prev.dataset.id));
+    });
     grid.querySelectorAll('.vd-btn-copiar').forEach((btn) => {
       btn.addEventListener('click', () => copiarPlantilla(btn.dataset.id));
     });
@@ -235,6 +262,8 @@
   }
 
   async function obtenerPlantilla(id) {
+    const enCache = plantillasData.find((p) => p.id === id);
+    if (enCache && enCache.html) return enCache;
     const r = await fetch(`/api/verbodesign/templates/${id}`);
     const data = await r.json();
     if (!r.ok || !data.ok) throw new Error('No se pudo cargar la plantilla.');

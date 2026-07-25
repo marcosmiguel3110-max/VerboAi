@@ -3741,14 +3741,18 @@ const VERBODESIGN_TEMPLATES = [
 <style>
 :root{--bg:#0b0d12;--panel:#12151c;--accent:#6d5efc;--text:#eef0f6;--muted:#9aa2b1;}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);}
-.hero{max-width:960px;margin:0 auto;padding:96px 24px 64px;text-align:center;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;}
+.hero{position:relative;max-width:960px;margin:0 auto;padding:96px 24px 64px;text-align:center;}
+.hero::before{content:'';position:absolute;top:-120px;left:50%;transform:translateX(-50%);width:520px;height:340px;background:radial-gradient(closest-side,rgba(109,94,252,.35),transparent);filter:blur(10px);pointer-events:none;z-index:0;}
+.hero>*{position:relative;z-index:1;}
 .hero h1{font-size:clamp(2rem,5vw,3.4rem);line-height:1.1;margin-bottom:18px;}
 .hero p{color:var(--muted);font-size:1.1rem;max-width:560px;margin:0 auto 32px;}
-.btn{display:inline-block;background:var(--accent);color:#fff;padding:14px 28px;border-radius:10px;font-weight:600;text-decoration:none;transition:transform .15s;}
-.btn:hover{transform:translateY(-2px);}
+.btn{display:inline-block;background:var(--accent);color:#fff;padding:14px 28px;border-radius:10px;font-weight:600;text-decoration:none;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 14px rgba(109,94,252,.35);}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(109,94,252,.5);}
 .features{max-width:960px;margin:0 auto;padding:32px 24px 96px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;}
-.card{background:var(--panel);border:1px solid #1f2430;border-radius:14px;padding:24px;}
+.card{background:var(--panel);border:1px solid #1f2430;border-radius:14px;padding:24px;transition:transform .15s,border-color .15s;}
+.card:hover{transform:translateY(-3px);border-color:var(--accent);}
+.card .icono{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#a78bfa);display:flex;align-items:center;justify-content:center;margin-bottom:14px;}
 .card h3{margin-bottom:8px;font-size:1.05rem;}
 .card p{color:var(--muted);font-size:.92rem;line-height:1.5;}
 </style>
@@ -3760,9 +3764,9 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:v
 <a class="btn" href="#">Empezar gratis</a>
 </section>
 <section class="features">
-<div class="card"><h3>Rápido</h3><p>Configuralo en minutos, sin fricción.</p></div>
-<div class="card"><h3>Seguro</h3><p>Tus datos protegidos de punta a punta.</p></div>
-<div class="card"><h3>Escalable</h3><p>Crece con vos sin cambiar de herramienta.</p></div>
+<div class="card"><div class="icono"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></div><h3>Rápido</h3><p>Configuralo en minutos, sin fricción.</p></div>
+<div class="card"><div class="icono"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2 4 5v6c0 5 3.4 8.7 8 11 4.6-2.3 8-6 8-11V5l-8-3z"/></svg></div><h3>Seguro</h3><p>Tus datos protegidos de punta a punta.</p></div>
+<div class="card"><div class="icono"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2"><path d="M3 17l6-6 4 4 8-8M17 7h4v4"/></svg></div><h3>Escalable</h3><p>Crece con vos sin cambiar de herramienta.</p></div>
 </section>
 </body>
 </html>`,
@@ -3785,8 +3789,11 @@ header{max-width:760px;margin:0 auto;padding:80px 24px 40px;}
 header h1{font-size:2.2rem;margin-bottom:10px;}
 header p{color:var(--muted);max-width:480px;line-height:1.6;}
 .proyectos{max-width:760px;margin:0 auto;padding:0 24px 80px;display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));}
-.proyecto{aspect-ratio:4/3;background:#e9e9e9;border-radius:12px;display:flex;align-items:flex-end;padding:16px;font-weight:600;transition:transform .2s;}
-.proyecto:hover{transform:translateY(-4px);}
+.proyecto{aspect-ratio:4/3;border-radius:12px;display:flex;align-items:flex-end;padding:16px;font-weight:600;color:#fff;transition:transform .2s,box-shadow .2s;text-shadow:0 1px 6px rgba(0,0,0,.25);}
+.proyecto:hover{transform:translateY(-5px);box-shadow:0 14px 28px rgba(0,0,0,.18);}
+.proyecto.p1{background:linear-gradient(135deg,#ff9a76,#ff6a88);}
+.proyecto.p2{background:linear-gradient(135deg,#5b8cff,#6d5efc);}
+.proyecto.p3{background:linear-gradient(135deg,#2dd4bf,#22c55e);}
 </style>
 </head>
 <body>
@@ -3795,9 +3802,9 @@ header p{color:var(--muted);max-width:480px;line-height:1.6;}
 <p>Diseñador/a y desarrollador/a. Acá van unos proyectos recientes.</p>
 </header>
 <div class="proyectos">
-<div class="proyecto">Proyecto uno</div>
-<div class="proyecto">Proyecto dos</div>
-<div class="proyecto">Proyecto tres</div>
+<div class="proyecto p1">Proyecto uno</div>
+<div class="proyecto p2">Proyecto dos</div>
+<div class="proyecto p3">Proyecto tres</div>
 </div>
 </body>
 </html>`,
@@ -3817,29 +3824,34 @@ header p{color:var(--muted);max-width:480px;line-height:1.6;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;}
 .sidebar{width:220px;background:var(--panel);border-right:1px solid var(--border);padding:24px 16px;}
-.sidebar h2{font-size:1rem;margin-bottom:24px;}
-.sidebar a{display:block;color:var(--muted);text-decoration:none;padding:10px 12px;border-radius:8px;font-size:.9rem;margin-bottom:4px;}
+.sidebar h2{font-size:1rem;margin-bottom:24px;display:flex;align-items:center;gap:8px;}
+.sidebar h2 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);}
+.sidebar a{display:flex;align-items:center;gap:10px;color:var(--muted);text-decoration:none;padding:10px 12px;border-radius:8px;font-size:.9rem;margin-bottom:4px;transition:background .15s,color .15s;}
+.sidebar a:hover{background:#1c2531;color:var(--text);}
 .sidebar a.activo{background:#1f2937;color:var(--text);}
+.sidebar a svg{flex-shrink:0;}
 .main{flex:1;padding:32px;}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:32px;}
-.metric{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px;}
+.metric{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px;transition:transform .15s,border-color .15s;}
+.metric:hover{transform:translateY(-3px);border-color:var(--accent);}
 .metric span{color:var(--muted);font-size:.8rem;display:block;margin-bottom:6px;}
 .metric strong{font-size:1.6rem;}
 .metric strong.up{color:var(--accent);}
+.metric .trend{display:inline-block;margin-left:8px;font-size:.72rem;font-weight:700;color:var(--accent);}
 </style>
 </head>
 <body>
 <aside class="sidebar">
-<h2>Panel</h2>
-<a class="activo" href="#">Inicio</a>
-<a href="#">Usuarios</a>
-<a href="#">Reportes</a>
-<a href="#">Configuración</a>
+<h2><span class="dot"></span>Panel</h2>
+<a class="activo" href="#"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</a>
+<a href="#"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="3"/><path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6M16 4a3 3 0 0 1 0 6M22 20c0-2.5-2-4.5-4.5-5"/></svg>Usuarios</a>
+<a href="#"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>Reportes</a>
+<a href="#"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>Configuración</a>
 </aside>
 <main class="main">
 <div class="grid">
-<div class="metric"><span>Usuarios activos</span><strong class="up">1,284</strong></div>
-<div class="metric"><span>Ingresos del mes</span><strong>$8,420</strong></div>
+<div class="metric"><span>Usuarios activos</span><strong class="up">1,284</strong><span class="trend">▲ 12%</span></div>
+<div class="metric"><span>Ingresos del mes</span><strong>$8,420</strong><span class="trend">▲ 4%</span></div>
 <div class="metric"><span>Tickets abiertos</span><strong>12</strong></div>
 </div>
 </main>
@@ -3861,16 +3873,19 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:v
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
 form{background:var(--panel);padding:36px;border-radius:16px;max-width:420px;width:100%;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.icono{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#818cf8);display:flex;align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 8px 18px rgba(79,70,229,.25);}
 form h1{font-size:1.3rem;margin-bottom:24px;}
 label{display:block;font-size:.85rem;font-weight:600;margin-bottom:6px;}
-input,textarea{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:8px;font-size:.95rem;margin-bottom:18px;font-family:inherit;}
+input,textarea{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:8px;font-size:.95rem;margin-bottom:18px;font-family:inherit;transition:border-color .15s;}
 input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
-button{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:.95rem;cursor:pointer;}
+button{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:.95rem;cursor:pointer;transition:transform .15s,box-shadow .15s;}
+button:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(79,70,229,.35);}
 .error{color:#dc2626;font-size:.8rem;margin-top:-14px;margin-bottom:14px;display:none;}
 </style>
 </head>
 <body>
 <form onsubmit="return false;">
+<div class="icono"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><path d="M4 4h16v16H4z" opacity="0"/><path d="M22 6 12 13 2 6"/><path d="M2 6h20v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg></div>
 <h1>Escribinos</h1>
 <label for="nombre">Nombre</label>
 <input id="nombre" required>
@@ -3897,20 +3912,25 @@ button{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;b
 <style>
 :root{--bg:#0f1115;--panel:#171a21;--text:#f2f3f5;--muted:#8b8f9a;--accent:#5b8cff;--border:#262a35;}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
-.box{background:var(--panel);border:1px solid var(--border);padding:36px;border-radius:16px;max-width:380px;width:100%;}
-.box h1{font-size:1.25rem;margin-bottom:6px;}
-.box p.sub{color:var(--muted);font-size:.85rem;margin-bottom:24px;}
+body{position:relative;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+body::before{content:'';position:absolute;width:380px;height:380px;background:radial-gradient(closest-side,rgba(91,140,255,.28),transparent);filter:blur(10px);}
+.logo{position:relative;z-index:1;width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#8b5cf6);margin:0 auto 18px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(91,140,255,.35);}
+.box{position:relative;z-index:1;background:var(--panel);border:1px solid var(--border);padding:36px;border-radius:16px;max-width:380px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.35);}
+.box h1{font-size:1.25rem;margin-bottom:6px;text-align:center;}
+.box p.sub{color:var(--muted);font-size:.85rem;margin-bottom:24px;text-align:center;}
 label{display:block;font-size:.8rem;font-weight:600;margin-bottom:6px;color:var(--muted);}
-input{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:8px;font-size:.9rem;margin-bottom:16px;background:#10131a;color:var(--text);}
-input:focus{outline:2px solid var(--accent);outline-offset:1px;}
-button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;margin-top:4px;}
+input{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:8px;font-size:.9rem;margin-bottom:16px;background:#10131a;color:var(--text);transition:border-color .15s;}
+input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;margin-top:4px;transition:transform .15s,box-shadow .15s;}
+button:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(91,140,255,.4);}
 .links{display:flex;justify-content:space-between;font-size:.8rem;margin-top:16px;}
 .links a{color:var(--muted);text-decoration:none;}
 .links a:hover{color:var(--accent);}
 </style>
 </head>
 <body>
+<div>
+<div class="logo"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
 <form class="box" onsubmit="return false;">
 <h1>Bienvenido de nuevo</h1>
 <p class="sub">Ingresá tus datos para continuar</p>
@@ -3921,6 +3941,7 @@ button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;b
 <button type="submit">Entrar</button>
 <div class="links"><a href="#">¿Olvidaste tu contraseña?</a><a href="#">Crear cuenta</a></div>
 </form>
+</div>
 </body>
 </html>`,
   },
@@ -3938,17 +3959,21 @@ button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;b
 :root{--bg:#faf9f7;--panel:#fff;--text:#1a1a1a;--muted:#767676;--accent:#e8664a;--border:#e4e1dc;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+.logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--accent),#f97316);margin:0 auto 16px;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px rgba(232,102,74,.3);}
 .box{background:var(--panel);border:1px solid var(--border);padding:36px;border-radius:14px;max-width:400px;width:100%;box-shadow:0 2px 8px rgba(0,0,0,.05);}
-.box h1{font-size:1.25rem;margin-bottom:20px;}
+.box h1{font-size:1.25rem;margin-bottom:20px;text-align:center;}
 .fila{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 label{display:block;font-size:.8rem;font-weight:600;margin-bottom:6px;}
-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:.9rem;margin-bottom:14px;}
-input:focus{outline:2px solid var(--accent);outline-offset:1px;}
-button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;}
+input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:.9rem;margin-bottom:14px;transition:border-color .15s;}
+input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;}
+button:hover{transform:translateY(-2px);box-shadow:0 10px 22px rgba(232,102,74,.35);}
 .terminos{font-size:.75rem;color:var(--muted);margin-bottom:14px;display:flex;gap:8px;align-items:flex-start;}
 </style>
 </head>
 <body>
+<div>
+<div class="logo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></div>
 <form class="box" onsubmit="return false;">
 <h1>Creá tu cuenta</h1>
 <div class="fila"><div><label>Nombre</label><input required></div><div><label>Apellido</label><input required></div></div>
@@ -3957,6 +3982,7 @@ button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;b
 <div class="terminos"><input type="checkbox" style="width:auto;margin:2px 0 0"><span>Acepto los términos y condiciones</span></div>
 <button type="submit">Registrarme</button>
 </form>
+</div>
 </body>
 </html>`,
   },
@@ -3975,22 +4001,24 @@ button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;b
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);}
 .wrap{max-width:900px;margin:0 auto;padding:48px 24px;display:grid;grid-template-columns:1fr 1fr;gap:40px;}
-.img{aspect-ratio:1/1;background:#f3f4f6;border-radius:12px;}
+.img{aspect-ratio:1/1;border-radius:12px;background:linear-gradient(135deg,#fbbf24,#f97316);display:flex;align-items:center;justify-content:center;}
 h1{font-size:1.5rem;margin-bottom:8px;}
 .precio{font-size:1.3rem;font-weight:700;margin-bottom:16px;}
 .desc{color:var(--muted);line-height:1.6;margin-bottom:24px;font-size:.92rem;}
 .opciones{margin-bottom:24px;}
 .opciones label{display:block;font-size:.8rem;font-weight:600;margin-bottom:8px;}
 .talles{display:flex;gap:8px;}
-.talles span{border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:.85rem;cursor:pointer;}
+.talles span{border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:.85rem;cursor:pointer;transition:all .15s;}
+.talles span:hover{border-color:var(--accent);}
 .talles span.sel{border-color:var(--accent);background:var(--accent);color:#fff;}
-button.comprar{width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:.95rem;}
+button.comprar{width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:.95rem;transition:transform .15s,box-shadow .15s;}
+button.comprar:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.2);}
 @media(max-width:640px){.wrap{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
 <div class="wrap">
-<div class="img"></div>
+<div class="img"><svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="#fff" stroke-width="1.5" opacity=".9"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>
 <div>
 <h1>Nombre del producto</h1>
 <div class="precio">$49.900</div>
@@ -4018,11 +4046,18 @@ button.comprar{width:100%;padding:14px;background:var(--accent);color:#fff;borde
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);}
 .wrap{max-width:1000px;margin:0 auto;padding:40px 24px;}
 .filtros{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
-.filtros span{padding:8px 16px;border:1px solid var(--border);border-radius:999px;font-size:.82rem;cursor:pointer;}
+.filtros span{padding:8px 16px;border:1px solid var(--border);border-radius:999px;font-size:.82rem;cursor:pointer;transition:all .15s;}
+.filtros span:hover{border-color:var(--accent);}
 .filtros span.activo{background:var(--accent);color:#fff;border-color:var(--accent);}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:20px;}
-.card{cursor:pointer;}
-.card .img{aspect-ratio:1/1;background:#f3f4f6;border-radius:10px;margin-bottom:10px;}
+.card{cursor:pointer;transition:transform .15s;}
+.card:hover{transform:translateY(-4px);}
+.card .img{aspect-ratio:1/1;border-radius:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;}
+.card .img svg{opacity:.9;}
+.card.c1 .img{background:linear-gradient(135deg,#818cf8,#6366f1);}
+.card.c2 .img{background:linear-gradient(135deg,#34d399,#10b981);}
+.card.c3 .img{background:linear-gradient(135deg,#f472b6,#ec4899);}
+.card.c4 .img{background:linear-gradient(135deg,#fbbf24,#f59e0b);}
 .card h3{font-size:.88rem;margin-bottom:4px;}
 .card .precio{font-size:.85rem;color:var(--muted);}
 </style>
@@ -4031,10 +4066,10 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--
 <div class="wrap">
 <div class="filtros"><span class="activo">Todos</span><span>Remeras</span><span>Pantalones</span><span>Accesorios</span></div>
 <div class="grid">
-<div class="card"><div class="img"></div><h3>Producto uno</h3><div class="precio">$12.500</div></div>
-<div class="card"><div class="img"></div><h3>Producto dos</h3><div class="precio">$8.900</div></div>
-<div class="card"><div class="img"></div><h3>Producto tres</h3><div class="precio">$15.000</div></div>
-<div class="card"><div class="img"></div><h3>Producto cuatro</h3><div class="precio">$6.400</div></div>
+<div class="card c1"><div class="img"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div><h3>Producto uno</h3><div class="precio">$12.500</div></div>
+<div class="card c2"><div class="img"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div><h3>Producto dos</h3><div class="precio">$8.900</div></div>
+<div class="card c3"><div class="img"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div><h3>Producto tres</h3><div class="precio">$15.000</div></div>
+<div class="card c4"><div class="img"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div><h3>Producto cuatro</h3><div class="precio">$6.400</div></div>
 </div>
 </div>
 </body>
@@ -4057,7 +4092,9 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--
 .wrap{max-width:760px;margin:0 auto;padding:40px 24px;display:grid;grid-template-columns:1.6fr 1fr;gap:32px;}
 h1{font-size:1.3rem;margin-bottom:20px;grid-column:1/-1;}
 .item{display:flex;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);}
-.item .img{width:64px;height:64px;background:#f3f4f6;border-radius:8px;flex-shrink:0;}
+.item .img{width:64px;height:64px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.item:nth-child(1) .img{background:linear-gradient(135deg,#818cf8,#6366f1);}
+.item:nth-child(2) .img{background:linear-gradient(135deg,#34d399,#10b981);}
 .item .info{flex:1;}
 .item .info h3{font-size:.88rem;margin-bottom:4px;}
 .item .info span{font-size:.8rem;color:var(--muted);}
@@ -4065,7 +4102,8 @@ h1{font-size:1.3rem;margin-bottom:20px;grid-column:1/-1;}
 .resumen{background:#f9fafb;border-radius:12px;padding:20px;height:fit-content;}
 .resumen .fila{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:10px;color:var(--muted);}
 .resumen .total{display:flex;justify-content:space-between;font-weight:700;font-size:1rem;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);color:var(--text);}
-button{width:100%;margin-top:16px;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;}
+button{width:100%;margin-top:16px;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;transition:transform .15s,box-shadow .15s;}
+button:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.2);}
 @media(max-width:600px){.wrap{grid-template-columns:1fr;}}
 </style>
 </head>
@@ -4073,8 +4111,8 @@ button{width:100%;margin-top:16px;padding:12px;background:var(--accent);color:#f
 <div class="wrap">
 <h1>Tu carrito</h1>
 <div>
-<div class="item"><div class="img"></div><div class="info"><h3>Producto uno</h3><span>$12.500</span></div><div class="cant">1</div></div>
-<div class="item"><div class="img"></div><div class="info"><h3>Producto dos</h3><span>$8.900</span></div><div class="cant">2</div></div>
+<div class="item"><div class="img"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div><div class="info"><h3>Producto uno</h3><span>$12.500</span></div><div class="cant">1</div></div>
+<div class="item"><div class="img"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div><div class="info"><h3>Producto dos</h3><span>$8.900</span></div><div class="cant">2</div></div>
 </div>
 <div class="resumen">
 <div class="fila"><span>Subtotal</span><span>$30.300</span></div>
@@ -4100,19 +4138,22 @@ button{width:100%;margin-top:16px;padding:12px;background:var(--accent);color:#f
 :root{--bg:#fdfdfc;--text:#1f1f1f;--muted:#8a8a8a;--accent:#2563eb;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:Georgia,'Times New Roman',serif;background:var(--bg);color:var(--text);}
+.cover{height:280px;background:linear-gradient(135deg,#2563eb,#7c3aed);}
 article{max-width:640px;margin:0 auto;padding:64px 24px;}
 .categoria{color:var(--accent);font-family:system-ui,sans-serif;font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:14px;}
 h1{font-size:2.1rem;line-height:1.2;margin-bottom:16px;}
-.meta{font-family:system-ui,sans-serif;color:var(--muted);font-size:.85rem;margin-bottom:36px;}
+.meta{font-family:system-ui,sans-serif;color:var(--muted);font-size:.85rem;margin-bottom:36px;display:flex;align-items:center;gap:10px;}
+.meta .autor{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);}
 p{line-height:1.8;margin-bottom:20px;font-size:1.05rem;}
 h2{font-family:system-ui,sans-serif;font-size:1.3rem;margin:32px 0 12px;}
 </style>
 </head>
 <body>
+<div class="cover"></div>
 <article>
 <div class="categoria">Diseño</div>
 <h1>Título del artículo que resume la idea principal</h1>
-<div class="meta">Por Tu Nombre · 5 min de lectura · 24 jul 2026</div>
+<div class="meta"><span class="autor"></span>Por Tu Nombre · 5 min de lectura · 24 jul 2026</div>
 <p>Primer párrafo de introducción explicando de qué trata el artículo y por qué le importa a quien lo está leyendo.</p>
 <h2>Un subtítulo</h2>
 <p>Desarrollo del contenido con el cuerpo principal del texto, en un ancho de línea cómodo para lectura larga.</p>
@@ -4136,8 +4177,11 @@ h2{font-family:system-ui,sans-serif;font-size:1.3rem;margin:32px 0 12px;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);}
 .wrap{max-width:720px;margin:0 auto;padding:56px 24px;}
 h1{font-size:1.6rem;margin-bottom:32px;}
-.post{display:flex;gap:20px;padding:24px 0;border-bottom:1px solid var(--border);}
-.post .img{width:140px;height:100px;background:#f3f4f6;border-radius:10px;flex-shrink:0;}
+.post{display:flex;gap:20px;padding:24px 0;border-bottom:1px solid var(--border);transition:transform .15s;}
+.post:hover{transform:translateX(4px);}
+.post .img{width:140px;height:100px;border-radius:10px;flex-shrink:0;}
+.post:nth-child(2) .img{background:linear-gradient(135deg,#2563eb,#7c3aed);}
+.post:nth-child(3) .img{background:linear-gradient(135deg,#f59e0b,#ef4444);}
 .post h2{font-size:1.05rem;margin-bottom:6px;}
 .post p{color:var(--muted);font-size:.88rem;line-height:1.5;}
 .post .fecha{font-size:.75rem;color:var(--muted);margin-top:8px;}
@@ -4247,11 +4291,14 @@ document.querySelectorAll('.pregunta').forEach(b=>{
 <style>
 :root{--bg:#0d0f14;--text:#eef0f6;--muted:#8b8f9a;--accent:#5b8cff;}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px;}
-.codigo{font-size:6rem;font-weight:800;color:var(--accent);line-height:1;}
-h1{font-size:1.2rem;margin:16px 0 8px;}
-p{color:var(--muted);margin-bottom:28px;}
-a{background:var(--accent);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:.9rem;}
+body{position:relative;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px;}
+body::before{content:'';position:absolute;width:420px;height:420px;background:radial-gradient(closest-side,rgba(91,140,255,.35),transparent);filter:blur(20px);z-index:0;animation:float 6s ease-in-out infinite;}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-16px)}}
+.codigo{position:relative;z-index:1;font-size:6rem;font-weight:800;color:var(--accent);line-height:1;}
+h1{position:relative;z-index:1;font-size:1.2rem;margin:16px 0 8px;}
+p{position:relative;z-index:1;color:var(--muted);margin-bottom:28px;}
+a{position:relative;z-index:1;display:inline-block;background:var(--accent);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:.9rem;transition:transform .15s,box-shadow .15s;}
+a:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(91,140,255,.4);}
 </style>
 </head>
 <body>
@@ -4276,13 +4323,14 @@ a{background:var(--accent);color:#fff;padding:12px 24px;border-radius:8px;text-d
 :root{--bg:#faf9f7;--text:#1a1a1a;--muted:#767676;--accent:#e8664a;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px;}
-.icono{width:64px;height:64px;border-radius:16px;background:var(--accent);margin-bottom:20px;}
+.icono{width:68px;height:68px;border-radius:18px;background:linear-gradient(135deg,var(--accent),#f97316);margin-bottom:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 24px rgba(232,102,74,.35);animation:spin 3.5s linear infinite;}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 h1{font-size:1.4rem;margin-bottom:10px;}
 p{color:var(--muted);max-width:380px;line-height:1.6;}
 </style>
 </head>
 <body>
-<div class="icono"></div>
+<div class="icono"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#fff" stroke-width="1.8"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.8 2.8-2-2z"/></svg></div>
 <h1>Estamos mejorando el sitio</h1>
 <p>Volvemos en breve. Gracias por la paciencia mientras hacemos estos cambios.</p>
 </body>
@@ -4302,8 +4350,9 @@ p{color:var(--muted);max-width:380px;line-height:1.6;}
 :root{--bg:#fff;--text:#111;--muted:#6b7280;--accent:#111;--border:#e5e7eb;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f9fafb;padding:24px;}
-.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:28px;max-width:280px;width:100%;text-align:center;}
-.avatar{width:72px;height:72px;border-radius:50%;background:#e5e7eb;margin:0 auto 14px;}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:28px;max-width:280px;width:100%;text-align:center;transition:transform .15s,box-shadow .15s;}
+.card:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(0,0,0,.08);}
+.avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#6d5efc,#a78bfa);margin:0 auto 14px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1.4rem;box-shadow:0 6px 16px rgba(109,94,252,.3);}
 .card h2{font-size:1.05rem;margin-bottom:2px;}
 .card .rol{color:var(--muted);font-size:.82rem;margin-bottom:14px;}
 .card p{font-size:.85rem;color:var(--muted);line-height:1.5;margin-bottom:18px;}
@@ -4314,7 +4363,7 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--
 </head>
 <body>
 <div class="card">
-<div class="avatar"></div>
+<div class="avatar">NA</div>
 <h2>Nombre Apellido</h2>
 <div class="rol">Diseñador/a de producto</div>
 <p>Construyendo cosas simples que la gente disfruta usar.</p>
@@ -4338,19 +4387,23 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);min-height:100vh;display:flex;flex-direction:column;}
 nav{display:flex;align-items:center;justify-content:space-between;padding:16px 32px;border-bottom:1px solid var(--border);}
-nav .logo{font-weight:700;}
+nav .logo{display:flex;align-items:center;gap:8px;font-weight:700;}
+nav .logo .mark{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#6d5efc,#a78bfa);}
 nav ul{list-style:none;display:flex;gap:24px;}
-nav a{text-decoration:none;color:var(--muted);font-size:.88rem;}
+nav a{text-decoration:none;color:var(--muted);font-size:.88rem;transition:color .15s;}
 nav a:hover{color:var(--text);}
-nav .cta{background:var(--accent);color:#fff;padding:9px 18px;border-radius:8px;font-size:.85rem;text-decoration:none;}
+nav .cta{background:var(--accent);color:#fff;padding:9px 18px;border-radius:8px;font-size:.85rem;text-decoration:none;transition:transform .15s,box-shadow .15s;}
+nav .cta:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(0,0,0,.2);}
 main{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.85rem;}
 footer{border-top:1px solid var(--border);padding:32px;display:flex;justify-content:space-between;align-items:center;font-size:.8rem;color:var(--muted);}
 footer .cols{display:flex;gap:32px;}
 footer .cols div{display:flex;flex-direction:column;gap:8px;}
+footer a{color:var(--muted);text-decoration:none;transition:color .15s;}
+footer a:hover{color:var(--text);}
 </style>
 </head>
 <body>
-<nav><div class="logo">Marca</div><ul><li><a href="#">Producto</a></li><li><a href="#">Precios</a></li><li><a href="#">Blog</a></li></ul><a class="cta" href="#">Empezar</a></nav>
+<nav><div class="logo"><span class="mark"></span>Marca</div><ul><li><a href="#">Producto</a></li><li><a href="#">Precios</a></li><li><a href="#">Blog</a></li></ul><a class="cta" href="#">Empezar</a></nav>
 <main>Contenido de la página acá</main>
 <footer><span>© 2026 Marca. Todos los derechos reservados.</span><div class="cols"><div><a href="#">Privacidad</a></div><div><a href="#">Términos</a></div></div></footer>
 </body>
@@ -4359,9 +4412,15 @@ footer .cols div{display:flex;flex-direction:column;gap:8px;}
 ];
 
 app.get('/api/verbodesign/templates', requiereAdminVerboCode, (req, res) => {
+  // Antes esto devolvía solo metadata (id/nombre/categoría/descripción) y la
+  // tarjeta se veía sin ninguna imagen, solo un rótulo de texto con el
+  // nombre de la categoría — bastante feo. Ahora se manda también el HTML
+  // completo de una: no pesa nada (son plantillas chicas, un solo archivo)
+  // y así el front puede armar una miniatura REAL (un iframe escalado que
+  // muestra la plantilla tal cual se ve) en vez de un cartel de texto.
   res.json({
     ok: true,
-    plantillas: VERBODESIGN_TEMPLATES.map(({ id, nombre, categoria, descripcion }) => ({ id, nombre, categoria, descripcion })),
+    plantillas: VERBODESIGN_TEMPLATES.map(({ id, nombre, categoria, descripcion, html }) => ({ id, nombre, categoria, descripcion, html })),
   });
 });
 

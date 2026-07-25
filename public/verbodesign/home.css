@@ -224,6 +224,7 @@
 .vd-plantilla-card {
   background: var(--vc-bg-tertiary);
   border: 1px solid var(--vc-border);
+  border-top: 3px solid var(--cat-color, var(--vc-accent));
   border-radius: var(--vc-radius);
   overflow: hidden;
   display: flex;
@@ -232,29 +233,78 @@
 }
 
 .vd-plantilla-card:hover {
-  transform: translateY(-3px);
-  border-color: var(--vc-accent);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  transform: translateY(-4px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
 }
 
+.vd-plantilla-card:hover .vd-plantilla-preview-overlay {
+  opacity: 1;
+}
+
+.vd-plantilla-card:hover .vd-plantilla-iframe {
+  filter: brightness(0.55) blur(0.3px);
+}
+
+/* Miniatura REAL: un iframe con la plantilla completa, escalado hacia abajo
+   para que entre en la tarjeta (así se ve el diseño real, no un cartel de
+   texto). pointer-events:none para que no se pueda interactuar con el
+   contenido de adentro (clicks/inputs), el click se maneja en el contenedor. */
 .vd-plantilla-preview {
+  position: relative;
   aspect-ratio: 16 / 10;
-  background: linear-gradient(135deg, var(--vc-accent-light), var(--vc-bg-secondary));
+  overflow: hidden;
+  background: var(--vc-bg-secondary);
+  cursor: pointer;
+}
+
+.vd-plantilla-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 400%;
+  height: 400%;
+  border: none;
+  transform: scale(0.25);
+  transform-origin: top left;
+  pointer-events: none;
+  background: #fff;
+  transition: filter 0.2s;
+}
+
+.vd-plantilla-preview-overlay {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
 }
 
-.vd-plantilla-preview span {
-  color: var(--vc-accent);
+.vd-plantilla-preview-overlay span {
+  color: #fff;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  padding: 7px 16px;
+  border-radius: 999px;
+  backdrop-filter: blur(2px);
+}
+
+.vd-plantilla-tag {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 10.5px;
+  font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  background: var(--vc-bg);
-  padding: 5px 12px;
+  padding: 3px 9px;
   border-radius: 999px;
-  border: 1px solid var(--vc-border);
+  border: 1px solid;
+  margin-bottom: 2px;
 }
 
 .vd-plantilla-body {
