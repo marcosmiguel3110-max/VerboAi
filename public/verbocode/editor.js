@@ -17,86 +17,80 @@ const estado = {
   imagenPendiente: null,        // base64 de imagen adjunta
   nombreImagenPendiente: null,  // nombre del archivo de imagen
   modoDesign: false,            // modo Design (Canvas/3D) activado desde el botón del chat
-  ejecucionEnCurso: 0,          // contador de operaciones reales en curso (terminal, npm, test)
-  totalCharsRespuesta: 0,       // largo real de la respuesta que se está transmitiendo (para el %)
 };
-
-// Prende/apaga el punto rojo del botón de terminal según haya o no una
-// ejecución real en curso (comando de terminal, npm install, test). Es un
-// contador porque puede haber más de una operación real superpuesta.
-function marcarEjecucionInicio() {
-  estado.ejecucionEnCurso++;
-  const dot = document.getElementById('vcTerminalDot');
-  if (dot) dot.classList.remove('oculto');
-}
-function marcarEjecucionFin() {
-  estado.ejecucionEnCurso = Math.max(0, estado.ejecucionEnCurso - 1);
-  if (estado.ejecucionEnCurso === 0) {
-    const dot = document.getElementById('vcTerminalDot');
-    if (dot) dot.classList.add('oculto');
-  }
-}
-
-// Sidebars/panel de chat redimensionables arrastrando las barras divisoras.
-// El ancho elegido se guarda en localStorage para que persista entre sesiones.
-function initResizers() {
-  const layout = document.querySelector('.vc-editor-layout');
-  if (!layout) return;
-
-  const guardado = JSON.parse(localStorage.getItem('vcAnchoPaneles') || '{}');
-  const anchoSidebar = guardado.sidebar || 200;
-  const anchoChat = guardado.chat || 360;
-  layout.style.gridTemplateColumns = `${anchoSidebar}px 6px 1fr 6px ${anchoChat}px`;
-
-  function setup(resizerId, propiedad, minimo, maximo, invertido) {
-    const resizer = document.getElementById(resizerId);
-    if (!resizer) return;
-    let arrastrando = false;
-    let inicioX = 0;
-    let inicioAncho = 0;
-
-    resizer.addEventListener('mousedown', (e) => {
-      arrastrando = true;
-      inicioX = e.clientX;
-      const cols = getComputedStyle(layout).gridTemplateColumns.split(' ');
-      inicioAncho = propiedad === 'sidebar' ? parseFloat(cols[0]) : parseFloat(cols[4]);
-      resizer.classList.add('vc-resizer-activo');
-      document.body.style.userSelect = 'none';
-      document.body.style.cursor = 'col-resize';
-    });
-
-    window.addEventListener('mousemove', (e) => {
-      if (!arrastrando) return;
-      const delta = e.clientX - inicioX;
-      let nuevoAncho = inicioAncho + (invertido ? -delta : delta);
-      nuevoAncho = Math.min(maximo, Math.max(minimo, nuevoAncho));
-      const cols = getComputedStyle(layout).gridTemplateColumns.split(' ');
-      if (propiedad === 'sidebar') cols[0] = `${nuevoAncho}px`;
-      else cols[4] = `${nuevoAncho}px`;
-      layout.style.gridTemplateColumns = cols.join(' ');
-    });
-
-    window.addEventListener('mouseup', () => {
-      if (!arrastrando) return;
-      arrastrando = false;
-      resizer.classList.remove('vc-resizer-activo');
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-      const cols = getComputedStyle(layout).gridTemplateColumns.split(' ');
-      const actual = JSON.parse(localStorage.getItem('vcAnchoPaneles') || '{}');
-      actual.sidebar = parseFloat(cols[0]);
-      actual.chat = parseFloat(cols[4]);
-      localStorage.setItem('vcAnchoPaneles', JSON.stringify(actual));
-    });
-  }
-
-  setup('vcResizerSidebar', 'sidebar', 140, 420, false);
-  setup('vcResizerChat', 'chat', 260, 560, true);
-}
 
 // ============================================================
 // Inicialización
 // ============================================================
+// Resize de sidebars con el mouse: arrastrás la barrita entre paneles y el
+// ancho se guarda en localStorage, así queda como lo dejaste la próxima vez
+// que entrás. Los límites (min/max) evitan que se pueda dejar un panel
+// inusable (0px o gigante tapando todo).
+const VC_SIDEBAR_MIN = 160;
+const VC_SIDEBAR_MAX = 560;
+const VC_CHAT_MIN = 260;
+const VC_CHAT_MAX = 680;
+
+function configurarResizeSidebars() {
+  const layout = document.querySelector('.vc-editor-layout');
+  if (!layout) return;
+
+  const anchoGuardado = JSON.parse(localStorage.getItem('vc_anchos_sidebar') || 'null') || {};
+  let anchoSidebar = clamp(anchoGuardado.sidebar || 200, VC_SIDEBAR_MIN, VC_SIDEBAR_MAX);
+  let anchoChat = clamp(anchoGuardado.chat || 360, VC_CHAT_MIN, VC_CHAT_MAX);
+
+  const aplicarAnchos = () => {
+    layout.style.gridTemplateColumns = `${anchoSidebar}px 6px 1fr 6px ${anchoChat}px`;
+  };
+  aplicarAnchos();
+
+  const guardarAnchos = () => {
+    localStorage.setItem('vc_anchos_sidebar', JSON.stringify({ sidebar: anchoSidebar, chat: anchoChat }));
+  };
+
+  document.querySelectorAll('.vc-resize-handle').forEach((handle) => {
+    const tipo = handle.dataset.resize; // 'sidebar' o 'chat'
+    handle.addEventListener('mousedown', (evStart) => {
+      evStart.preventDefault();
+      handle.classList.add('vc-resizing');
+      document.body.classList.add('vc-resizing-activo');
+      const inicioX = evStart.clientX;
+      const inicioSidebar = anchoSidebar;
+      const inicioChat = anchoChat;
+
+      const onMove = (evMove) => {
+        const delta = evMove.clientX - inicioX;
+        if (tipo === 'sidebar') {
+          anchoSidebar = clamp(inicioSidebar + delta, VC_SIDEBAR_MIN, VC_SIDEBAR_MAX);
+        } else {
+          anchoChat = clamp(inicioChat - delta, VC_CHAT_MIN, VC_CHAT_MAX);
+        }
+        aplicarAnchos();
+      };
+      const onUp = () => {
+        handle.classList.remove('vc-resizing');
+        document.body.classList.remove('vc-resizing-activo');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        guardarAnchos();
+        if (estado.monaco && estado.monaco.layout) estado.monaco.layout();
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    handle.addEventListener('dblclick', () => {
+      if (tipo === 'sidebar') anchoSidebar = 200; else anchoChat = 360;
+      aplicarAnchos();
+      guardarAnchos();
+      if (estado.monaco && estado.monaco.layout) estado.monaco.layout();
+    });
+  });
+}
+
+function clamp(valor, min, max) {
+  return Math.max(min, Math.min(max, valor));
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   aplicarTema();
   // Extraer projectId de la URL: /verbocode/editor/<id>/
@@ -113,8 +107,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   await cargarModelos();
   await initMonaco();
   configurarEventos();
-  initResizers();
   configurarChatInput();
+  configurarResizeSidebars();
 
   // Guardar todo antes de cerrar la pestaña
   window.addEventListener('beforeunload', () => {
@@ -702,7 +696,6 @@ function configurarEventos() {
 
       input.value = '';
       input.disabled = true;
-      marcarEjecucionInicio();
 
       try {
         // Detectar lenguaje del comando
@@ -774,7 +767,6 @@ function configurarEventos() {
         input.disabled = false;
         input.focus();
         output.scrollTop = output.scrollHeight;
-        marcarEjecucionFin();
       }
     }
   });
@@ -818,6 +810,99 @@ function crearArchivo() {
 // ============================================================
 // Chat
 // ============================================================
+// Tamaño (en caracteres) a partir del cual un archivo que la IA está
+// escribiendo se considera "grande" y se muestra la card de "Compactando"
+// con progreso en vez de volcar el texto crudo del tag al chat.
+const UMBRAL_ARCHIVO_GRANDE = 1200;
+
+// Busca el ÚLTIMO tag [[FILE_CREATE::/FILE_EDIT::nombre::]] que empezó mas
+// no terminó todavía dentro del texto acumulado del stream. Si lo encuentra,
+// devuelve dónde arranca el header, dónde termina (para poder contar
+// caracteres reales escritos desde ahí) y el nombre de archivo/tipo.
+function detectarBloqueEnCurso(texto) {
+  const re = /\[\[(FILE_CREATE|FILE_EDIT)::([^:\n]+)::/g;
+  let match, ultimo = null;
+  while ((match = re.exec(texto)) !== null) ultimo = match;
+  if (!ultimo) return null;
+  const headerEnd = ultimo.index + ultimo[0].length;
+  if (texto.indexOf(']]', headerEnd) !== -1) return null; // ya cerró, no está en curso
+  return { tipo: ultimo[1], archivo: ultimo[2].trim(), headerStart: ultimo.index, headerEnd, cardEl: null };
+}
+
+// Igual que detectarBloqueEnCurso pero para bloques <think>...</think> de
+// razonamiento: si el modelo los usa, nunca se muestran (ni completos ni a
+// medias) — se devuelve dónde empezó el último <think> que todavía no cerró.
+function detectarThinkEnCurso(texto) {
+  const reOpen = /<think(?:ing)?>/gi;
+  let m, ultimo = null;
+  while ((m = reOpen.exec(texto)) !== null) ultimo = m;
+  if (!ultimo) return null;
+  if (/<\/think(?:ing)?>/i.test(texto.slice(ultimo.index))) return null;
+  return ultimo.index;
+}
+
+function crearCardCompactando(bloque) {
+  const codeDiv = document.createElement('div');
+  codeDiv.className = 'vc-msg-creando-codigo';
+  codeDiv.innerHTML = `
+    <div class="vc-creando-topbar">
+      <span class="vc-creando-punto rojo"></span>
+      <span class="vc-creando-punto amarillo"></span>
+      <span class="vc-creando-punto verde"></span>
+    </div>
+    <div class="vc-creando-content">
+      <div class="vc-creando-header">
+        <span class="vc-creando-loading"></span>
+        Compactando
+        <span class="vc-creando-porcentaje"></span>
+      </div>
+      <div class="vc-creando-bar">
+        <svg class="vc-creando-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <span class="vc-creando-archivo">${bloque.archivo}</span>
+      </div>
+      <div class="vc-creando-scan"></div>
+    </div>
+  `;
+  document.getElementById('vcChatMensajes').appendChild(codeDiv);
+  scrollChatAbajo();
+  return codeDiv;
+}
+
+// Actualiza la card con datos REALES: si es un FILE_EDIT de un archivo que
+// ya conocemos (tenemos su tamaño anterior en estado.archivos), calculamos
+// un % real (caracteres ya recibidos / tamaño anterior). Si es un archivo
+// nuevo (FILE_CREATE) no hay forma honesta de saber el total final, así que
+// en vez de inventar un número mostramos el tamaño real ya escrito en KB.
+function actualizarCardCompactando(bloque, escritos) {
+  const cardEl = bloque.cardEl;
+  if (!cardEl) return;
+  const porcentajeEl = cardEl.querySelector('.vc-creando-porcentaje');
+  const scanEl = cardEl.querySelector('.vc-creando-scan');
+  const refLen = (bloque.tipo === 'FILE_EDIT' && estado.archivos[bloque.archivo]) ? estado.archivos[bloque.archivo].length : null;
+  if (refLen && refLen > 0) {
+    const pct = Math.max(1, Math.min(99, Math.round((escritos / refLen) * 100)));
+    porcentajeEl.textContent = pct + '%';
+    scanEl.classList.add('real');
+    scanEl.style.setProperty('--progreso', pct + '%');
+  } else {
+    porcentajeEl.textContent = (escritos / 1024).toFixed(1) + ' KB';
+  }
+  scrollChatAbajo();
+}
+
+function finalizarCardCompactando(cardEl) {
+  if (!cardEl || !cardEl.parentNode) return;
+  cardEl.classList.add('vc-creando-listo');
+  const loadingEl = cardEl.querySelector('.vc-creando-loading');
+  const porcentajeEl = cardEl.querySelector('.vc-creando-porcentaje');
+  if (loadingEl) loadingEl.classList.add('vc-creando-loading-done');
+  if (porcentajeEl) porcentajeEl.textContent = '100%';
+  setTimeout(() => {
+    cardEl.classList.add('vc-creando-colapsado');
+    setTimeout(() => { if (cardEl.parentNode) cardEl.remove(); }, 350);
+  }, 1200);
+}
+
 function configurarChatInput() {
   const input = document.getElementById('vcChatInput');
   input.addEventListener('keydown', (e) => {
@@ -853,7 +938,6 @@ async function enviarChat() {
     try { input.focus(); } catch(e) {}
     // Ocultar indicador Generando Code
     if (indicadorGenerando) indicadorGenerando.classList.add('oculto');
-    marcarEjecucionFin();
   };
 
   const msgUser = { 
@@ -874,12 +958,6 @@ async function enviarChat() {
 
   // Mostrar indicador Generando Code
   if (indicadorGenerando) indicadorGenerando.classList.remove('oculto');
-  estado.totalCharsRespuesta = 0;
-  const textoIndEl = document.getElementById('vcIndicadorGenerandoTexto');
-  const pctIndEl = document.getElementById('vcIndicadorGenerandoPct');
-  if (textoIndEl) textoIndEl.textContent = 'Generando Code...';
-  if (pctIndEl) pctIndEl.classList.add('oculto');
-  marcarEjecucionInicio();
 
   // Limpiar elementos de peticiones anteriores que pudieron quedar
   const thinkingViejo = document.getElementById('thinkingIndicator');
@@ -931,6 +1009,9 @@ async function enviarChat() {
     let modeloRecibido = 'VerboAITeams';
     let archivosActualizados = null;
     let proyectoActualizado = false;
+    // Ver detectarBloqueEnCurso() / crearCardCompactando(): progreso REAL
+    // (no simulado) de un archivo grande que la IA está escribiendo ahora.
+    let bloqueActivo = null;
 
     const msgDiv = document.createElement('div');
     msgDiv.className = 'vc-msg assistant';
@@ -952,20 +1033,6 @@ async function enviarChat() {
         if (evt.type === 'status') {
           if (thinkingEl && thinkingEl.parentNode) {
             thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> ' + evt.text;
-          }
-        } else if (evt.type === 'meta') {
-          // Largo real de la respuesta ya generada (no una estimación). Con
-          // esto el % que se muestra es real: charsRecibidos / totalChars.
-          estado.totalCharsRespuesta = evt.totalChars || 0;
-          const textoEl = document.getElementById('vcIndicadorGenerandoTexto');
-          const pctEl = document.getElementById('vcIndicadorGenerandoPct');
-          const UMBRAL_COMPACTANDO = 4000; // chars: a partir de acá se considera "script grande"
-          if (textoEl) {
-            textoEl.textContent = estado.totalCharsRespuesta > UMBRAL_COMPACTANDO ? 'Compactando código...' : 'Generando Code...';
-          }
-          if (pctEl) {
-            pctEl.classList.toggle('oculto', estado.totalCharsRespuesta <= 0);
-            pctEl.textContent = '0%';
           }
         } else if (evt.type === 'plan') {
           planRecibido = evt.plan;
@@ -991,28 +1058,89 @@ async function enviarChat() {
           }, 8);
         } else if (evt.type === 'chunk') {
           textoRespuesta += evt.text;
-          // % real: caracteres ya recibidos sobre el largo real total (evt de 'meta').
-          if (estado.totalCharsRespuesta > 0) {
-            const pctEl = document.getElementById('vcIndicadorGenerandoPct');
-            if (pctEl) {
-              const pct = Math.min(100, Math.round((textoRespuesta.length / estado.totalCharsRespuesta) * 100));
-              pctEl.textContent = pct + '%';
-              pctEl.classList.remove('oculto');
+
+          // Si estamos escribiendo un archivo grande, mostrar "Compactando"
+          // con progreso REAL (ver detectarBloqueEnCurso) en vez de volcar
+          // el tag [[FILE_CREATE::/FILE_EDIT::...]] crudo al chat mientras
+          // llega caracter por caracter.
+          if (!bloqueActivo) {
+            const detectado = detectarBloqueEnCurso(textoRespuesta);
+            if (detectado) bloqueActivo = detectado;
+          }
+
+          if (bloqueActivo) {
+            const cerrado = textoRespuesta.indexOf(']]', bloqueActivo.headerEnd) !== -1;
+            const escritos = textoRespuesta.length - bloqueActivo.headerEnd;
+
+            if (cerrado) {
+              if (bloqueActivo.cardEl) finalizarCardCompactando(bloqueActivo.cardEl);
+              bloqueActivo = null;
+            } else if (escritos > UMBRAL_ARCHIVO_GRANDE) {
+              if (!bloqueActivo.cardEl) bloqueActivo.cardEl = crearCardCompactando(bloqueActivo);
+              actualizarCardCompactando(bloqueActivo, escritos);
             }
           }
+
           // Mostrar línea por línea: solo mostrar hasta el último salto de línea completo
-          // Las líneas incompletas se guardan y se muestran cuando se completen
-          const ultimaLinea = textoRespuesta.lastIndexOf('\n');
+          // Las líneas incompletas se guardan y se muestran cuando se completen.
+          // Se oculta el texto crudo desde donde empiece CUALQUIER bloque todavía
+          // sin cerrar: un tag [[FILE_CREATE::/FILE_EDIT::...]] (chico o grande,
+          // con card de "Compactando" si es grande) o un bloque <think>...</think>
+          // de razonamiento (que nunca se muestra, ni chico ni grande — antes esto
+          // no hacía falta porque el streaming era fake y ya llegaba limpio).
+          const thinkStart = detectarThinkEnCurso(textoRespuesta);
+          const cortes = [];
+          if (bloqueActivo) cortes.push(bloqueActivo.headerStart);
+          if (thinkStart !== null) cortes.push(thinkStart);
+          const ocultarDesde = cortes.length ? Math.min(...cortes) : textoRespuesta.length;
+          const textoParaMostrar = textoRespuesta.slice(0, ocultarDesde);
+
+          const ultimaLinea = textoParaMostrar.lastIndexOf('\n');
           if (ultimaLinea >= 0) {
-            const textoVisible = textoRespuesta.slice(0, ultimaLinea + 1);
-            const resto = textoRespuesta.slice(ultimaLinea + 1);
+            const textoVisible = textoParaMostrar.slice(0, ultimaLinea + 1);
+            const resto = textoParaMostrar.slice(ultimaLinea + 1);
             msgDiv.innerHTML = formatearMarkdownConColapsado(textoVisible) + (resto ? '<span class="vc-typing-cursor">▋</span>' : '');
-          } else {
+          } else if (cortes.length === 0) {
             msgDiv.innerHTML = '<span class="vc-typing-cursor">▋</span>';
           }
           scrollChatAbajo();
         } else if (evt.type === 'action') {
           renderAccion(evt.accion);
+        } else if (evt.type === 'terminal_run') {
+          // La IA está corriendo un comando de verdad AHORA MISMO. Prender el
+          // punto rojo del botón de terminal y, si el modal está abierto,
+          // mostrar el comando en vivo — igual que si lo hubiera tipeado el
+          // usuario a mano.
+          const dot = document.getElementById('vcTerminalDot');
+          if (dot) dot.classList.remove('oculto');
+          const output = document.getElementById('vcTerminalOutput');
+          if (output) {
+            const cmdLine = document.createElement('div');
+            cmdLine.className = 'vc-terminal-line command';
+            cmdLine.textContent = `$ ${evt.comando} (ejecutado por la IA)`;
+            output.appendChild(cmdLine);
+            output.scrollTop = output.scrollHeight;
+          }
+        } else if (evt.type === 'terminal_result') {
+          const dot = document.getElementById('vcTerminalDot');
+          if (dot) dot.classList.add('oculto');
+          const output = document.getElementById('vcTerminalOutput');
+          if (output) {
+            const r = evt.resultado || {};
+            if (r.stdout) {
+              const okLine = document.createElement('div');
+              okLine.className = 'vc-terminal-line success';
+              okLine.textContent = r.stdout;
+              output.appendChild(okLine);
+            }
+            if (r.stderr) {
+              const errLine = document.createElement('div');
+              errLine.className = 'vc-terminal-line error';
+              errLine.textContent = r.stderr;
+              output.appendChild(errLine);
+            }
+            output.scrollTop = output.scrollHeight;
+          }
         } else if (evt.type === 'investigando') {
           // Limpiar indicador anterior si quedó sin cerrar
           const invViejo = document.getElementById('investigandoIndicator');
@@ -1150,7 +1278,10 @@ async function enviarChat() {
           proyectoActualizado = evt.proyectoActualizado;
           archivosActualizados = evt.archivos;
           if (evt.plan) planRecibido = evt.plan;
-          // Mostrar texto completo al terminar (incluye última línea)
+          // Usar el texto LIMPIO que manda el server (sin tags crudos ni
+          // bloques <think>) para el render final, en vez del buffer crudo
+          // que se fue acumulando del streaming en vivo del lado del cliente.
+          if (typeof evt.textoFinal === 'string') textoRespuesta = evt.textoFinal;
           msgDiv.innerHTML = formatearMarkdownConColapsado(textoRespuesta);
           scrollChatAbajo();
           // Salir del while inmediatamente después de done
@@ -1306,13 +1437,8 @@ function renderAccion(accion) {
     run: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
     npm_install: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     test: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    sound_download: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
   };
   const icono = iconos[accion.tipo] || '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
-  // Si la acción trae exito:false (npm_install/sound_download que en verdad
-  // fallaron al verificar contra la web real), marcarla como error en vez de
-  // mostrarla como si hubiese funcionado.
-  if (accion.exito === false) div.classList.add('vc-accion-fallida');
   div.innerHTML = `${icono} <span>${accion.descripcion}</span>`;
   cont.appendChild(div);
 

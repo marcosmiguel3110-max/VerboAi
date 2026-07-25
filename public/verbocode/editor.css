@@ -118,28 +118,33 @@
   overflow: hidden;
 }
 
-/* Barras para redimensionar el sidebar y el chat arrastrando con el mouse.
-   El ancho real de cada columna lo pone JS (ver initResizers en editor.js),
-   guardado en localStorage para que quede como lo dejaste la próxima vez. */
-.vc-resizer {
-  cursor: col-resize;
-  background: transparent;
+/* Barritas para arrastrar y ajustar el ancho del sidebar y del panel de
+   chat a gusto (antes eran anchos fijos, no se podían mover). El ancho
+   elegido se guarda en localStorage y se restaura la próxima vez. */
+.vc-resize-handle {
   position: relative;
-  z-index: 5;
-}
-.vc-resizer::after {
-  content: '';
-  position: absolute;
-  top: 0; bottom: 0;
-  left: 2px;
-  width: 2px;
+  cursor: col-resize;
   background: var(--vc-border);
   transition: background 0.15s;
+  z-index: 5;
 }
-.vc-resizer:hover::after,
-.vc-resizer.vc-resizer-activo::after {
+.vc-resize-handle:hover,
+.vc-resize-handle.vc-resizing {
   background: var(--vc-accent);
 }
+.vc-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+}
+body.vc-resizing-activo {
+  cursor: col-resize;
+  user-select: none;
+}
+body.vc-resizing-activo iframe { pointer-events: none; }
 
 /* ============================================================
    Sidebar — angosto, con secciones tipo VSCode
@@ -740,6 +745,26 @@
   animation: vc-scan 1.5s ease-in-out infinite;
 }
 
+/* Barra de progreso REAL (no la animación indeterminada de arriba): se usa
+   cuando sabemos un porcentaje real (editando un archivo existente, del que
+   conocemos el tamaño previo). El ancho se setea desde JS con el número de
+   caracteres realmente recibidos del stream, no es una animación simulada. */
+.vc-creando-scan.real::after {
+  animation: none;
+  left: 0;
+  width: var(--progreso, 0%);
+  transition: width 0.15s linear;
+}
+
+.vc-creando-porcentaje {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vc-accent);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .vc-msg-creando-codigo.vc-creando-listo .vc-creando-scan::after {
   animation: none;
   left: 0;
@@ -917,20 +942,34 @@
   align-items: flex-end;
 }
 
-/* Grid 2x2 de botones: Terminal (arriba-izq) / Design-Canvas (arriba-der)
-   Imagen (abajo-izq) / Enviar (abajo-der). Así Terminal queda arriba de
-   Imagen, y Design/Canvas queda arriba de Enviar. */
-.vc-chat-btn-grid {
-  display: grid;
-  grid-template-columns: 32px 32px;
-  grid-template-rows: 32px 32px;
+/* Columna de dos botones apilados verticalmente: terminal arriba de imagen
+   (a la izquierda del textarea) y design arriba de enviar (a la derecha). */
+.vc-chat-btn-col {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   flex-shrink: 0;
 }
-.vc-chat-btn-grid #btnTerminal { grid-column: 1; grid-row: 1; }
-.vc-chat-btn-grid #btnDesign { grid-column: 2; grid-row: 1; }
-.vc-chat-btn-grid #btnImagenChat { grid-column: 1; grid-row: 2; }
-.vc-chat-btn-grid #btnEnviarChat { grid-column: 2; grid-row: 2; }
+
+/* Punto rojo sobre el botón de terminal: se prende mientras hay un comando
+   corriendo de verdad (no es decorativo), para que se note de un vistazo
+   sin tener que abrir el modal. Click en el botón abre la terminal y ahí
+   se ve la salida en vivo mientras corre. */
+.vc-terminal-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid var(--vc-bg);
+  animation: pulseDot 1.1s ease-in-out infinite;
+}
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.75; }
+}
 
 .vc-chat-input {
   flex: 1;
@@ -984,6 +1023,7 @@
 
 /* Botón de terminal — arriba del botón de imagen */
 .vc-chat-btn-terminal {
+  position: relative;
   width: 32px; height: 32px;
   padding: 0;
   border-radius: 50%;
@@ -995,51 +1035,11 @@
   color: var(--vc-text-secondary);
   border: 1px solid var(--vc-border);
   transition: all 0.15s;
-  position: relative;
 }
 .vc-chat-btn-terminal:hover {
   background: var(--vc-bg-tertiary);
   color: var(--vc-accent);
   border-color: var(--vc-accent);
-}
-
-/* Punto rojo: se prende SOLO mientras hay una ejecución real en curso
-   (comando de terminal, npm install, test) — no es decorativo, refleja
-   estado real de estado.ejecucionEnCurso. */
-.vc-terminal-dot {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #e0333f;
-  box-shadow: 0 0 0 rgba(224, 51, 63, 0.6);
-  animation: vcPulseRojo 1.2s infinite;
-}
-.vc-terminal-dot.oculto { display: none; }
-@keyframes vcPulseRojo {
-  0% { box-shadow: 0 0 0 0 rgba(224, 51, 63, 0.6); }
-  70% { box-shadow: 0 0 0 6px rgba(224, 51, 63, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(224, 51, 63, 0); }
-}
-
-/* Badge de porcentaje real junto a "Generando Code" / "Compactando" */
-.vc-indicador-pct {
-  font-variant-numeric: tabular-nums;
-  background: rgba(255, 255, 255, 0.2);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.vc-indicador-pct.oculto { display: none; }
-
-/* Acción que en verdad falló al verificarse contra la web/CDN real
-   (ej. npm_install o sound_download que no resolvieron) */
-.vc-msg-accion.vc-accion-fallida {
-  color: #e0333f;
-  border-left: 2px solid #e0333f;
-  padding-left: 6px;
 }
 
 /* Botón de Design — arriba del botón de imagen */
@@ -1249,11 +1249,11 @@
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr auto;
   }
+  .vc-resize-handle { display: none; }
   .vc-sidebar, .vc-chat {
     max-height: 30vh;
     border: none;
     border-bottom: 1px solid var(--vc-border);
   }
   .vc-chat { border-bottom: none; border-top: 1px solid var(--vc-border); }
-  .vc-resizer { display: none; }
 }

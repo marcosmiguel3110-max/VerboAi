@@ -59,44 +59,48 @@ function alternarSidebar() {
 btnToggleSidebar.addEventListener('click', alternarSidebar);
 elFondoSidebar.addEventListener('click', cerrarSidebarMovil);
 
-// Sidebar redimensionable arrastrando la barra divisoria (igual que en Verbo Code)
-(function initResizerSidebarNormal() {
-  const resizer = document.getElementById('resizerSidebar');
-  if (!resizer || !elSidebar) return;
+// Resize del sidebar arrastrando la barrita: el ancho elegido se guarda en
+// localStorage y se restaura la próxima vez que se abre la app. Solo aplica
+// en desktop (en mobile el sidebar es un panel superpuesto, no una columna).
+(function initResizeSidebarPrincipal() {
+  const handle = document.getElementById('resizeHandleSidebar');
+  if (!handle || !elSidebar) return;
 
-  const anchoGuardado = parseFloat(localStorage.getItem('verboAiAnchoSidebar') || '260');
-  if (!elSidebar.classList.contains('sidebar-colapsado')) {
+  const MIN = 200;
+  const MAX = 420;
+  const anchoGuardado = parseInt(localStorage.getItem('verbo_ancho_sidebar') || '', 10);
+  if (anchoGuardado && anchoGuardado >= MIN && anchoGuardado <= MAX) {
     elSidebar.style.width = anchoGuardado + 'px';
   }
 
-  let arrastrando = false;
-  let inicioX = 0;
-  let inicioAncho = 0;
-
-  resizer.addEventListener('mousedown', (e) => {
+  handle.addEventListener('mousedown', (evStart) => {
     if (esVistaMovil() || elSidebar.classList.contains('sidebar-colapsado')) return;
-    arrastrando = true;
-    inicioX = e.clientX;
-    inicioAncho = elSidebar.getBoundingClientRect().width;
-    resizer.classList.add('resizer-activo');
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'col-resize';
+    evStart.preventDefault();
+    handle.classList.add('resizing');
+    document.body.classList.add('resizing-sidebar-activo');
+    elSidebar.classList.add('sin-transicion');
+    const inicioX = evStart.clientX;
+    const inicioAncho = elSidebar.getBoundingClientRect().width;
+
+    const onMove = (evMove) => {
+      const nuevoAncho = Math.max(MIN, Math.min(MAX, inicioAncho + (evMove.clientX - inicioX)));
+      elSidebar.style.width = nuevoAncho + 'px';
+    };
+    const onUp = () => {
+      handle.classList.remove('resizing');
+      document.body.classList.remove('resizing-sidebar-activo');
+      elSidebar.classList.remove('sin-transicion');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      localStorage.setItem('verbo_ancho_sidebar', Math.round(elSidebar.getBoundingClientRect().width));
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   });
 
-  window.addEventListener('mousemove', (e) => {
-    if (!arrastrando) return;
-    const delta = e.clientX - inicioX;
-    const nuevoAncho = Math.min(420, Math.max(180, inicioAncho + delta));
-    elSidebar.style.width = nuevoAncho + 'px';
-  });
-
-  window.addEventListener('mouseup', () => {
-    if (!arrastrando) return;
-    arrastrando = false;
-    resizer.classList.remove('resizer-activo');
-    document.body.style.userSelect = '';
-    document.body.style.cursor = '';
-    localStorage.setItem('verboAiAnchoSidebar', parseFloat(elSidebar.style.width));
+  handle.addEventListener('dblclick', () => {
+    elSidebar.style.width = '260px';
+    localStorage.setItem('verbo_ancho_sidebar', 260);
   });
 })();
 

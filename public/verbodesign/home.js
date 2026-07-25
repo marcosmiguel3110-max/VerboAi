@@ -71,6 +71,27 @@
     }
   }
 
+  // Antes esto usaba `new Function(...)`, que el navegador trata igual que
+  // eval() — y el Content-Security-Policy del sitio, a propósito, NO tiene
+  // 'unsafe-eval' habilitado (habilitarlo bajaría la seguridad de todo el
+  // sitio, no solo de esto). Por eso tiraba el error de CSP. La forma
+  // correcta de correr código generado sin eval es inyectar un <script>
+  // real en el DOM: sí está permitido (scriptSrcElem tiene 'unsafe-inline')
+  // y el navegador lo ejecuta como un script normal, no como eval.
+  function ejecutarCodigoSonido(codigo) {
+    const id = '__verboSonido_' + Math.random().toString(36).slice(2);
+    const script = document.createElement('script');
+    script.textContent = `window.${id} = function(){\n${codigo}\nreturn (typeof reproducirSonido === 'function') ? reproducirSonido() : undefined;\n};`;
+    document.head.appendChild(script);
+    try {
+      if (typeof window[id] !== 'function') throw new Error('El código generado no definió reproducirSonido().');
+      window[id]();
+    } finally {
+      document.head.removeChild(script);
+      delete window[id];
+    }
+  }
+
   function crearCardLoading() {
     const card = document.createElement('div');
     card.className = 'vd-card vd-loading';
@@ -235,7 +256,7 @@
       card.style.setProperty('--cat-color', color);
       card.innerHTML = `
         <div class="vd-plantilla-preview" data-id="${p.id}" title="Click para ver completa">
-          <iframe class="vd-plantilla-iframe" srcdoc="${escaparParaAtributo(p.html)}" sandbox="allow-scripts" tabindex="-1" loading="lazy"></iframe>
+          <iframe class="vd-plantilla-iframe" srcdoc="${escaparParaAtributo(p.html)}" sandbox="allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-pointer-lock" tabindex="-1" loading="lazy"></iframe>
           <div class="vd-plantilla-preview-overlay"><span>Ver completa</span></div>
         </div>
         <div class="vd-plantilla-body">
@@ -343,9 +364,7 @@
       `;
       item.querySelector('.vd-btn-play').addEventListener('click', () => {
         try {
-          // eslint-disable-next-line no-new-func
-          const fn = new Function(data.codigo + '\nreturn reproducirSonido;');
-          fn()();
+          ejecutarCodigoSonido(data.codigo);
         } catch (e) {
           mostrarToast('Error ejecutando el sonido: ' + e.message, 'error');
         }

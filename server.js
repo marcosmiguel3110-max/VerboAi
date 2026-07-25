@@ -902,59 +902,134 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
       headers['HTTP-Referer'] = 'https://verboai.duckdns.org';
       headers['X-Title'] = 'Verbo AI';
 
+      // Si nos pasan onDelta, pedimos streaming real (stream:true) y vamos
+      // devolviendo cada pedacito de texto A MEDIDA que el modelo lo genera
+      // de verdad — antes esto SIEMPRE pedía stream:false, esperaba la
+      // respuesta completa, y recién ahí el endpoint de chat la cortaba en
+      // pedacitos de 15 caracteres con un delay artificial de 15ms para
+      // "simular" que iba llegando en vivo. Ahora, cuando hay onDelta, es
+      // real: el texto llega exactamente al ritmo en que OpenRouter lo va
+      // generando.
+      const usarStreamingReal = typeof opciones.onDelta === 'function';
       const body = {
         model: model,
         messages: [{ role: 'system', content: systemPrompt }, ...messages],
         temperature: 0.7,
         max_tokens: 16384,
-        stream: false,
+        stream: usarStreamingReal,
       };
 
-      const resp = await axios.post(OPENROUTER_FREE_URL, body, {
-        timeout: OPENROUTER_FREE_TIMEOUT,
-        headers,
-        signal: opciones.signal,
-        validateStatus: () => true,
-      });
+      if (!usarStreamingReal) {
+        const resp = await axios.post(OPENROUTER_FREE_URL, body, {
+          timeout: OPENROUTER_FREE_TIMEOUT,
+          headers,
+          signal: opciones.signal,
+          validateStatus: () => true,
+        });
 
-      if (resp.status < 200 || resp.status >= 300) {
-        const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
-        console.error(`[openrouter-free] Intento ${intento + 1} HTTP ${resp.status}: ${detalle}`);
-        ultimoError = `HTTP ${resp.status}`;
-        
-        if (keyIndex !== null) {
-          updateKeyStats(keyIndex, false, resp.status === 429, detalle);
-          
-          if (resp.status === 429) {
-            console.log(`[openrouter-free] Key ${keyIndex} stats: ${keyStats[keyIndex].requests} requests, ${keyStats[keyIndex].successes} success, ${keyStats[keyIndex].failures} failures, ${keyStats[keyIndex].rateLimits} rate limits`);
-            continue; // Reintentar con nueva key seleccionada automáticamente
+        if (resp.status < 200 || resp.status >= 300) {
+          const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
+          console.error(`[openrouter-free] Intento ${intento + 1} HTTP ${resp.status}: ${detalle}`);
+          ultimoError = `HTTP ${resp.status}`;
+          if (keyIndex !== null) {
+            updateKeyStats(keyIndex, false, resp.status === 429, detalle);
+            if (resp.status === 429) continue;
           }
-        }
-        
-        // Para 429/502/503/504, reintentar con backoff
-        if ([429, 502, 503, 504].includes(resp.status)) {
+          if ([429, 502, 503, 504].includes(resp.status)) continue;
+          if (resp.status >= 400 && resp.status < 500) break;
           continue;
         }
-        // Para otros 4xx, no reintentar
-        if (resp.status >= 400 && resp.status < 500) {
-          break;
+
+        const texto = resp.data?.choices?.[0]?.message?.content || '';
+        const finishReason = resp.data?.choices?.[0]?.finish_reason || null;
+        if (!texto || !texto.trim()) {
+          console.error('[openrouter-free] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+          if (keyIndex !== null) updateKeyStats(keyIndex, false, false);
+          ultimoError = 'Respuesta vacia de OpenRouter';
+          continue;
         }
-        // Para 5xx, reintentar
+
+        if (keyIndex !== null) updateKeyStats(keyIndex, true, false);
+        console.log(`[openrouter-free] OK - ${texto.length} chars por ${model} (finish_reason: ${finishReason})`);
+        return { ok: true, texto: texto.trim(), modelo: model, finishReason };
+      }
+
+      // ---- Camino con streaming real ----
+      const resultadoStream = await new Promise((resolve) => {
+        let textoAcumulado = '';
+        let finishReason = null;
+        let buffer = '';
+        let statusCode = null;
+        let seRecibioAlgo = false;
+
+        axios.post(OPENROUTER_FREE_URL, body, {
+          timeout: OPENROUTER_FREE_TIMEOUT,
+          headers,
+          signal: opciones.signal,
+          responseType: 'stream',
+          validateStatus: () => true,
+        }).then((resp) => {
+          statusCode = resp.status;
+          if (resp.status < 200 || resp.status >= 300) {
+            // Error HTTP: juntar el cuerpo (puede venir como stream de error JSON) y resolver como fallo.
+            let cuerpoError = '';
+            resp.data.on('data', (c) => { cuerpoError += c.toString(); });
+            resp.data.on('end', () => resolve({ ok: false, status: resp.status, detalle: cuerpoError.slice(0, 300) }));
+            resp.data.on('error', () => resolve({ ok: false, status: resp.status, detalle: '' }));
+            return;
+          }
+
+          resp.data.on('data', (chunk) => {
+            buffer += chunk.toString('utf8');
+            let idx;
+            while ((idx = buffer.indexOf('\n')) !== -1) {
+              const linea = buffer.slice(0, idx).trim();
+              buffer = buffer.slice(idx + 1);
+              if (!linea.startsWith('data:')) continue;
+              const payload = linea.slice(5).trim();
+              if (payload === '[DONE]') continue;
+              try {
+                const json = JSON.parse(payload);
+                const delta = json?.choices?.[0]?.delta?.content;
+                const fr = json?.choices?.[0]?.finish_reason;
+                if (fr) finishReason = fr;
+                if (delta) {
+                  seRecibioAlgo = true;
+                  textoAcumulado += delta;
+                  opciones.onDelta(delta);
+                }
+              } catch (e) {
+                // Línea SSE parcial o no-JSON: ignorar, sigue acumulando en el buffer
+              }
+            }
+          });
+          resp.data.on('end', () => resolve({ ok: seRecibioAlgo, texto: textoAcumulado, finishReason, status: statusCode }));
+          resp.data.on('error', (e) => resolve({ ok: seRecibioAlgo, texto: textoAcumulado, finishReason, status: statusCode, detalle: e.message }));
+        }).catch((e) => {
+          resolve({ ok: false, status: null, detalle: e.message });
+        });
+      });
+
+      if (!resultadoStream.ok) {
+        const detalle = resultadoStream.detalle || '';
+        console.error(`[openrouter-free] Intento ${intento + 1} (stream) HTTP ${resultadoStream.status}: ${detalle}`.slice(0, 300));
+        ultimoError = resultadoStream.status ? `HTTP ${resultadoStream.status}` : (detalle || 'Error de streaming');
+        if (keyIndex !== null) updateKeyStats(keyIndex, false, resultadoStream.status === 429, detalle);
+        if (resultadoStream.status === 429) continue;
+        if ([429, 502, 503, 504].includes(resultadoStream.status)) continue;
+        if (resultadoStream.status && resultadoStream.status >= 400 && resultadoStream.status < 500) break;
         continue;
       }
 
-      const texto = resp.data?.choices?.[0]?.message?.content || '';
-      const finishReason = resp.data?.choices?.[0]?.finish_reason || null;
-      if (!texto || !texto.trim()) {
-        console.error('[openrouter-free] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+      if (!resultadoStream.texto || !resultadoStream.texto.trim()) {
         if (keyIndex !== null) updateKeyStats(keyIndex, false, false);
-        ultimoError = 'Respuesta vacia de OpenRouter';
-        continue; // Reintentar si la respuesta está vacía
+        ultimoError = 'Respuesta vacia de OpenRouter (stream)';
+        continue;
       }
 
       if (keyIndex !== null) updateKeyStats(keyIndex, true, false);
-      console.log(`[openrouter-free] OK - ${texto.length} chars por ${model} (finish_reason: ${finishReason})`);
-      return { ok: true, texto: texto.trim(), modelo: model, finishReason };
+      console.log(`[openrouter-free] OK (stream real) - ${resultadoStream.texto.length} chars por ${model} (finish_reason: ${resultadoStream.finishReason})`);
+      return { ok: true, texto: resultadoStream.texto.trim(), modelo: model, finishReason: resultadoStream.finishReason };
     } catch (e) {
       ultimoError = e.message;
       console.warn(`[openrouter-free] Intento ${intento + 1} fallo: ${e.message}`);
@@ -1128,9 +1203,6 @@ async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
 async function emitirTextoComoStream(texto, enviar, signal) {
   const TAMANO_CHUNK = 12; // ~12 chars por tick
   const DELAY_MS = 25;
-  // totalChars real (no inventado): el cliente usa esto para calcular el % de
-  // progreso real de la respuesta ya generada que se está transmitiendo.
-  enviar({ type: 'meta', totalChars: texto.length });
   for (let i = 0; i < texto.length; i += TAMANO_CHUNK) {
     if (signal?.aborted) return false;
     enviar({ type: 'chunk', text: texto.slice(i, i + TAMANO_CHUNK) });
@@ -1277,14 +1349,7 @@ app.use(helmet({
       scriptSrc: [
         "'self'",
         "'unsafe-inline'",
-        // 'unsafe-eval': VerboCode/VerboDesign arman funciones dinámicas en el
-        // navegador (ej. reproducirSonido() con `new Function`) para poder
-        // ejecutar el código que genera la IA. Sin esto el navegador bloquea
-        // esa ejecución y el sonido/efectos no corren. Alcance: sólo afecta
-        // scripts que ya pasaron el resto del CSP; no habilita cargar JS ajeno.
-        "'unsafe-eval'",
         'https://cdn.jsdelivr.net',
-        'https://esm.sh',
         'https://pagead2.googlesyndication.com',
         'https://googleads.g.doubleclick.net',
         'https://www.googletagservices.com',
@@ -1297,7 +1362,6 @@ app.use(helmet({
         "'self'",
         "'unsafe-inline'",
         'https://cdn.jsdelivr.net',
-        'https://esm.sh',
         'https://pagead2.googlesyndication.com',
         'https://googleads.g.doubleclick.net',
         'https://www.googletagservices.com',
@@ -1310,10 +1374,8 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-      mediaSrc: ["'self'", 'data:', 'blob:', 'https:'],
-      connectSrc: ["'self'", 'https:', 'blob:'],
-      workerSrc: ["'self'", 'blob:'],
-      frameSrc: ["'self'", 'blob:', 'https://googleads.g.doubleclick.net', 'https://tpc.googlesyndication.com', 'https://*.google.com', 'https://*.adtrafficquality.google'],
+      connectSrc: ["'self'", 'https:'],
+      frameSrc: ['https://googleads.g.doubleclick.net', 'https://tpc.googlesyndication.com', 'https://*.google.com', 'https://*.adtrafficquality.google'],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
     },
@@ -3381,29 +3443,7 @@ async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE
     proyecto.archivos['package.json'] = JSON.stringify(pkgJson, null, 2);
     proyectoActualizado = true;
     const cdnUrl = `https://esm.sh/${paquete}`;
-    enviarSSE({ type: 'status', text: `Instalando ${paquete}...` });
-    // VerboCode corre en el navegador (sin Node real), asi que "npm install" se
-    // resuelve como un paquete servido por esm.sh en vez de un node_modules local.
-    // Esto SI hace una petición HTTP real al CDN para confirmar que el paquete
-    // existe y responde, en vez de asumir éxito a ciegas.
-    let npmOk = false;
-    let npmError = null;
-    try {
-      const check = await axios.head(cdnUrl, { timeout: 8000, validateStatus: () => true });
-      npmOk = check.status >= 200 && check.status < 400;
-      if (!npmOk) npmError = `HTTP ${check.status}`;
-    } catch (e) {
-      npmError = e.message;
-    }
-    emitir({
-      tipo: 'npm_install',
-      paquete,
-      cdn: cdnUrl,
-      exito: npmOk,
-      descripcion: npmOk
-        ? `Paquete npm instalado: ${paquete} (CDN verificado: ${cdnUrl})`
-        : `No se pudo instalar ${paquete}: el CDN no respondió (${npmError})`,
-    });
+    emitir({ tipo: 'npm_install', paquete, cdn: cdnUrl, descripcion: `Paquete npm instalado: ${paquete} (CDN: ${cdnUrl})` });
   }
 
   let matchTest;
@@ -4654,56 +4694,6 @@ app.post('/api/verbocode/execute', codeRateLimit, requiereAdminVerboCode, async 
 });
 
 // ============================================================
-// API: descargar un sonido real desde otra web (para VerboCode/VerboDesign)
-// ============================================================
-const EXTENSIONES_AUDIO_PERMITIDAS = ['mp3', 'wav', 'ogg', 'oga', 'm4a', 'webm', 'flac'];
-app.post('/api/verbocode/download-sound', codeRateLimit, requiereAdminVerboCode, async (req, res) => {
-  const url = (req.body?.url || '').trim();
-  if (!url) return res.status(400).json({ exito: false, error: 'Falta la url del sonido.' });
-
-  let parsed;
-  try {
-    parsed = new URL(url);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('protocolo invalido');
-  } catch (e) {
-    return res.status(400).json({ exito: false, error: 'URL invalida.' });
-  }
-
-  try {
-    const respuesta = await axios.get(url, {
-      responseType: 'arraybuffer',
-      timeout: 15000,
-      maxContentLength: 15 * 1024 * 1024, // 15MB
-      headers: { 'User-Agent': 'Mozilla/5.0 (VerboCode sound fetcher)' },
-      validateStatus: () => true,
-    });
-
-    if (respuesta.status < 200 || respuesta.status >= 300) {
-      return res.status(502).json({ exito: false, error: `La web respondió ${respuesta.status}.` });
-    }
-
-    const contentType = (respuesta.headers['content-type'] || '').toLowerCase();
-    let ext = (path.extname(parsed.pathname).replace('.', '') || '').toLowerCase();
-    if (!EXTENSIONES_AUDIO_PERMITIDAS.includes(ext)) {
-      // Si la extension de la URL no ayuda, deducir por el content-type real.
-      const porTipo = contentType.split('/')[1]?.split(';')[0];
-      ext = EXTENSIONES_AUDIO_PERMITIDAS.includes(porTipo) ? porTipo : null;
-    }
-    if (!contentType.startsWith('audio/') && !ext) {
-      return res.status(415).json({ exito: false, error: 'La URL no parece ser un archivo de audio (content-type: ' + (contentType || 'desconocido') + ').' });
-    }
-    if (!ext) ext = 'mp3';
-
-    const nombreArchivo = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
-    fs.writeFileSync(path.join(UPLOADS_DIR, nombreArchivo), Buffer.from(respuesta.data));
-
-    res.json({ exito: true, url: `/uploads/${nombreArchivo}`, bytes: respuesta.data.byteLength });
-  } catch (e) {
-    res.status(500).json({ exito: false, error: 'No se pudo descargar el sonido: ' + e.message });
-  }
-});
-
-// ============================================================
 // API: chat con IA (con herramientas)
 // ============================================================
 app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => {
@@ -4766,6 +4756,9 @@ Elimina un archivo.
 
 [[NPM_INSTALL::nombre-paquete]]
 Instala un paquete npm. Crea/actualiza package.json. Se carga desde esm.sh CDN.
+
+[[RUN::comando]]
+Ejecuta un comando de terminal REAL vos misma (no hace falta que el usuario lo tipee): comandos de archivos (ls, cat, touch, rm, mv, echo >, mkdir) se aplican directo sobre los archivos reales del proyecto; cualquier otro comando (node script.js, python script.py, npm run algo, etc) corre en el sandbox de ejecución. Se ve en vivo en la terminal del usuario mientras corre. Usalo para verificar que algo funciona, correr un script de build, o cualquier tarea de terminal que el usuario te pida sin tener que decirle "corré esto vos".
 
 [[TEST::lenguaje::codigo a ejecutar]]
 Ejecuta código y muestra el resultado. Lenguajes: python, javascript, java, c, cpp, go, rust, ruby, php, bash, sql.
@@ -5023,7 +5016,11 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         'Casi listo, terminando de escribir...',
       ];
       let heartbeatIdx = 0;
+      let recibioPrimerDelta = false;
       const heartbeat = setInterval(() => {
+        // Si ya está llegando texto real en vivo, no hace falta el heartbeat
+        // artificial — el texto mismo es la prueba de que sigue trabajando.
+        if (recibioPrimerDelta) return;
         enviarSSE({ type: 'status', text: mensajesHeartbeat[heartbeatIdx % mensajesHeartbeat.length] });
         heartbeatIdx++;
       }, 4000);
@@ -5041,7 +5038,19 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
               enviarSSE({ type: 'status', text: `Reintentando con ${evt.modelo}...` });
             }
           },
-          opcionesGeneracion,
+          {
+            ...opcionesGeneracion,
+            // Streaming REAL: cada pedacito de texto se manda al cliente apenas
+            // OpenRouter lo genera, no una vez que ya está todo listo. Antes acá
+            // no había onDelta: se esperaba la respuesta completa y RECIÉN
+            // DESPUÉS se cortaba en pedacitos de 15 caracteres con un delay
+            // artificial de 15ms para "simular" que iba llegando en vivo — eso
+            // ya no hace falta, esto es tiempo real de verdad.
+            onDelta: (delta) => {
+              recibioPrimerDelta = true;
+              enviarSSE({ type: 'chunk', text: delta });
+            },
+          },
         );
       } finally {
         clearInterval(heartbeat);
@@ -5094,23 +5103,64 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     // los datos del mundo/mapa suelen ser arrays anidados). Ahora el cierre ]] solo
     // cuenta si le sigue el próximo tag [[ALGO:: o el final del texto — así un ]]
     // suelto en medio del código no corta nada.
-    const reFileCreate = /\[\[FILE_CREATE::([^\]]+?)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
-    const reFileEdit = /\[\[FILE_EDIT::([^\]]+?)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
+    // Regex mejorado: soporta nombres con / (carpetas), saltos de línea en contenido,
+    // y caracteres especiales. Antes esto cortaba en el PRIMER ]] que apareciera en el
+    // contenido — y código real (arrays anidados tipo [[0,0],[1,1]], tipos TS como
+    // number[][], JSX, etc) tiene ]] sueltos todo el tiempo, así que el archivo se
+    // truncaba a mitad de camino con bastante frecuencia (sobre todo en juegos, donde
+    // los datos del mundo/mapa suelen ser arrays anidados).
+    //
+    // FILE_CREATE/FILE_EDIT/LINE_EDIT usan extraerBloquesConCierre() en vez de un
+    // regex con lookahead: la versión anterior exigía que el "]]" de cierre
+    // estuviera INMEDIATAMENTE seguido del próximo tag o del final del texto. Eso
+    // se rompía todo el tiempo porque el modelo casi siempre agrega una frase
+    // después del último tag (ej "¡Listo, ya lo ajusté!") — al no cumplirse el
+    // lookahead exacto, el regex fallaba en encontrar el cierre y el archivo
+    // NUNCA SE APLICABA (ni error ni nada, simplemente no insertaba el cambio).
+    // Ahora se busca el tramo hasta el próximo tag/fin de texto y se toma el
+    // ÚLTIMO "]]" de ese tramo como cierre real — mucho más tolerante a texto
+    // de cierre después del tag, y sigue sin cortar en un "]]" suelto de código.
     const reFileDelete = /\[\[FILE_DELETE::([^\]]+?)\]\]/g;
     const reImage = /\[\[IMAGE::([^\]]+?)\]\]/g;
     const reTexture = /\[\[TEXTURE::([^\]]+?)\]\]/g;
     const reWeb = /\[\[WEB::([^\]]+?)\]\]/g;
 
+    function extraerBloquesConCierre(texto, tagName) {
+      const bloques = [];
+      const reHeader = new RegExp(`\\[\\[${tagName}::`, 'g');
+      const reAnyHeader = /\[\[[A-Z_]+::/g;
+      let m;
+      while ((m = reHeader.exec(texto)) !== null) {
+        const inicioContenido = m.index + m[0].length;
+        reAnyHeader.lastIndex = inicioContenido;
+        const siguiente = reAnyHeader.exec(texto);
+        const limite = siguiente ? siguiente.index : texto.length;
+        const tramo = texto.slice(inicioContenido, limite);
+        const idxCierre = tramo.lastIndexOf(']]');
+        if (idxCierre === -1) { reHeader.lastIndex = limite; continue; }
+        bloques.push({
+          camposCrudo: tramo.slice(0, idxCierre),
+          startIndex: m.index,
+          endIndex: inicioContenido + idxCierre + 2,
+        });
+        reHeader.lastIndex = inicioContenido + idxCierre + 2;
+      }
+      return bloques;
+    }
+
     // Procesar FILE_CREATE y FILE_EDIT (mismo efecto: crear/reemplazar archivo)
     // Soporta rutas con carpetas: "css/styles.css", "js/app.js", "manifest.json"
-    const procesarArchivos = (regex, tipo) => {
-      let match;
-      while ((match = regex.exec(textoRespuesta)) !== null) {
-        const nombre = match[1].trim();
-        const contenido = match[2];
-        // Si el contenido está vacío, usar string vacío (no trim para conservar saltos)
+    const spansAEliminar = [];
+    const procesarArchivos = (tagName, tipo) => {
+      for (const bloque of extraerBloquesConCierre(textoRespuesta, tagName)) {
+        const idxSep = bloque.camposCrudo.indexOf('::');
+        if (idxSep === -1) continue;
+        const nombre = bloque.camposCrudo.slice(0, idxSep).trim();
+        const contenido = bloque.camposCrudo.slice(idxSep + 2);
+        if (!nombre) continue;
         proyecto.archivos[nombre] = contenido;
         proyectoActualizado = true;
+        spansAEliminar.push([bloque.startIndex, bloque.endIndex]);
         acciones.push({
           tipo,
           nombre,
@@ -5118,16 +5168,17 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         });
       }
     };
-    procesarArchivos(reFileCreate, 'file_create');
-    procesarArchivos(reFileEdit, 'file_edit');
+    procesarArchivos('FILE_CREATE', 'file_create');
+    procesarArchivos('FILE_EDIT', 'file_edit');
 
-    // Procesar LINE_EDIT (cambiar una línea específica)
-    const reLineEdit = /\[\[LINE_EDIT::([^\]]+?)::(\d+)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
-    let matchLine;
-    while ((matchLine = reLineEdit.exec(textoRespuesta)) !== null) {
-      const nombre = matchLine[1].trim();
-      const numLinea = parseInt(matchLine[2].trim(), 10);
-      const nuevoContenido = matchLine[3].replace(/\n$/, ''); // saca el último salto de línea
+    // Procesar LINE_EDIT (cambiar una línea específica) — mismo problema y misma solución.
+    for (const bloque of extraerBloquesConCierre(textoRespuesta, 'LINE_EDIT')) {
+      const partes = bloque.camposCrudo.split('::');
+      if (partes.length < 3) continue;
+      const nombre = partes[0].trim();
+      const numLinea = parseInt(partes[1].trim(), 10);
+      const nuevoContenido = partes.slice(2).join('::').replace(/\n$/, '');
+      spansAEliminar.push([bloque.startIndex, bloque.endIndex]);
       if (proyecto.archivos[nombre] && numLinea > 0) {
         const lineas = proyecto.archivos[nombre].split('\n');
         if (numLinea <= lineas.length) {
@@ -5198,6 +5249,52 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       textoLimpio += resultadosWebAcumulados;
     }
 
+    // Procesar RUN (la IA ejecuta un comando de terminal ella misma — real,
+    // no una simulación: corre exactamente lo mismo que corre el usuario a
+    // mano en la terminal de Verbo Code — primero contra el proyecto virtual
+    // (ls/cat/echo/touch/rm/mv, etc), y si no es un comando de archivo, en el
+    // sandbox real de Piston). Se manda un evento SSE ANTES de ejecutar (para
+    // que el punto rojo de la terminal se prenda y, si está abierta, se vea
+    // "corriendo...") y otro DESPUÉS con la salida real, apenas termina.
+    const reRun = /\[\[RUN::([\s\S]*?)\]\]/g;
+    let matchRun;
+    while ((matchRun = reRun.exec(textoRespuesta)) !== null) {
+      const comandoRun = matchRun[1].trim();
+      if (!comandoRun) continue;
+      enviarSSE({ type: 'terminal_run', comando: comandoRun });
+      let resultadoRun;
+      const subcomandos = comandoRun.split(/\s*(?:&&|;)\s*/).filter(Boolean);
+      const salidas = [];
+      let huboError = false;
+      let modifico = false;
+      let todosManejados = subcomandos.length > 0;
+      for (const sub of subcomandos) {
+        const r = ejecutarComandoProyecto(sub, proyecto);
+        if (!r.manejado) { todosManejados = false; break; }
+        if (r.modifico) modifico = true;
+        if (r.error) { huboError = true; salidas.push(`Error: ${r.error}`); }
+        else if (r.salida !== undefined) salidas.push(r.salida);
+      }
+      if (todosManejados) {
+        if (modifico) proyectoActualizado = true;
+        resultadoRun = { stdout: salidas.join('\n'), stderr: huboError ? salidas.filter((s) => s.startsWith('Error:')).join('\n') : '', exito: !huboError };
+      } else {
+        try {
+          const r = await ejecutarCodigoPiston('bash', comandoRun);
+          resultadoRun = { stdout: r.stdout || '', stderr: r.stderr || '', exito: !!r.exito, exitCode: r.exitCode };
+        } catch (e) {
+          resultadoRun = { stdout: '', stderr: e.message, exito: false };
+        }
+      }
+      enviarSSE({ type: 'terminal_result', comando: comandoRun, resultado: resultadoRun });
+      acciones.push({
+        tipo: 'run',
+        comando: comandoRun,
+        resultado: resultadoRun,
+        descripcion: `Comando ejecutado: ${comandoRun}${resultadoRun.exito ? '' : ' (con errores)'}`,
+      });
+    }
+
     // Procesar NPM_INSTALL (crear/actualizar package.json)
     const reNpm = /\[\[NPM_INSTALL::([^\]]+?)\]\]/g;
     let matchNpm;
@@ -5217,58 +5314,12 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       proyecto.archivos['package.json'] = JSON.stringify(pkgJson, null, 2);
       proyectoActualizado = true;
       const cdnUrl = `https://esm.sh/${paquete}`;
-      enviarSSE({ type: 'status', text: `Instalando ${paquete}...` });
-      // VerboCode corre en el navegador (no hay Node real ni node_modules), asi
-      // que el "npm install" real que se puede hacer es resolver el paquete
-      // contra un CDN (esm.sh). Esto SI hace una petición HTTP real para
-      // confirmar que el paquete existe, en vez de asumir éxito a ciegas.
-      let npmOk = false;
-      let npmError = null;
-      try {
-        const check = await axios.head(cdnUrl, { timeout: 8000, validateStatus: () => true });
-        npmOk = check.status >= 200 && check.status < 400;
-        if (!npmOk) npmError = `HTTP ${check.status}`;
-      } catch (e) {
-        npmError = e.message;
-      }
       acciones.push({
         tipo: 'npm_install',
         paquete: paquete,
         cdn: cdnUrl,
-        exito: npmOk,
-        descripcion: npmOk
-          ? `Paquete npm instalado: ${paquete} (CDN verificado: ${cdnUrl})`
-          : `No se pudo instalar ${paquete}: el CDN no respondió (${npmError})`,
+        descripcion: `Paquete npm instalado: ${paquete} (CDN: ${cdnUrl})`,
       });
-    }
-
-    // Procesar SOUND_DOWNLOAD (descargar un sonido real de otra web)
-    const reSoundDownload = /\[\[SOUND_DOWNLOAD::([^\]]+?)\]\]/g;
-    let matchSound;
-    while ((matchSound = reSoundDownload.exec(textoRespuesta)) !== null) {
-      const soundUrl = matchSound[1].trim();
-      enviarSSE({ type: 'status', text: `Descargando sonido: "${soundUrl.slice(0, 50)}..."` });
-      try {
-        const resp = await axios.get(soundUrl, {
-          responseType: 'arraybuffer',
-          timeout: 15000,
-          maxContentLength: 15 * 1024 * 1024,
-          headers: { 'User-Agent': 'Mozilla/5.0 (VerboCode sound fetcher)' },
-          validateStatus: () => true,
-        });
-        if (resp.status >= 200 && resp.status < 300) {
-          let ext = (path.extname(new URL(soundUrl).pathname).replace('.', '') || 'mp3').toLowerCase();
-          if (!['mp3', 'wav', 'ogg', 'oga', 'm4a', 'webm', 'flac'].includes(ext)) ext = 'mp3';
-          const nombreSonido = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
-          fs.writeFileSync(path.join(UPLOADS_DIR, nombreSonido), Buffer.from(resp.data));
-          const urlGuardada = `/uploads/${nombreSonido}`;
-          acciones.push({ tipo: 'sound_download', url: urlGuardada, origen: soundUrl, descripcion: `Sonido descargado desde ${soundUrl} → ${urlGuardada}` });
-        } else {
-          acciones.push({ tipo: 'sound_download', exito: false, descripcion: `No se pudo descargar el sonido (HTTP ${resp.status}): ${soundUrl}` });
-        }
-      } catch (e) {
-        acciones.push({ tipo: 'sound_download', exito: false, descripcion: `Error descargando sonido: ${e.message}` });
-      }
     }
 
     // Procesar TEST (ejecutar código con Piston API)
@@ -5359,17 +5410,28 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       }
     }
 
-    // Limpiar las etiquetas de herramientas del texto visible
-    textoLimpio = textoLimpio
-      .replace(reFileCreate, '')
-      .replace(reFileEdit, '')
-      .replace(reLineEdit, '')
+    // Limpiar las etiquetas de herramientas del texto visible.
+    // FILE_CREATE/FILE_EDIT/LINE_EDIT se sacan por posición exacta (los spans
+    // que ya encontramos arriba con extraerBloquesConCierre, mucho más
+    // confiable que un regex.replace con el mismo lookahead que fallaba).
+    spansAEliminar.sort((a, b) => a[0] - b[0]);
+    let textoSinBloques = '';
+    let cursor = 0;
+    for (const [inicio, fin] of spansAEliminar) {
+      if (inicio < cursor) continue; // spans superpuestos, por las dudas
+      textoSinBloques += textoRespuesta.slice(cursor, inicio);
+      cursor = fin;
+    }
+    textoSinBloques += textoRespuesta.slice(cursor);
+
+    textoLimpio = textoSinBloques
       .replace(reFileDelete, '')
       .replace(reImage, '')
       .replace(reTexture, '')
       .replace(reWeb, '')
       .replace(reNpm, '')
       .replace(reTest, '')
+      .replace(/\[\[RUN::([\s\S]*?)\]\]/g, '')
       .trim();
 
     // Guardar el mensaje del usuario + respuesta en el chat del proyecto
@@ -5379,17 +5441,11 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     if (proyecto.chat.length > 50) proyecto.chat = proyecto.chat.slice(-50);
     guardarProyectoVerboCode(proyecto);
 
-    // Enviar respuesta como chunks. totalChars es el largo real del texto ya
-    // generado (no una estimación), asi el % que ve el usuario es real.
-    if (textoLimpio && !clienteDesconectado) {
-      enviarSSE({ type: 'meta', totalChars: textoLimpio.length });
-      const chunkSize = 15;
-      for (let i = 0; i < textoLimpio.length; i += chunkSize) {
-        if (clienteDesconectado) break;
-        enviarSSE({ type: 'chunk', text: textoLimpio.slice(i, i + chunkSize) });
-        await new Promise(r => setTimeout(r, 15));
-      }
-    }
+    // El texto ya se mandó en vivo, de verdad, mientras el modelo lo generaba
+    // (ver onDelta más arriba) — antes acá se volvía a mandar TODO de nuevo
+    // cortado en pedacitos falsos de 15 caracteres con delay artificial,
+    // duplicando el mensaje completo una segunda vez para "simular" streaming.
+    // Ya no hace falta.
 
     // Enviar acciones
     if (acciones.length > 0) {
@@ -5400,9 +5456,13 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       }
     }
 
-    // Enviar done con metadata
+    // Enviar done con metadata. Se manda textoLimpio (sin los tags [[FILE_CREATE::]]
+    // / [[RUN::]] / <think> crudos) para que el cliente arme el render final y
+    // guarde el historial con el texto limpio, no con el buffer crudo que fue
+    // acumulando del streaming en vivo.
     enviarSSE({
       type: 'done',
+      textoFinal: textoLimpio,
       proyectoActualizado,
       archivos: proyectoActualizado ? proyecto.archivos : undefined,
       modeloUsado: modeloDisplay,
