@@ -51,7 +51,7 @@
   async function cargarModelos() {
     try {
       const r = await fetch('/api/verbodesign/models');
-      if (!r.ok) throw new Error('No se pudieron cargar los modelos.');
+      if (!r.ok) throw new Error('No se pudieron cargar las opciones.');
       const data = await r.json();
       estado.modelos = data.modelos || [];
 
@@ -66,17 +66,8 @@
       if (estado.modelos.length) estado.modeloSeleccionado = estado.modelos[0].nombre;
       select.value = estado.modeloSeleccionado;
       select.addEventListener('change', () => { estado.modeloSeleccionado = select.value; });
-
-      const info = $('vdModelosInfo');
-      info.innerHTML = '';
-      estado.modelos.forEach((m) => {
-        const card = document.createElement('div');
-        card.className = 'vd-modelo-card';
-        card.innerHTML = `<strong>${m.nombre}</strong>${m.badge ? `<span class="vd-badge">${m.badge}</span>` : ''} — ${m.descripcion}`;
-        info.appendChild(card);
-      });
     } catch (e) {
-      mostrarToast('No se pudieron cargar los modelos de Verbo Design.', 'error');
+      mostrarToast('No se pudieron cargar las opciones de Verbo Design.', 'error');
     }
   }
 
@@ -178,6 +169,9 @@
   // Plantillas HTML
   // ============================================================
   let plantillasCargadas = false;
+  let plantillasData = [];
+  let categoriaActiva = 'Todas';
+
   async function cargarPlantillas() {
     if (plantillasCargadas) return;
     const grid = $('vdPlantillasGrid');
@@ -187,32 +181,57 @@
       const data = await r.json();
       if (!r.ok || !data.ok) throw new Error('No se pudieron cargar las plantillas.');
       plantillasCargadas = true;
-      grid.innerHTML = '';
-      data.plantillas.forEach((p) => {
-        const card = document.createElement('div');
-        card.className = 'vd-plantilla-card';
-        card.innerHTML = `
-          <div class="vd-plantilla-preview" data-id="${p.id}"><span>${p.categoria}</span></div>
-          <div class="vd-plantilla-body">
-            <h3>${p.nombre}</h3>
-            <p>${p.descripcion}</p>
-            <div class="vd-plantilla-actions">
-              <button class="vd-btn-ver" data-id="${p.id}">Ver código</button>
-              <button class="vd-btn-copiar" data-id="${p.id}">Copiar</button>
-            </div>
-          </div>
-        `;
-        grid.appendChild(card);
-      });
-      grid.querySelectorAll('.vd-btn-copiar').forEach((btn) => {
-        btn.addEventListener('click', () => copiarPlantilla(btn.dataset.id));
-      });
-      grid.querySelectorAll('.vd-btn-ver').forEach((btn) => {
-        btn.addEventListener('click', () => verPlantilla(btn.dataset.id));
-      });
+      plantillasData = data.plantillas || [];
+      renderChipsCategorias();
+      renderGridPlantillas();
     } catch (e) {
       grid.innerHTML = `<p class="vd-error-inline">${e.message}</p>`;
     }
+  }
+
+  function renderChipsCategorias() {
+    const cont = $('vdPlantillasCategorias');
+    const categorias = ['Todas', ...new Set(plantillasData.map((p) => p.categoria))];
+    cont.innerHTML = '';
+    categorias.forEach((cat) => {
+      const chip = document.createElement('button');
+      chip.className = 'vd-chip' + (cat === categoriaActiva ? ' activo' : '');
+      chip.textContent = cat;
+      chip.addEventListener('click', () => {
+        categoriaActiva = cat;
+        cont.querySelectorAll('.vd-chip').forEach((c) => c.classList.toggle('activo', c.textContent === cat));
+        renderGridPlantillas();
+      });
+      cont.appendChild(chip);
+    });
+  }
+
+  function renderGridPlantillas() {
+    const grid = $('vdPlantillasGrid');
+    const filtradas = categoriaActiva === 'Todas' ? plantillasData : plantillasData.filter((p) => p.categoria === categoriaActiva);
+    grid.innerHTML = '';
+    filtradas.forEach((p) => {
+      const card = document.createElement('div');
+      card.className = 'vd-plantilla-card';
+      card.innerHTML = `
+        <div class="vd-plantilla-preview" data-id="${p.id}"><span>${p.categoria}</span></div>
+        <div class="vd-plantilla-body">
+          <h3>${p.nombre}</h3>
+          <p>${p.descripcion}</p>
+          <div class="vd-plantilla-actions">
+            <button class="vd-btn-ver" data-id="${p.id}">Ver código</button>
+            <button class="vd-btn-copiar" data-id="${p.id}">Copiar</button>
+          </div>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+    grid.querySelectorAll('.vd-btn-copiar').forEach((btn) => {
+      btn.addEventListener('click', () => copiarPlantilla(btn.dataset.id));
+    });
+    grid.querySelectorAll('.vd-btn-ver').forEach((btn) => {
+      btn.addEventListener('click', () => verPlantilla(btn.dataset.id));
+    });
   }
 
   async function obtenerPlantilla(id) {
@@ -235,16 +254,24 @@
   async function verPlantilla(id) {
     try {
       const plantilla = await obtenerPlantilla(id);
-      const w = window.open('', '_blank');
-      w.document.write(plantilla.html);
-      w.document.close();
+      // Antes esto abría una pestaña en blanco (about:blank) y recién after
+      // eso le hacía document.write() — en varios navegadores eso se ve
+      // exactamente igual a como abren las páginas de phishing/adware, así
+      // que aunque era inofensivo (era el código de la propia plantilla)
+      // generaba desconfianza. Ahora se arma un Blob real con la URL
+      // "blob:https://..." (mismo mecanismo que usa "Probar" en Verbo Code),
+      // que se ve como una página normal y no como una pestaña vacía.
+      const blob = new Blob([plantilla.html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) {
       mostrarToast(e.message || 'No se pudo abrir la plantilla.', 'error');
     }
   }
 
   // ============================================================
-  // Sonidos (Web Audio API)
+  // Sonidos
   // ============================================================
   let generandoSonido = false;
   async function generarSonido() {

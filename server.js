@@ -3672,13 +3672,13 @@ const MODELOS_VERBO_DESIGN = {
   },
   'Design1.5': {
     nombre: 'Design1.5',
-    descripcion: 'Más resolución y un paso extra de mejora de prompt (enhance).',
+    descripcion: 'Más resolución y más precisión con el prompt.',
     badge: null,
     opciones: { modeloOverride: 'flux', anchoOverride: 1536, altoOverride: 1536, enhanceOverride: true, detallada: true },
   },
   DesignPro: {
     nombre: 'DesignPro',
-    descripcion: 'Máxima calidad: flux-realism en 16:9, pensado para mockups web/apps.',
+    descripcion: 'Máxima calidad, formato panorámico, pensado para mockups web/apps.',
     badge: 'Pro',
     opciones: { modeloOverride: 'flux-realism', anchoOverride: 1536, altoOverride: 864, enhanceOverride: true, detallada: true },
   },
@@ -3881,6 +3881,478 @@ button{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;b
 <textarea id="mensaje" rows="4" required></textarea>
 <button type="submit">Enviar</button>
 </form>
+</body>
+</html>`,
+  },
+  {
+    id: 'login-simple',
+    nombre: 'Login',
+    categoria: 'Autenticación',
+    descripcion: 'Pantalla de inicio de sesión centrada, con link de recuperar contraseña.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Iniciar sesión</title>
+<style>
+:root{--bg:#0f1115;--panel:#171a21;--text:#f2f3f5;--muted:#8b8f9a;--accent:#5b8cff;--border:#262a35;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+.box{background:var(--panel);border:1px solid var(--border);padding:36px;border-radius:16px;max-width:380px;width:100%;}
+.box h1{font-size:1.25rem;margin-bottom:6px;}
+.box p.sub{color:var(--muted);font-size:.85rem;margin-bottom:24px;}
+label{display:block;font-size:.8rem;font-weight:600;margin-bottom:6px;color:var(--muted);}
+input{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:8px;font-size:.9rem;margin-bottom:16px;background:#10131a;color:var(--text);}
+input:focus{outline:2px solid var(--accent);outline-offset:1px;}
+button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;margin-top:4px;}
+.links{display:flex;justify-content:space-between;font-size:.8rem;margin-top:16px;}
+.links a{color:var(--muted);text-decoration:none;}
+.links a:hover{color:var(--accent);}
+</style>
+</head>
+<body>
+<form class="box" onsubmit="return false;">
+<h1>Bienvenido de nuevo</h1>
+<p class="sub">Ingresá tus datos para continuar</p>
+<label for="email">Email</label>
+<input id="email" type="email" required>
+<label for="pass">Contraseña</label>
+<input id="pass" type="password" required>
+<button type="submit">Entrar</button>
+<div class="links"><a href="#">¿Olvidaste tu contraseña?</a><a href="#">Crear cuenta</a></div>
+</form>
+</body>
+</html>`,
+  },
+  {
+    id: 'registro-usuario',
+    nombre: 'Registro de usuario',
+    categoria: 'Autenticación',
+    descripcion: 'Formulario de alta con confirmación de contraseña.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Crear cuenta</title>
+<style>
+:root{--bg:#faf9f7;--panel:#fff;--text:#1a1a1a;--muted:#767676;--accent:#e8664a;--border:#e4e1dc;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+.box{background:var(--panel);border:1px solid var(--border);padding:36px;border-radius:14px;max-width:400px;width:100%;box-shadow:0 2px 8px rgba(0,0,0,.05);}
+.box h1{font-size:1.25rem;margin-bottom:20px;}
+.fila{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+label{display:block;font-size:.8rem;font-weight:600;margin-bottom:6px;}
+input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:.9rem;margin-bottom:14px;}
+input:focus{outline:2px solid var(--accent);outline-offset:1px;}
+button{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;}
+.terminos{font-size:.75rem;color:var(--muted);margin-bottom:14px;display:flex;gap:8px;align-items:flex-start;}
+</style>
+</head>
+<body>
+<form class="box" onsubmit="return false;">
+<h1>Creá tu cuenta</h1>
+<div class="fila"><div><label>Nombre</label><input required></div><div><label>Apellido</label><input required></div></div>
+<label>Email</label><input type="email" required>
+<div class="fila"><div><label>Contraseña</label><input type="password" required></div><div><label>Repetir</label><input type="password" required></div></div>
+<div class="terminos"><input type="checkbox" style="width:auto;margin:2px 0 0"><span>Acepto los términos y condiciones</span></div>
+<button type="submit">Registrarme</button>
+</form>
+</body>
+</html>`,
+  },
+  {
+    id: 'producto-detalle',
+    nombre: 'Detalle de producto',
+    categoria: 'E-commerce',
+    descripcion: 'Imagen + info + selector de talle/cantidad + botón comprar.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Producto</title>
+<style>
+:root{--bg:#fff;--text:#111;--muted:#6b7280;--accent:#111;--border:#e5e7eb;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);}
+.wrap{max-width:900px;margin:0 auto;padding:48px 24px;display:grid;grid-template-columns:1fr 1fr;gap:40px;}
+.img{aspect-ratio:1/1;background:#f3f4f6;border-radius:12px;}
+h1{font-size:1.5rem;margin-bottom:8px;}
+.precio{font-size:1.3rem;font-weight:700;margin-bottom:16px;}
+.desc{color:var(--muted);line-height:1.6;margin-bottom:24px;font-size:.92rem;}
+.opciones{margin-bottom:24px;}
+.opciones label{display:block;font-size:.8rem;font-weight:600;margin-bottom:8px;}
+.talles{display:flex;gap:8px;}
+.talles span{border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:.85rem;cursor:pointer;}
+.talles span.sel{border-color:var(--accent);background:var(--accent);color:#fff;}
+button.comprar{width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;font-size:.95rem;}
+@media(max-width:640px){.wrap{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="img"></div>
+<div>
+<h1>Nombre del producto</h1>
+<div class="precio">$49.900</div>
+<p class="desc">Descripción corta del producto: materiales, características principales y por qué elegirlo.</p>
+<div class="opciones"><label>Talle</label><div class="talles"><span>S</span><span class="sel">M</span><span>L</span><span>XL</span></div></div>
+<button class="comprar">Agregar al carrito</button>
+</div>
+</div>
+</body>
+</html>`,
+  },
+  {
+    id: 'catalogo-productos',
+    nombre: 'Catálogo de productos',
+    categoria: 'E-commerce',
+    descripcion: 'Grid de productos con filtro de categorías arriba.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Catálogo</title>
+<style>
+:root{--bg:#fff;--text:#111;--muted:#6b7280;--accent:#111;--border:#e5e7eb;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);}
+.wrap{max-width:1000px;margin:0 auto;padding:40px 24px;}
+.filtros{display:flex;gap:10px;margin-bottom:28px;flex-wrap:wrap;}
+.filtros span{padding:8px 16px;border:1px solid var(--border);border-radius:999px;font-size:.82rem;cursor:pointer;}
+.filtros span.activo{background:var(--accent);color:#fff;border-color:var(--accent);}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:20px;}
+.card{cursor:pointer;}
+.card .img{aspect-ratio:1/1;background:#f3f4f6;border-radius:10px;margin-bottom:10px;}
+.card h3{font-size:.88rem;margin-bottom:4px;}
+.card .precio{font-size:.85rem;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="filtros"><span class="activo">Todos</span><span>Remeras</span><span>Pantalones</span><span>Accesorios</span></div>
+<div class="grid">
+<div class="card"><div class="img"></div><h3>Producto uno</h3><div class="precio">$12.500</div></div>
+<div class="card"><div class="img"></div><h3>Producto dos</h3><div class="precio">$8.900</div></div>
+<div class="card"><div class="img"></div><h3>Producto tres</h3><div class="precio">$15.000</div></div>
+<div class="card"><div class="img"></div><h3>Producto cuatro</h3><div class="precio">$6.400</div></div>
+</div>
+</div>
+</body>
+</html>`,
+  },
+  {
+    id: 'carrito-compra',
+    nombre: 'Carrito de compra',
+    categoria: 'E-commerce',
+    descripcion: 'Lista de ítems con cantidad + resumen de totales.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Carrito</title>
+<style>
+:root{--bg:#fff;--text:#111;--muted:#6b7280;--accent:#111;--border:#e5e7eb;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);}
+.wrap{max-width:760px;margin:0 auto;padding:40px 24px;display:grid;grid-template-columns:1.6fr 1fr;gap:32px;}
+h1{font-size:1.3rem;margin-bottom:20px;grid-column:1/-1;}
+.item{display:flex;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--border);}
+.item .img{width:64px;height:64px;background:#f3f4f6;border-radius:8px;flex-shrink:0;}
+.item .info{flex:1;}
+.item .info h3{font-size:.88rem;margin-bottom:4px;}
+.item .info span{font-size:.8rem;color:var(--muted);}
+.item .cant{border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:.82rem;}
+.resumen{background:#f9fafb;border-radius:12px;padding:20px;height:fit-content;}
+.resumen .fila{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:10px;color:var(--muted);}
+.resumen .total{display:flex;justify-content:space-between;font-weight:700;font-size:1rem;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);color:var(--text);}
+button{width:100%;margin-top:16px;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;}
+@media(max-width:600px){.wrap{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Tu carrito</h1>
+<div>
+<div class="item"><div class="img"></div><div class="info"><h3>Producto uno</h3><span>$12.500</span></div><div class="cant">1</div></div>
+<div class="item"><div class="img"></div><div class="info"><h3>Producto dos</h3><span>$8.900</span></div><div class="cant">2</div></div>
+</div>
+<div class="resumen">
+<div class="fila"><span>Subtotal</span><span>$30.300</span></div>
+<div class="fila"><span>Envío</span><span>Gratis</span></div>
+<div class="total"><span>Total</span><span>$30.300</span></div>
+<button>Finalizar compra</button>
+</div>
+</div>
+</body>
+</html>`,
+  },
+  {
+    id: 'blog-post',
+    nombre: 'Artículo de blog',
+    categoria: 'Blog',
+    descripcion: 'Encabezado con metadata + cuerpo de texto legible.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Artículo</title>
+<style>
+:root{--bg:#fdfdfc;--text:#1f1f1f;--muted:#8a8a8a;--accent:#2563eb;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Georgia,'Times New Roman',serif;background:var(--bg);color:var(--text);}
+article{max-width:640px;margin:0 auto;padding:64px 24px;}
+.categoria{color:var(--accent);font-family:system-ui,sans-serif;font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:14px;}
+h1{font-size:2.1rem;line-height:1.2;margin-bottom:16px;}
+.meta{font-family:system-ui,sans-serif;color:var(--muted);font-size:.85rem;margin-bottom:36px;}
+p{line-height:1.8;margin-bottom:20px;font-size:1.05rem;}
+h2{font-family:system-ui,sans-serif;font-size:1.3rem;margin:32px 0 12px;}
+</style>
+</head>
+<body>
+<article>
+<div class="categoria">Diseño</div>
+<h1>Título del artículo que resume la idea principal</h1>
+<div class="meta">Por Tu Nombre · 5 min de lectura · 24 jul 2026</div>
+<p>Primer párrafo de introducción explicando de qué trata el artículo y por qué le importa a quien lo está leyendo.</p>
+<h2>Un subtítulo</h2>
+<p>Desarrollo del contenido con el cuerpo principal del texto, en un ancho de línea cómodo para lectura larga.</p>
+</article>
+</body>
+</html>`,
+  },
+  {
+    id: 'blog-listado',
+    nombre: 'Listado de blog',
+    categoria: 'Blog',
+    descripcion: 'Lista de posts con imagen, título y resumen.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Blog</title>
+<style>
+:root{--bg:#fff;--text:#111;--muted:#6b7280;--border:#e5e7eb;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);}
+.wrap{max-width:720px;margin:0 auto;padding:56px 24px;}
+h1{font-size:1.6rem;margin-bottom:32px;}
+.post{display:flex;gap:20px;padding:24px 0;border-bottom:1px solid var(--border);}
+.post .img{width:140px;height:100px;background:#f3f4f6;border-radius:10px;flex-shrink:0;}
+.post h2{font-size:1.05rem;margin-bottom:6px;}
+.post p{color:var(--muted);font-size:.88rem;line-height:1.5;}
+.post .fecha{font-size:.75rem;color:var(--muted);margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Últimas publicaciones</h1>
+<div class="post"><div class="img"></div><div><h2>Primer título de post</h2><p>Resumen corto de qué trata este artículo del blog, en dos líneas.</p><div class="fecha">20 jul 2026</div></div></div>
+<div class="post"><div class="img"></div><div><h2>Segundo título de post</h2><p>Resumen corto de qué trata este artículo del blog, en dos líneas.</p><div class="fecha">14 jul 2026</div></div></div>
+</div>
+</body>
+</html>`,
+  },
+  {
+    id: 'pricing-table',
+    nombre: 'Tabla de precios',
+    categoria: 'Landing',
+    descripcion: '3 planes con el del medio destacado.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Precios</title>
+<style>
+:root{--bg:#0b0d12;--panel:#12151c;--accent:#6d5efc;--text:#eef0f6;--muted:#9aa2b1;--border:#1f2430;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);}
+.wrap{max-width:960px;margin:0 auto;padding:64px 24px;text-align:center;}
+h1{font-size:1.8rem;margin-bottom:12px;}
+.wrap>p{color:var(--muted);margin-bottom:40px;}
+.planes{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;text-align:left;}
+.plan{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:28px;}
+.plan.destacado{border-color:var(--accent);transform:scale(1.04);}
+.plan .nombre{font-size:.85rem;color:var(--muted);margin-bottom:8px;}
+.plan .precio{font-size:2rem;font-weight:700;margin-bottom:20px;}
+.plan .precio span{font-size:.9rem;color:var(--muted);font-weight:400;}
+.plan ul{list-style:none;margin-bottom:24px;}
+.plan li{font-size:.85rem;color:var(--muted);padding:6px 0;}
+.plan button{width:100%;padding:11px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-weight:600;cursor:pointer;}
+.plan.destacado button{background:var(--accent);border-color:var(--accent);}
+@media(max-width:700px){.planes{grid-template-columns:1fr;}.plan.destacado{transform:none;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Planes simples y claros</h1>
+<p>Elegí el que se ajuste a lo que necesitás.</p>
+<div class="planes">
+<div class="plan"><div class="nombre">Básico</div><div class="precio">$0<span>/mes</span></div><ul><li>1 proyecto</li><li>Soporte por email</li></ul><button>Empezar</button></div>
+<div class="plan destacado"><div class="nombre">Pro</div><div class="precio">$19<span>/mes</span></div><ul><li>Proyectos ilimitados</li><li>Soporte prioritario</li><li>Exportación avanzada</li></ul><button>Empezar</button></div>
+<div class="plan"><div class="nombre">Equipo</div><div class="precio">$49<span>/mes</span></div><ul><li>Todo lo de Pro</li><li>Multiusuario</li></ul><button>Empezar</button></div>
+</div>
+</div>
+</body>
+</html>`,
+  },
+  {
+    id: 'faq-acordeon',
+    nombre: 'Preguntas frecuentes',
+    categoria: 'Landing',
+    descripcion: 'Acordeón de FAQ con abrir/cerrar en JS.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>FAQ</title>
+<style>
+:root{--bg:#fff;--text:#111;--muted:#6b7280;--border:#e5e7eb;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);}
+.wrap{max-width:640px;margin:0 auto;padding:56px 24px;}
+h1{font-size:1.5rem;margin-bottom:28px;}
+.item{border-bottom:1px solid var(--border);}
+.pregunta{width:100%;text-align:left;background:none;border:none;padding:18px 0;font-size:.95rem;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;color:var(--text);}
+.pregunta .icono{transition:transform .2s;}
+.item.abierto .pregunta .icono{transform:rotate(45deg);}
+.respuesta{max-height:0;overflow:hidden;transition:max-height .25s ease;color:var(--muted);font-size:.88rem;line-height:1.6;}
+.item.abierto .respuesta{max-height:200px;padding-bottom:18px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Preguntas frecuentes</h1>
+<div class="item abierto"><button class="pregunta">¿Cómo funciona? <span class="icono">+</span></button><div class="respuesta">Funciona de forma simple: te registrás, elegís un plan y empezás a usarlo al instante.</div></div>
+<div class="item"><button class="pregunta">¿Puedo cancelar cuando quiera? <span class="icono">+</span></button><div class="respuesta">Sí, podés cancelar en cualquier momento desde tu panel de cuenta.</div></div>
+<div class="item"><button class="pregunta">¿Hay soporte técnico? <span class="icono">+</span></button><div class="respuesta">Sí, por email para todos los planes y prioritario en los planes pagos.</div></div>
+</div>
+<script>
+document.querySelectorAll('.pregunta').forEach(b=>{
+  b.addEventListener('click',()=>{ b.parentElement.classList.toggle('abierto'); });
+});
+</script>
+</body>
+</html>`,
+  },
+  {
+    id: 'pagina-404',
+    nombre: 'Página 404',
+    categoria: 'Estado',
+    descripcion: 'Error de página no encontrada con botón de volver.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>404</title>
+<style>
+:root{--bg:#0d0f14;--text:#eef0f6;--muted:#8b8f9a;--accent:#5b8cff;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px;}
+.codigo{font-size:6rem;font-weight:800;color:var(--accent);line-height:1;}
+h1{font-size:1.2rem;margin:16px 0 8px;}
+p{color:var(--muted);margin-bottom:28px;}
+a{background:var(--accent);color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:.9rem;}
+</style>
+</head>
+<body>
+<div class="codigo">404</div>
+<h1>Esta página no existe</h1>
+<p>El link que seguiste puede estar roto o la página se movió.</p>
+<a href="#">Volver al inicio</a>
+</body>
+</html>`,
+  },
+  {
+    id: 'pagina-mantenimiento',
+    nombre: 'Página de mantenimiento',
+    categoria: 'Estado',
+    descripcion: 'Aviso de sitio en mantenimiento, para cuando el proyecto está en pausa.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>En mantenimiento</title>
+<style>
+:root{--bg:#faf9f7;--text:#1a1a1a;--muted:#767676;--accent:#e8664a;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:24px;}
+.icono{width:64px;height:64px;border-radius:16px;background:var(--accent);margin-bottom:20px;}
+h1{font-size:1.4rem;margin-bottom:10px;}
+p{color:var(--muted);max-width:380px;line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="icono"></div>
+<h1>Estamos mejorando el sitio</h1>
+<p>Volvemos en breve. Gracias por la paciencia mientras hacemos estos cambios.</p>
+</body>
+</html>`,
+  },
+  {
+    id: 'tarjeta-perfil',
+    nombre: 'Tarjeta de perfil',
+    categoria: 'Componentes',
+    descripcion: 'Card de usuario con avatar, bio y stats.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Perfil</title>
+<style>
+:root{--bg:#fff;--text:#111;--muted:#6b7280;--accent:#111;--border:#e5e7eb;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f9fafb;padding:24px;}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:28px;max-width:280px;width:100%;text-align:center;}
+.avatar{width:72px;height:72px;border-radius:50%;background:#e5e7eb;margin:0 auto 14px;}
+.card h2{font-size:1.05rem;margin-bottom:2px;}
+.card .rol{color:var(--muted);font-size:.82rem;margin-bottom:14px;}
+.card p{font-size:.85rem;color:var(--muted);line-height:1.5;margin-bottom:18px;}
+.stats{display:flex;justify-content:space-around;border-top:1px solid var(--border);padding-top:16px;}
+.stats div strong{display:block;font-size:1rem;}
+.stats div span{font-size:.72rem;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="card">
+<div class="avatar"></div>
+<h2>Nombre Apellido</h2>
+<div class="rol">Diseñador/a de producto</div>
+<p>Construyendo cosas simples que la gente disfruta usar.</p>
+<div class="stats"><div><strong>128</strong><span>Proyectos</span></div><div><strong>4.2k</strong><span>Seguidores</span></div><div><strong>312</strong><span>Siguiendo</span></div></div>
+</div>
+</body>
+</html>`,
+  },
+  {
+    id: 'navbar-footer',
+    nombre: 'Navbar + Footer',
+    categoria: 'Componentes',
+    descripcion: 'Barra de navegación fija y pie de página, para pegar arriba/abajo de cualquier sitio.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Navbar + Footer</title>
+<style>
+:root{--bg:#fff;--text:#111;--muted:#6b7280;--accent:#111;--border:#e5e7eb;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text);min-height:100vh;display:flex;flex-direction:column;}
+nav{display:flex;align-items:center;justify-content:space-between;padding:16px 32px;border-bottom:1px solid var(--border);}
+nav .logo{font-weight:700;}
+nav ul{list-style:none;display:flex;gap:24px;}
+nav a{text-decoration:none;color:var(--muted);font-size:.88rem;}
+nav a:hover{color:var(--text);}
+nav .cta{background:var(--accent);color:#fff;padding:9px 18px;border-radius:8px;font-size:.85rem;text-decoration:none;}
+main{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.85rem;}
+footer{border-top:1px solid var(--border);padding:32px;display:flex;justify-content:space-between;align-items:center;font-size:.8rem;color:var(--muted);}
+footer .cols{display:flex;gap:32px;}
+footer .cols div{display:flex;flex-direction:column;gap:8px;}
+</style>
+</head>
+<body>
+<nav><div class="logo">Marca</div><ul><li><a href="#">Producto</a></li><li><a href="#">Precios</a></li><li><a href="#">Blog</a></li></ul><a class="cta" href="#">Empezar</a></nav>
+<main>Contenido de la página acá</main>
+<footer><span>© 2026 Marca. Todos los derechos reservados.</span><div class="cols"><div><a href="#">Privacidad</a></div><div><a href="#">Términos</a></div></div></footer>
 </body>
 </html>`,
   },
