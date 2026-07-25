@@ -16,6 +16,7 @@ const estado = {
   chatEnProgreso: false,
   imagenPendiente: null,        // base64 de imagen adjunta
   nombreImagenPendiente: null,  // nombre del archivo de imagen
+  modoDesign: false,            // modo Design (Canvas/3D) activado desde el botón del chat
 };
 
 // ============================================================
@@ -580,6 +581,23 @@ function configurarEventos() {
     input.click();
   });
 
+  // Botón Design (Canvas/3D): antes no tenía ningún listener, no hacía nada
+  // al clickear. Ahora activa/desactiva "modo Design": prioriza canvas/three.js
+  // y estética visual en lo que la IA genere hasta que se desactive de nuevo.
+  const btnDesign = document.getElementById('btnDesign');
+  if (btnDesign) {
+    btnDesign.addEventListener('click', () => {
+      estado.modoDesign = !estado.modoDesign;
+      btnDesign.classList.toggle('activo', estado.modoDesign);
+      mostrarToast(
+        estado.modoDesign
+          ? 'Modo Design activado: se va a priorizar Canvas/3D y estética visual'
+          : 'Modo Design desactivado',
+        estado.modoDesign ? 'success' : ''
+      );
+    });
+  }
+
   // Botón terminal (abrir modal de terminal)
   document.getElementById('btnTerminal').addEventListener('click', () => {
     document.getElementById('modalTerminal').classList.remove('oculto');
@@ -798,6 +816,7 @@ async function enviarChat() {
     const bodyData = { 
       mensaje: texto, 
       modelo: estado.modeloSeleccionado,
+      modoDesign: estado.modoDesign,
     };
     
     if (estado.imagenPendiente) {
@@ -1223,9 +1242,33 @@ function scrollChatAbajo() {
 // ============================================================
 // Preview (modal) y Probar (nueva ventana full-screen)
 // ============================================================
+// ANTES esto exigía que existiera EXACTAMENTE "index.html", así que cualquier
+// proyecto que no fuera "solo HTML" (por ejemplo un juego generado como
+// archivo .html con otro nombre, o un experimento de canvas que es puro .js
+// sin HTML) no tenía forma de previsualizarse: el botón tiraba error y no
+// mostraba nada. Ahora se resuelve un "archivo de entrada" con fallbacks:
+// 1) index.html si existe, 2) cualquier otro .html si existe, 3) si no hay
+// NINGÚN .html pero sí hay .js (típico de un experimento de canvas rápido),
+// se arma un HTML mínimo con <canvas> automáticamente para poder verlo igual.
+function resolverArchivoEntradaPreview() {
+  if (estado.archivos['index.html']) return 'index.html';
+  const htmls = Object.keys(estado.archivos).filter((n) => n.toLowerCase().endsWith('.html'));
+  if (htmls.length > 0) {
+    // Preferir el .html más corto de ruta (probablemente el de nivel raíz)
+    htmls.sort((a, b) => a.split('/').length - b.split('/').length || a.length - b.length);
+    return htmls[0];
+  }
+  return null;
+}
+
+function proyectoTieneCodigoPrevisualizable() {
+  if (resolverArchivoEntradaPreview()) return true;
+  return Object.keys(estado.archivos).some((n) => n.toLowerCase().endsWith('.js'));
+}
+
 function mostrarPreview() {
-  if (!estado.archivos['index.html']) {
-    mostrarToast('No hay index.html para previsualizar', 'error');
+  if (!proyectoTieneCodigoPrevisualizable()) {
+    mostrarToast('Todavía no hay nada previsualizable (falta un .html o .js)', 'error');
     return;
   }
   const frame = document.getElementById('vcPreviewFrame');
@@ -1235,8 +1278,8 @@ function mostrarPreview() {
 }
 
 function probarProyecto() {
-  if (!estado.archivos['index.html']) {
-    mostrarToast('No hay index.html para probar', 'error');
+  if (!proyectoTieneCodigoPrevisualizable()) {
+    mostrarToast('Todavía no hay nada previsualizable (falta un .html o .js)', 'error');
     return;
   }
   // Abrir en nueva ventana/pestaña con el HTML completo
@@ -1249,10 +1292,34 @@ function probarProyecto() {
   mostrarToast('Abriendo proyecto en nueva pestaña...', '');
 }
 
-// Construye el HTML combinando index.html + todos los CSS/JS inline
-// Soporta archivos en carpetas y paquetes npm cargados desde esm.sh CDN
+// Construye el HTML combinando el archivo de entrada (index.html u otro
+// .html, resuelto por resolverArchivoEntradaPreview) + todos los CSS/JS
+// inline. Soporta archivos en carpetas y paquetes npm cargados desde esm.sh.
+// Si no hay NINGÚN archivo .html, arma un wrapper mínimo alrededor de todo
+// el JS/CSS del proyecto (para poder ver algo tipo "juego rápido de canvas"
+// aunque la IA todavía no haya generado un HTML separado).
 function construirHtmlParaPreview() {
-  let html = estado.archivos['index.html'] || '';
+  const entrada = resolverArchivoEntradaPreview();
+  let html = entrada ? (estado.archivos[entrada] || '') : '';
+
+  if (!entrada) {
+    // Sin HTML: armar un wrapper básico con <canvas> a pantalla completa por
+    // si el JS del proyecto dibuja directo sobre un canvas con id "canvas" o
+    // similar, y además crea el suyo propio si hace falta (no estorba).
+    html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${(estado.proyecto && estado.proyecto.nombre) || 'Preview'}</title>
+<style>html,body{margin:0;padding:0;background:#0a0a0a;overflow:hidden;height:100%;}
+canvas{display:block;width:100%;height:100%;}</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<script>window.canvas = document.getElementById('canvas');<\/script>
+</body>
+</html>`;
+  }
 
   // Cargar package.json y agregar imports de esm.sh para las dependencias
   let deps = {};
@@ -1292,6 +1359,7 @@ function construirHtmlParaPreview() {
   }
 
   // Reemplazar todas las referencias a archivos JS del proyecto
+  const jsInsertados = new Set();
   Object.entries(estado.archivos).forEach(([nombre, contenido]) => {
     if (nombre.endsWith('.js') && nombre !== 'script.js') {
       const basename = nombre.split('/').pop();
@@ -1299,16 +1367,31 @@ function construirHtmlParaPreview() {
       const reBasename = new RegExp(`<script[^>]*src=["']${basename}["'][^>]*><\\/script>`, 'g');
       const esModulo = contenido.includes('import ') || contenido.includes('export ');
       const tag = esModulo ? `<script type="module">${contenido}<\/script>` : `<script>${contenido}<\/script>`;
+      const huboMatch = reFullPath.test(html) || reBasename.test(html);
       html = html.replace(reFullPath, tag);
       html = html.replace(reBasename, tag);
+      if (huboMatch) jsInsertados.add(nombre);
     }
   });
   if (estado.archivos['script.js']) {
     const js = estado.archivos['script.js'];
     const esModulo = js.includes('import ') || js.includes('export ');
     const tag = esModulo ? `<script type="module">${js}<\/script>` : `<script>${js}<\/script>`;
+    const huboMatch = /<script[^>]*script\.js[^>]*><\/script>/.test(html);
     html = html.replace(/<script[^>]*script\.js[^>]*><\/script>/g, tag);
+    if (huboMatch) jsInsertados.add('script.js');
   }
+
+  // Si el HTML de entrada no referenciaba ALGUNO de los .js del proyecto
+  // (por ejemplo la IA se olvidó del <script src>, o es el wrapper sin HTML
+  // que armamos arriba), los inyectamos igual antes de </body> para que el
+  // juego/experimento se vea en vez de quedar en blanco silenciosamente.
+  Object.entries(estado.archivos).forEach(([nombre, contenido]) => {
+    if (!nombre.endsWith('.js') || jsInsertados.has(nombre)) return;
+    const esModulo = contenido.includes('import ') || contenido.includes('export ');
+    const tag = esModulo ? `<script type="module">${contenido}<\/script>` : `<script>${contenido}<\/script>`;
+    html = html.includes('</body>') ? html.replace('</body>', `${tag}\n</body>`) : html + tag;
+  });
 
   return html;
 }

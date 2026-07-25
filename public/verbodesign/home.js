@@ -153,11 +153,175 @@
     });
   }
 
+  // ============================================================
+  // Tabs
+  // ============================================================
+  function initTabs() {
+    const tabs = document.querySelectorAll('.vd-tab');
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const destino = tab.dataset.tab;
+        tabs.forEach((t) => t.classList.toggle('activo', t === tab));
+        document.querySelectorAll('.vd-panel').forEach((p) => p.classList.add('oculto'));
+        $('vdFooterImagenes').style.display = destino === 'imagenes' ? '' : 'none';
+        if (destino === 'imagenes') $('vdPanelImagenes').classList.remove('oculto');
+        if (destino === 'plantillas') {
+          $('vdPanelPlantillas').classList.remove('oculto');
+          cargarPlantillas();
+        }
+        if (destino === 'sonidos') $('vdPanelSonidos').classList.remove('oculto');
+      });
+    });
+  }
+
+  // ============================================================
+  // Plantillas HTML
+  // ============================================================
+  let plantillasCargadas = false;
+  async function cargarPlantillas() {
+    if (plantillasCargadas) return;
+    const grid = $('vdPlantillasGrid');
+    grid.innerHTML = '<div class="vd-loading-inline"><div class="vc-spinner"></div> Cargando plantillas...</div>';
+    try {
+      const r = await fetch('/api/verbodesign/templates');
+      const data = await r.json();
+      if (!r.ok || !data.ok) throw new Error('No se pudieron cargar las plantillas.');
+      plantillasCargadas = true;
+      grid.innerHTML = '';
+      data.plantillas.forEach((p) => {
+        const card = document.createElement('div');
+        card.className = 'vd-plantilla-card';
+        card.innerHTML = `
+          <div class="vd-plantilla-preview" data-id="${p.id}"><span>${p.categoria}</span></div>
+          <div class="vd-plantilla-body">
+            <h3>${p.nombre}</h3>
+            <p>${p.descripcion}</p>
+            <div class="vd-plantilla-actions">
+              <button class="vd-btn-ver" data-id="${p.id}">Ver código</button>
+              <button class="vd-btn-copiar" data-id="${p.id}">Copiar</button>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+      grid.querySelectorAll('.vd-btn-copiar').forEach((btn) => {
+        btn.addEventListener('click', () => copiarPlantilla(btn.dataset.id));
+      });
+      grid.querySelectorAll('.vd-btn-ver').forEach((btn) => {
+        btn.addEventListener('click', () => verPlantilla(btn.dataset.id));
+      });
+    } catch (e) {
+      grid.innerHTML = `<p class="vd-error-inline">${e.message}</p>`;
+    }
+  }
+
+  async function obtenerPlantilla(id) {
+    const r = await fetch(`/api/verbodesign/templates/${id}`);
+    const data = await r.json();
+    if (!r.ok || !data.ok) throw new Error('No se pudo cargar la plantilla.');
+    return data.plantilla;
+  }
+
+  async function copiarPlantilla(id) {
+    try {
+      const plantilla = await obtenerPlantilla(id);
+      await navigator.clipboard.writeText(plantilla.html);
+      mostrarToast('Código copiado al portapapeles', 'success');
+    } catch (e) {
+      mostrarToast(e.message || 'No se pudo copiar.', 'error');
+    }
+  }
+
+  async function verPlantilla(id) {
+    try {
+      const plantilla = await obtenerPlantilla(id);
+      const w = window.open('', '_blank');
+      w.document.write(plantilla.html);
+      w.document.close();
+    } catch (e) {
+      mostrarToast(e.message || 'No se pudo abrir la plantilla.', 'error');
+    }
+  }
+
+  // ============================================================
+  // Sonidos (Web Audio API)
+  // ============================================================
+  let generandoSonido = false;
+  async function generarSonido() {
+    if (generandoSonido) return;
+    const input = $('vdSonidoInput');
+    const descripcion = input.value.trim();
+    if (!descripcion) return;
+
+    generandoSonido = true;
+    const btn = $('vdBtnSonido');
+    btn.disabled = true;
+    input.value = '';
+
+    const lista = $('vdSonidosLista');
+    const item = document.createElement('div');
+    item.className = 'vd-sonido-item vd-loading';
+    item.innerHTML = '<div class="vc-spinner"></div><span>Generando...</span>';
+    lista.prepend(item);
+
+    try {
+      const r = await fetch('/api/verbodesign/sound', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ descripcion }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.ok) throw new Error(data.error || 'No se pudo generar el sonido.');
+
+      item.className = 'vd-sonido-item';
+      const codigoId = 'snd_' + Math.random().toString(36).slice(2);
+      item.innerHTML = `
+        <div class="vd-sonido-header">
+          <strong>${descripcion}</strong>
+          <div class="vd-sonido-actions">
+            <button class="vd-btn-play">▶ Probar</button>
+            <button class="vd-btn-copiar-sonido">Copiar código</button>
+          </div>
+        </div>
+        <pre class="vd-sonido-codigo" id="${codigoId}">${data.codigo.replace(/</g, '&lt;')}</pre>
+      `;
+      item.querySelector('.vd-btn-play').addEventListener('click', () => {
+        try {
+          // eslint-disable-next-line no-new-func
+          const fn = new Function(data.codigo + '\nreturn reproducirSonido;');
+          fn()();
+        } catch (e) {
+          mostrarToast('Error ejecutando el sonido: ' + e.message, 'error');
+        }
+      });
+      item.querySelector('.vd-btn-copiar-sonido').addEventListener('click', async () => {
+        await navigator.clipboard.writeText(data.codigo);
+        mostrarToast('Código copiado al portapapeles', 'success');
+      });
+    } catch (e) {
+      item.remove();
+      mostrarToast(e.message || 'Error generando el sonido.', 'error');
+    } finally {
+      generandoSonido = false;
+      btn.disabled = false;
+      input.focus();
+    }
+  }
+
+  function initSonidos() {
+    $('vdBtnSonido').addEventListener('click', generarSonido);
+    $('vdSonidoInput').addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') generarSonido();
+    });
+  }
+
   function init() {
     aplicarTema();
     cargarUsuario();
     cargarModelos();
     initInputAutoResize();
+    initTabs();
+    initSonidos();
     $('vdBtnGenerar').addEventListener('click', generar);
   }
 

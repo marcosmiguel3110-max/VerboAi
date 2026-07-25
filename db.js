@@ -183,4 +183,17 @@ async function leerTodosPorPrefijo(prefijo) {
   }
 }
 
-module.exports = { conectarMongo, estaConectado, leerDocumento, guardarDocumento, leerTodosPorPrefijo };
+// Elimina un documento por id. No tira excepcion (mismo criterio que el
+// resto del modulo: un fallo de red con Mongo nunca debe tirar abajo la app).
+async function eliminarDocumento(id) {
+  if (!db) return false;
+  try {
+    await db.collection(COLECCION).deleteOne({ _id: id });
+    return true;
+  } catch (err) {
+    console.error(`[mongodb] Error eliminando "${id}":`, err.message);
+    return false;
+  }
+}
+
+module.exports = { conectarMongo, estaConectado, leerDocumento, guardarDocumento, leerTodosPorPrefijo, eliminarDocumento };

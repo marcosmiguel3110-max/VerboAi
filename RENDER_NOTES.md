@@ -21,17 +21,21 @@ free-tier y Pollinations, ver https://github.com/ClawLabsAI/free-ai-models):
 - `APP_USER`: Usuario admin para login (ej: admin)
 - `APP_PASS`: Contraseña para el usuario admin
 - `AUTH_SECRET`: Secreto aleatorio largo para firmar cookies (genera uno con: openssl rand -base64 32)
-- `JUDGE0_API_URL`: (opcional) URL base de Judge0 para la herramienta de ejecución de código de NewserAdvanced1.5. Default: `https://judge0-ce.p.rapidapi.com` (RapidAPI). Si tenés tu propia instancia de Judge0 CE (self-hosted), poné esa URL acá y dejá `JUDGE0_API_KEY` vacío.
-- `JUDGE0_API_KEY`: Tu clave de RapidAPI (solo necesaria si usás la URL default de RapidAPI). Conseguila en https://rapidapi.com/judge0-official/api/judge0-ce
+- `JUDGE0_API_URL`: (opcional) URL base de Judge0 para la ejecución de código de Verbo Code y NewserAdvanced1.5. Default: `https://ce.judge0.com`, la instancia pública gratuita de Judge0 CE — **no requiere ninguna API key**. No hace falta tocar esta variable para que la ejecución de código funcione.
+- `JUDGE0_API_KEY`: (opcional) Solo hace falta si decidís cambiar `JUDGE0_API_URL` a la versión hosteada de RapidAPI (`https://judge0-ce.p.rapidapi.com`), que tiene más límite de peticiones pero es de pago fuera del tier gratis. Conseguila en https://rapidapi.com/judge0-official/api/judge0-ce. Si dejás la URL de RapidAPI puesta pero sin key, el servidor lo detecta y usa `ce.judge0.com` automáticamente en su lugar.
 
 ## Migración de Piston a Judge0
 El sandbox de ejecución de código usaba la API pública de Piston (emkc.org), que
 pasó a requerir whitelist obligatoria desde el 15/2/2026 y por eso empezó a
-devolver `401` en cada ejecución. Se reemplazó por Judge0, que soporta dos modos:
-1. **RapidAPI (recomendado para arrancar rápido)**: dejá `JUDGE0_API_URL` en su
-   valor default y configurá `JUDGE0_API_KEY` con tu clave de RapidAPI. Tiene un
-   plan gratuito con límite de peticiones por día/mes.
-2. **Self-hosted**: si preferís no depender de un tercero, podés levantar tu
+devolver `401` en cada ejecución. Se reemplazó por Judge0, que soporta tres modos:
+1. **Pública gratis (default, no requiere nada)**: `JUDGE0_API_URL` apunta a
+   `https://ce.judge0.com`, que no exige autenticación. Es lo que usa el
+   proyecto de entrada, sin configurar nada en Render.
+2. **RapidAPI (opcional, solo si necesitás más límite)**: cambiá
+   `JUDGE0_API_URL` a `https://judge0-ce.p.rapidapi.com` y configurá
+   `JUDGE0_API_KEY` con tu clave de RapidAPI (tiene un plan gratuito limitado
+   y planes pagos arriba de eso).
+3. **Self-hosted**: si preferís no depender de un tercero, podés levantar tu
    propia instancia de Judge0 CE en un contenedor Docker (en Render o donde sea)
    y apuntar `JUDGE0_API_URL` a esa URL, sin necesidad de `JUDGE0_API_KEY`.
 

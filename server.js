@@ -3122,14 +3122,25 @@ const SKILLS_REGISTRO = [
   {
     archivo: 'gamedev-2d-3d.md',
     trigger: /juego|game|minecraft|terraria|motor.{0,15}(3d|2d)|voxel|canvas.*(juego|game)|three\.js|webgl/i,
+    visual: true,
   },
   {
     archivo: 'canvas-2d-visual.md',
     trigger: /canvas|dashboard|gr[aá]fico|chart|dibuj|pizarra|whiteboard|visualizador|diagrama/i,
+    visual: true,
   },
   {
     archivo: 'threejs-3d-general.md',
     trigger: /three\.js|threejs|modelo 3d|escena 3d|configurador|gltf|glb|visor 3d|webgl/i,
+    visual: true,
+  },
+  {
+    archivo: 'audio-web.md',
+    trigger: /audio|sonido|m[uú]sica|efecto de sonido|sfx|sintetiz|beep|melod[ií]a/i,
+  },
+  {
+    archivo: 'texto-tipografia.md',
+    trigger: /tipograf|fuente(?!\s+de\s+datos)|texto animado|texto (grande|llamativo)|t[ií]tulo animado|contador|typewriter|máquina de escribir|maquina de escribir|marquee|formulario|input|validaci[oó]n de texto/i,
   },
 ];
 
@@ -3147,13 +3158,77 @@ function cargarSkill(archivo) {
 
 // Devuelve el texto combinado de las skills que aplican al pedido del usuario
 // (dedupeado, en el orden del registro). Si ninguna aplica, devuelve ''.
-function skillsRelevantes(mensaje) {
+function skillsRelevantes(mensaje, forzarVisuales) {
   const texto = (mensaje || '');
-  const aplicables = SKILLS_REGISTRO.filter((s) => s.trigger.test(texto));
+  const aplicables = SKILLS_REGISTRO.filter((s) => s.trigger.test(texto) || (forzarVisuales && s.visual));
   if (aplicables.length === 0) return '';
-  const bloques = aplicables.map((s) => cargarSkill(s.archivo)).filter(Boolean);
+  const vistas = new Set();
+  const bloques = [];
+  for (const s of aplicables) {
+    if (vistas.has(s.archivo)) continue;
+    vistas.add(s.archivo);
+    const c = cargarSkill(s.archivo);
+    if (c) bloques.push(c);
+  }
   if (bloques.length === 0) return '';
   return '\n\nSKILLS ACTIVAS PARA ESTE PEDIDO (guías especializadas, seguilas al pie de la letra):\n\n' + bloques.join('\n\n---\n\n');
+}
+
+// ============================================================
+// Contexto de archivos reales para el system prompt del chat de Verbo Code.
+// ANTES solo se mandaban los NOMBRES de los archivos ("- index.html",
+// "- script.js"), nunca su contenido. Eso hacía que, al pedir una edición
+// puntual (ej "cambiá el color del pájaro en el flappy bird"), el modelo no
+// tuviera ninguna forma de saber qué había en esos archivos y terminaba
+// inventando un proyecto nuevo desde cero con FILE_CREATE en vez de editar
+// el real con FILE_EDIT. Ahora se manda el contenido real, con un presupuesto
+// de caracteres para no explotar el contexto: los archivos más chicos van
+// completos, y si algo es gigante se corta avisando que está cortado (igual
+// alcanza para que el modelo entienda estructura, nombres de variables/IDs,
+// y no reinvente todo de cero).
+const PRESUPUESTO_CONTEXTO_ARCHIVOS = 14000; // caracteres totales aprox
+const MAX_POR_ARCHIVO_CONTEXTO = 4000; // tope individual antes de repartir
+
+function construirContextoArchivosProyecto(archivos) {
+  const nombres = Object.keys(archivos || {});
+  if (nombres.length === 0) return '(vacío, es un proyecto nuevo)';
+
+  // Priorizar archivos "de entrada" típicos (index.html, script.js, etc) y
+  // después el resto en el orden en que están, para que si hay que cortar,
+  // se corten los menos importantes primero.
+  const prioridad = (n) => {
+    const base = n.toLowerCase();
+    if (base === 'index.html') return 0;
+    if (base.endsWith('.html')) return 1;
+    if (base === 'script.js' || base === 'main.js' || base === 'game.js') return 2;
+    if (base.endsWith('.js')) return 3;
+    if (base === 'styles.css' || base === 'style.css') return 4;
+    if (base.endsWith('.css')) return 5;
+    if (base === 'manifest.json' || base === 'package.json') return 6;
+    return 7;
+  };
+  const ordenados = [...nombres].sort((a, b) => prioridad(a) - prioridad(b));
+
+  let restante = PRESUPUESTO_CONTEXTO_ARCHIVOS;
+  const bloques = [];
+  for (const nombre of ordenados) {
+    if (restante <= 200) {
+      bloques.push(`--- ${nombre} ---\n(no incluido por espacio, pero existe: pedí verlo si lo necesitás editar)`);
+      continue;
+    }
+    const contenidoCompleto = String(archivos[nombre] ?? '');
+    const tope = Math.min(MAX_POR_ARCHIVO_CONTEXTO, restante);
+    let contenido = contenidoCompleto;
+    let cortado = false;
+    if (contenido.length > tope) {
+      contenido = contenido.slice(0, tope);
+      cortado = true;
+    }
+    restante -= contenido.length;
+    bloques.push(`--- ${nombre} ---\n${contenido}${cortado ? '\n... (archivo cortado por espacio, esto es solo el inicio real del archivo, no inventes el resto)' : ''}`);
+  }
+
+  return bloques.join('\n\n');
 }
 
 // ============================================================
@@ -3566,10 +3641,17 @@ app.put('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => {
+app.delete('/api/verbocode/projects/:id', requiereAdminVerboCode, async (req, res) => {
   const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
   if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
   try { fs.unlinkSync(path.join(VERBOCODE_DIR, `${req.params.id}.json`)); } catch (e) {}
+  // Antes esto NO se borraba de Mongo ni de la cache en memoria: el archivo
+  // local desaparecía pero, en el siguiente restart de Render (o cada vez
+  // que corría cargarProyectosVerboCodeDesdeMongo), el proyecto "eliminado"
+  // volvía solo desde Mongo porque ya no había archivo local que lo tapara.
+  // Ahora se borra en los tres lugares para que un delete sea un delete.
+  verboCodeCache.delete(req.params.id);
+  try { await mongoDb.eliminarDocumento('verbocode-' + req.params.id); } catch (e) {}
   res.json({ ok: true });
 });
 
@@ -3635,6 +3717,229 @@ app.post('/api/verbodesign/generate', requiereAdminVerboCode, async (req, res) =
   } catch (e) {
     console.error('[verbodesign] Error generando:', e.message);
     res.status(500).json({ error: 'Error interno generando el diseño.' });
+  }
+});
+
+// ============================================================
+// VERBO DESIGN — Plantillas HTML/CSS listas para usar
+// ============================================================
+// Set curado de plantillas de arranque (landing, portfolio, dashboard,
+// formulario), pensadas para copiarlas directo a un proyecto de Verbo Code
+// o a cualquier otro lado. Cada una es HTML+CSS autocontenido (un solo
+// archivo), sin dependencias externas.
+const VERBODESIGN_TEMPLATES = [
+  {
+    id: 'landing-producto',
+    nombre: 'Landing de producto',
+    categoria: 'Landing',
+    descripcion: 'Hero + features + CTA, estilo SaaS moderno.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Producto</title>
+<style>
+:root{--bg:#0b0d12;--panel:#12151c;--accent:#6d5efc;--text:#eef0f6;--muted:#9aa2b1;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);}
+.hero{max-width:960px;margin:0 auto;padding:96px 24px 64px;text-align:center;}
+.hero h1{font-size:clamp(2rem,5vw,3.4rem);line-height:1.1;margin-bottom:18px;}
+.hero p{color:var(--muted);font-size:1.1rem;max-width:560px;margin:0 auto 32px;}
+.btn{display:inline-block;background:var(--accent);color:#fff;padding:14px 28px;border-radius:10px;font-weight:600;text-decoration:none;transition:transform .15s;}
+.btn:hover{transform:translateY(-2px);}
+.features{max-width:960px;margin:0 auto;padding:32px 24px 96px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;}
+.card{background:var(--panel);border:1px solid #1f2430;border-radius:14px;padding:24px;}
+.card h3{margin-bottom:8px;font-size:1.05rem;}
+.card p{color:var(--muted);font-size:.92rem;line-height:1.5;}
+</style>
+</head>
+<body>
+<section class="hero">
+<h1>Tu producto, explicado en una frase</h1>
+<p>Un subtítulo corto que resume el beneficio principal para quien recién llega a la página.</p>
+<a class="btn" href="#">Empezar gratis</a>
+</section>
+<section class="features">
+<div class="card"><h3>Rápido</h3><p>Configuralo en minutos, sin fricción.</p></div>
+<div class="card"><h3>Seguro</h3><p>Tus datos protegidos de punta a punta.</p></div>
+<div class="card"><h3>Escalable</h3><p>Crece con vos sin cambiar de herramienta.</p></div>
+</section>
+</body>
+</html>`,
+  },
+  {
+    id: 'portfolio-personal',
+    nombre: 'Portfolio personal',
+    categoria: 'Portfolio',
+    descripcion: 'Presentación + grid de proyectos, minimalista.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Portfolio</title>
+<style>
+:root{--bg:#fafafa;--text:#111;--muted:#666;--accent:#111;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);}
+header{max-width:760px;margin:0 auto;padding:80px 24px 40px;}
+header h1{font-size:2.2rem;margin-bottom:10px;}
+header p{color:var(--muted);max-width:480px;line-height:1.6;}
+.proyectos{max-width:760px;margin:0 auto;padding:0 24px 80px;display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));}
+.proyecto{aspect-ratio:4/3;background:#e9e9e9;border-radius:12px;display:flex;align-items:flex-end;padding:16px;font-weight:600;transition:transform .2s;}
+.proyecto:hover{transform:translateY(-4px);}
+</style>
+</head>
+<body>
+<header>
+<h1>Tu nombre</h1>
+<p>Diseñador/a y desarrollador/a. Acá van unos proyectos recientes.</p>
+</header>
+<div class="proyectos">
+<div class="proyecto">Proyecto uno</div>
+<div class="proyecto">Proyecto dos</div>
+<div class="proyecto">Proyecto tres</div>
+</div>
+</body>
+</html>`,
+  },
+  {
+    id: 'dashboard-admin',
+    nombre: 'Dashboard admin',
+    categoria: 'Dashboard',
+    descripcion: 'Sidebar + tarjetas de métricas, tema oscuro.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard</title>
+<style>
+:root{--bg:#0d1117;--panel:#151b23;--border:#232b36;--text:#e6edf3;--muted:#8b949e;--accent:#3fb950;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;}
+.sidebar{width:220px;background:var(--panel);border-right:1px solid var(--border);padding:24px 16px;}
+.sidebar h2{font-size:1rem;margin-bottom:24px;}
+.sidebar a{display:block;color:var(--muted);text-decoration:none;padding:10px 12px;border-radius:8px;font-size:.9rem;margin-bottom:4px;}
+.sidebar a.activo{background:#1f2937;color:var(--text);}
+.main{flex:1;padding:32px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:32px;}
+.metric{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px;}
+.metric span{color:var(--muted);font-size:.8rem;display:block;margin-bottom:6px;}
+.metric strong{font-size:1.6rem;}
+.metric strong.up{color:var(--accent);}
+</style>
+</head>
+<body>
+<aside class="sidebar">
+<h2>Panel</h2>
+<a class="activo" href="#">Inicio</a>
+<a href="#">Usuarios</a>
+<a href="#">Reportes</a>
+<a href="#">Configuración</a>
+</aside>
+<main class="main">
+<div class="grid">
+<div class="metric"><span>Usuarios activos</span><strong class="up">1,284</strong></div>
+<div class="metric"><span>Ingresos del mes</span><strong>$8,420</strong></div>
+<div class="metric"><span>Tickets abiertos</span><strong>12</strong></div>
+</div>
+</main>
+</body>
+</html>`,
+  },
+  {
+    id: 'formulario-contacto',
+    nombre: 'Formulario de contacto',
+    categoria: 'Formulario',
+    descripcion: 'Inputs con validación visual y buen contraste.',
+    html: `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Contacto</title>
+<style>
+:root{--bg:#f3f4f6;--panel:#fff;--text:#111827;--muted:#6b7280;--accent:#4f46e5;--border:#d1d5db;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;}
+form{background:var(--panel);padding:36px;border-radius:16px;max-width:420px;width:100%;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+form h1{font-size:1.3rem;margin-bottom:24px;}
+label{display:block;font-size:.85rem;font-weight:600;margin-bottom:6px;}
+input,textarea{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:8px;font-size:.95rem;margin-bottom:18px;font-family:inherit;}
+input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+button{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:.95rem;cursor:pointer;}
+.error{color:#dc2626;font-size:.8rem;margin-top:-14px;margin-bottom:14px;display:none;}
+</style>
+</head>
+<body>
+<form onsubmit="return false;">
+<h1>Escribinos</h1>
+<label for="nombre">Nombre</label>
+<input id="nombre" required>
+<label for="email">Email</label>
+<input id="email" type="email" required>
+<span class="error" id="errEmail">Ingresá un email válido</span>
+<label for="mensaje">Mensaje</label>
+<textarea id="mensaje" rows="4" required></textarea>
+<button type="submit">Enviar</button>
+</form>
+</body>
+</html>`,
+  },
+];
+
+app.get('/api/verbodesign/templates', requiereAdminVerboCode, (req, res) => {
+  res.json({
+    ok: true,
+    plantillas: VERBODESIGN_TEMPLATES.map(({ id, nombre, categoria, descripcion }) => ({ id, nombre, categoria, descripcion })),
+  });
+});
+
+app.get('/api/verbodesign/templates/:id', requiereAdminVerboCode, (req, res) => {
+  const plantilla = VERBODESIGN_TEMPLATES.find((t) => t.id === req.params.id);
+  if (!plantilla) return res.status(404).json({ error: 'Plantilla no encontrada.' });
+  res.json({ ok: true, plantilla });
+});
+
+// ============================================================
+// VERBO DESIGN — Generador de sonidos (Web Audio API, código real)
+// ============================================================
+// No hay forma gratis de generar un .mp3/.wav real server-side, así que en
+// vez de eso generamos CÓDIGO de Web Audio API (mismo enfoque que la
+// herramienta [[AUDIO::]] de Verbo Code) que el usuario puede pegar directo
+// en su proyecto y ejecutar en el navegador.
+app.post('/api/verbodesign/sound', requiereAdminVerboCode, async (req, res) => {
+  try {
+    const descripcion = (req.body?.descripcion || '').trim();
+    if (!descripcion) return res.status(400).json({ error: 'Falta describir el sonido que querés generar.' });
+
+    const systemPrompt = `Sos un generador de efectos de sonido con Web Audio API para Verbo AI Design. Te dan una descripción corta en español de un sonido (ej "salto de videojuego", "moneda", "explosión suave", "click de UI") y devolvés SOLO código JavaScript, sin explicación, sin markdown, sin comentarios.
+
+${cargarSkill('audio-web.md')}
+
+El código debe:
+- Definir una función llamada reproducirSonido() que, al llamarse, cree (o reuse) un AudioContext y reproduzca el efecto de una sola vez.
+- Ser 100% autocontenido (sin archivos externos, sin fetch, sin dependencias).
+- No incluir HTML, solo el JavaScript.`;
+
+    const resultado = await llamarModeloGratisConReintentos(
+      [{ role: 'user', content: `Generá el efecto de sonido: ${descripcion}` }],
+      systemPrompt,
+      MODELOS_VERBO_CODE['NewserPro'].modelosOpenRouterCodigo || MODELOS_VERBO_CODE['NewserPro'].modelosOpenRouterTexto,
+      () => {},
+      { maxContinuaciones: 0 },
+    );
+
+    if (!resultado.ok) {
+      return res.status(502).json({ error: 'No se pudo generar el sonido. Probá de nuevo en unos segundos.' });
+    }
+
+    let codigo = stripThinkTags(resultado.texto).trim();
+    // Sacar fences de markdown si el modelo los agregó igual
+    codigo = codigo.replace(/^```(?:javascript|js)?\n?/i, '').replace(/```\s*$/, '').trim();
+
+    res.json({ ok: true, codigo, descripcion });
+  } catch (e) {
+    console.error('[verbodesign] Error generando sonido:', e.message);
+    res.status(500).json({ error: 'Error interno generando el sonido.' });
   }
 });
 
@@ -3790,7 +4095,8 @@ app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => 
   const mensaje = (req.body?.mensaje || '').trim();
   const imagen = req.body?.imagen || null;
   const nombreImagen = req.body?.nombreImagen || null;
-  
+  const modoDesign = !!req.body?.modoDesign; // activado con el botón "Design (Canvas 3D)" del chat
+
   if (!mensaje && !imagen) return res.status(400).json({ error: 'Falta el mensaje o imagen.' });
 
   const modeloPedido = req.body?.modelo || 'NewserPro';
@@ -3858,8 +4164,10 @@ Genera CÓDIGO REAL de Web Audio API (osciladores, envolventes ADSR, ruido filtr
 [[WEB::consulta corta]]
 Busca en internet.
 
-${skillsRelevantes(mensaje)}
-
+${skillsRelevantes(mensaje, modoDesign)}
+${modoDesign ? `
+MODO DESIGN ACTIVADO (el usuario activó el botón de Canvas/Diseño 3D): priorizá el resultado VISUAL por sobre todo lo demás. Usá <canvas> (2D o three.js/WebGL si el pedido tiene onda 3D) en vez de HTML/CSS plano siempre que se pueda, cuidá la paleta de colores, la composición, la iluminación (si es 3D) y el "juice" (animaciones, transiciones, feedback visual). Si el usuario no fue específico, inclinate por la opción más vistosa dentro de lo razonable.
+` : ''}
 REGLAS CRÍTICAS:
 
 1. SEPARACIÓN OBLIGATORIA: NUNCA pongas CSS o JS dentro del HTML. SIEMPRE separá:
@@ -3920,8 +4228,10 @@ REGLAS CRÍTICAS:
 
 13. ITERACIÓN: Si el usuario dice que algo no funciona, NO le des el mismo código otra vez. Analizá el problema real, identificá el error específico, y mandá la corrección con LINE_EDIT o FILE_EDIT.
 
+14. REGLA CRÍTICA — RESPETAR EL PROYECTO EXISTENTE: Si "Archivos actuales" de abajo NO está vacío, este proyecto YA EXISTE y probablemente el usuario te está pidiendo un CAMBIO puntual, no un proyecto nuevo. Mirá el CONTENIDO REAL de esos archivos (te lo paso abajo, no solo el nombre) antes de responder. Usá FILE_EDIT o LINE_EDIT sobre esos archivos, MANTENIENDO todo lo que ya funciona (mismos nombres de variables, IDs, estructura, arte/lógica del juego que ya existe) y modificando SOLO lo que el usuario pidió. NUNCA uses FILE_CREATE para reemplazar por un proyecto distinto/genérico cuando el usuario pidió "arreglar", "cambiar", "agregar", "que no haga X", "mejorá" o cualquier pedido que hable de algo que YA está en el proyecto. Reservá FILE_CREATE para archivos que todavía no existen. Si de verdad tenés dudas de si el pedido es una edición o un proyecto nuevo, asumí que es una EDICIÓN del proyecto actual.
+
 Archivos actuales:
-${Object.keys(proyecto.archivos).length > 0 ? Object.keys(proyecto.archivos).map(n => `- ${n}`).join('\n') : '(vacío)'}
+${construirContextoArchivosProyecto(proyecto.archivos)}
 
 Proyecto: ${proyecto.nombre}`;
 
@@ -6144,8 +6454,22 @@ function describirCodigoClima(code) {
 // la version hosteada de RapidAPI (necesita JUDGE0_API_KEY, se usa solo si se
 // configura JUDGE0_API_URL apuntando a *.rapidapi.com). Se detecta sola segun
 // la URL configurada en JUDGE0_API_URL.
-const JUDGE0_API_URL = (process.env.JUDGE0_API_URL || 'https://ce.judge0.com').replace(/\/+$/, '');
+// Si alguien configuró JUDGE0_API_URL apuntando a RapidAPI pero NUNCA cargó
+// JUDGE0_API_KEY (típicamente porque copió el .env.example viejo, que traía
+// la URL de RapidAPI puesta por default), ANTES esto rompía todas las
+// ejecuciones con "Falta configurar JUDGE0_API_KEY (RapidAPI)" — es decir,
+// pedía una key paga aunque el usuario nunca haya elegido RapidAPI a
+// propósito. Ahora, si pasa eso, se ignora esa URL sin key y se cae solo a
+// la instancia pública ce.judge0.com (gratis, sin key) en vez de romper.
+const JUDGE0_API_URL_CONFIGURADA = (process.env.JUDGE0_API_URL || 'https://ce.judge0.com').replace(/\/+$/, '');
 const JUDGE0_API_KEY = process.env.JUDGE0_API_KEY || '';
+const JUDGE0_CONFIGURADA_ES_RAPIDAPI = /rapidapi\.com$/i.test(new URL(JUDGE0_API_URL_CONFIGURADA).hostname);
+const JUDGE0_API_URL = (JUDGE0_CONFIGURADA_ES_RAPIDAPI && !JUDGE0_API_KEY)
+  ? 'https://ce.judge0.com'
+  : JUDGE0_API_URL_CONFIGURADA;
+if (JUDGE0_CONFIGURADA_ES_RAPIDAPI && !JUDGE0_API_KEY) {
+  console.warn('[judge0] JUDGE0_API_URL apunta a RapidAPI pero falta JUDGE0_API_KEY. Usando ce.judge0.com (gratis, sin key) en su lugar.');
+}
 const JUDGE0_ES_RAPIDAPI = /rapidapi\.com$/i.test(new URL(JUDGE0_API_URL).hostname);
 const JUDGE0_API_HOST = process.env.JUDGE0_API_HOST || new URL(JUDGE0_API_URL).hostname;
 

@@ -168,3 +168,289 @@
 }
 
 .vd-btn-generar { white-space: nowrap; }
+
+/* ============================================================
+   Rediseño: tabs (Imágenes / Plantillas / Sonidos) + pulido visual
+   general. Antes era una sola pantalla de generación de imágenes sin
+   ninguna jerarquía visual fuerte (header plano, sin acento de color, sin
+   separación de secciones). Ahora hay un header con acento sutil, tabs
+   claras, y tarjetas con más aire y hover consistente en todo Verbo Design.
+   ============================================================ */
+
+.vd-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--vc-border);
+  background: var(--vc-bg);
+}
+
+.vd-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: var(--vc-radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--vc-text-secondary);
+  font-family: var(--vc-font);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.vd-tab:hover {
+  background: var(--vc-bg-tertiary);
+  color: var(--vc-text);
+}
+
+.vd-tab.activo {
+  background: var(--vc-accent-light);
+  color: var(--vc-accent);
+  border-color: var(--vc-accent);
+}
+
+.vd-panel-header {
+  max-width: 900px;
+  margin: 0 auto 20px;
+}
+
+.vd-panel-header h2 {
+  font-size: 19px;
+  color: var(--vc-text);
+  margin-bottom: 4px;
+}
+
+.vd-panel-header p {
+  font-size: 13px;
+  color: var(--vc-text-secondary);
+}
+
+/* Tarjetas de imagen: más aire, esquinas más suaves, hover con leve elevación */
+.vd-card {
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+
+.vd-card:not(.vd-loading):hover {
+  transform: translateY(-3px);
+  border-color: var(--vc-accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+/* ============================================================
+   Plantillas HTML
+   ============================================================ */
+.vd-plantillas-grid {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 18px;
+}
+
+.vd-plantilla-card {
+  background: var(--vc-bg-tertiary);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+}
+
+.vd-plantilla-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--vc-accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.vd-plantilla-preview {
+  aspect-ratio: 16 / 10;
+  background: linear-gradient(135deg, var(--vc-accent-light), var(--vc-bg-secondary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vd-plantilla-preview span {
+  color: var(--vc-accent);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: var(--vc-bg);
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--vc-border);
+}
+
+.vd-plantilla-body {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vd-plantilla-body h3 {
+  font-size: 14px;
+  color: var(--vc-text);
+}
+
+.vd-plantilla-body p {
+  font-size: 12px;
+  color: var(--vc-text-secondary);
+  line-height: 1.5;
+  min-height: 32px;
+}
+
+.vd-plantilla-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.vd-plantilla-actions button {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: var(--vc-radius-sm);
+  border: 1px solid var(--vc-border);
+  background: var(--vc-bg-secondary);
+  color: var(--vc-text);
+  font-family: var(--vc-font);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.vd-plantilla-actions button:hover {
+  border-color: var(--vc-accent);
+  color: var(--vc-accent);
+}
+
+.vd-btn-copiar {
+  background: var(--vc-accent) !important;
+  color: white !important;
+  border-color: var(--vc-accent) !important;
+}
+
+.vd-btn-copiar:hover {
+  filter: brightness(1.08);
+}
+
+/* ============================================================
+   Sonidos
+   ============================================================ */
+.vd-sonido-input-wrap {
+  max-width: 900px;
+  margin: 0 auto 24px;
+  display: flex;
+  gap: 10px;
+}
+
+.vd-sonido-input-wrap .vd-input {
+  background: var(--vc-bg-tertiary);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  padding: 12px 14px;
+}
+
+.vd-sonidos-lista {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vd-sonido-item {
+  background: var(--vc-bg-tertiary);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  padding: 14px 16px;
+}
+
+.vd-sonido-item.vd-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--vc-text-secondary);
+  font-size: 13px;
+}
+
+.vd-sonido-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.vd-sonido-header strong {
+  font-size: 13px;
+  color: var(--vc-text);
+  text-transform: capitalize;
+}
+
+.vd-sonido-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.vd-sonido-actions button {
+  padding: 6px 12px;
+  border-radius: var(--vc-radius-sm);
+  border: 1px solid var(--vc-border);
+  background: var(--vc-bg-secondary);
+  color: var(--vc-text);
+  font-family: var(--vc-font);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.vd-sonido-actions button:hover {
+  border-color: var(--vc-accent);
+  color: var(--vc-accent);
+}
+
+.vd-btn-play {
+  background: var(--vc-accent) !important;
+  color: white !important;
+  border-color: var(--vc-accent) !important;
+}
+
+.vd-sonido-codigo {
+  background: var(--vc-bg);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius-sm);
+  padding: 12px;
+  font-size: 11.5px;
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  color: var(--vc-text-secondary);
+  overflow-x: auto;
+  max-height: 220px;
+  overflow-y: auto;
+  white-space: pre;
+}
+
+.vd-loading-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--vc-text-secondary);
+  font-size: 13px;
+  padding: 24px;
+  justify-content: center;
+}
+
+.vd-error-inline {
+  color: #e5484d;
+  font-size: 13px;
+  text-align: center;
+  padding: 24px;
+}
