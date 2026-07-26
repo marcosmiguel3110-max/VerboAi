@@ -914,6 +914,16 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   color: var(--vc-accent);
   flex-shrink: 0;
 }
+
+/* Cuando un archivo grande se aplicó como mejor esfuerzo porque el modelo se
+   quedó sin espacio incluso después de las continuaciones automáticas. */
+.vc-msg-accion-incompleto {
+  border-left-color: #e6b84f;
+  background: rgba(230, 184, 79, 0.08);
+}
+.vc-msg-accion-incompleto svg {
+  color: #e6b84f;
+}
 .vc-msg-accion span {
   color: var(--vc-text-secondary);
   word-break: break-word;

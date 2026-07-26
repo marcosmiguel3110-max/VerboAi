@@ -674,7 +674,7 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
         // (ej. un [[FILE_CREATE::...]] sin el ]] final), lo que rompe el regex del
         // parser y el archivo se pierde entero. En vez de devolver la respuesta cortada,
         // pedimos hasta 2 continuaciones "desde donde quedó" y las concatenamos.
-        const maxContinuaciones = opciones.maxContinuaciones ?? 2;
+        const maxContinuaciones = opciones.maxContinuaciones ?? 3;
         let continuaciones = 0;
         let textoAcumulado = r.texto;
         let ultimoFinish = r.finishReason;
@@ -4541,8 +4541,37 @@ El código debe:
     }
 
     let codigo = stripThinkTags(resultado.texto).trim();
-    // Sacar fences de markdown si el modelo los agregó igual
-    codigo = codigo.replace(/^```(?:javascript|js)?\n?/i, '').replace(/```\s*$/, '').trim();
+
+    // Antes esto solo sacaba un ```fence si estaba pegado al principio/final
+    // exacto del texto (^```...```$). Si el modelo agregaba CUALQUIER frase
+    // antes o después (algo bastante común, tipo "Acá tenés el código:"),
+    // esa frase quedaba mezclada con el código y rompía la sintaxis del
+    // <script> que lo ejecuta en el navegador — fallaba en silencio con un
+    // error de sintaxis que ni el usuario ni el catch de JS podían explicar
+    // bien. Ahora se busca el bloque ```...``` en CUALQUIER parte del texto
+    // (tomando el más largo si hay varios) y, si no hay ninguno, se usa el
+    // texto completo tal cual.
+    const bloquesFence = [...codigo.matchAll(/```(?:javascript|js)?\n([\s\S]*?)```/gi)].map((m) => m[1]);
+    if (bloquesFence.length > 0) {
+      codigo = bloquesFence.reduce((a, b) => (b.length > a.length ? b : a), bloquesFence[0]).trim();
+    }
+
+    // Validar que de verdad define reproducirSonido() y que es JS sintácticamente
+    // válido ANTES de mandarlo al navegador (acá en Node no hay restricción de
+    // CSP, así que usar Function() solo para chequear sintaxis es seguro: no
+    // se está ejecutando código de usuario final, solo generado por nuestra
+    // propia IA, y ni siquiera se llama a la función, solo se compila).
+    if (!/function\s+reproducirSonido\s*\(/.test(codigo)) {
+      console.error('[verbodesign] sonido generado sin reproducirSonido():', codigo.slice(0, 200));
+      return res.status(502).json({ error: 'El sonido generado no salió bien formado. Probá de nuevo o cambiá la descripción.' });
+    }
+    try {
+      // eslint-disable-next-line no-new-func
+      new Function(codigo);
+    } catch (e) {
+      console.error('[verbodesign] sonido generado con error de sintaxis:', e.message, '\n', codigo.slice(0, 300));
+      return res.status(502).json({ error: 'El sonido generado tenía un error de sintaxis. Probá de nuevo.' });
+    }
 
     res.json({ ok: true, codigo, descripcion });
   } catch (e) {
@@ -5137,7 +5166,28 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         const limite = siguiente ? siguiente.index : texto.length;
         const tramo = texto.slice(inicioContenido, limite);
         const idxCierre = tramo.lastIndexOf(']]');
-        if (idxCierre === -1) { reHeader.lastIndex = limite; continue; }
+        if (idxCierre === -1) {
+          // No hay "]]" en todo el tramo. Si este es el ÚLTIMO bloque del
+          // texto (no hay otro tag después Y llegamos al final real), lo más
+          // probable es que el modelo se haya quedado sin espacio para
+          // terminar de escribirlo, incluso después de pedirle continuaciones
+          // (ver llamarModeloGratisConReintentos). Antes esto se descartaba
+          // entero: no se aplicaba el archivo Y el texto crudo con [[FILE_EDIT::
+          // y todo el código quedaba visible tal cual en el chat, sin que el
+          // usuario entendiera qué pasó. Ahora se aplica lo que sí se llegó a
+          // generar como mejor esfuerzo (mejor un archivo casi completo que
+          // nada) y se avisa que puede estar incompleto.
+          if (!siguiente && limite === texto.length && tramo.trim().length > 0) {
+            bloques.push({
+              camposCrudo: tramo,
+              startIndex: m.index,
+              endIndex: texto.length,
+              incompleto: true,
+            });
+          }
+          reHeader.lastIndex = limite;
+          continue;
+        }
         bloques.push({
           camposCrudo: tramo.slice(0, idxCierre),
           startIndex: m.index,
@@ -5164,7 +5214,10 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         acciones.push({
           tipo,
           nombre,
-          descripcion: `${tipo === 'file_create' ? 'Archivo creado' : 'Archivo editado'}: ${nombre} (${contenido.length} chars)`,
+          incompleto: !!bloque.incompleto,
+          descripcion: bloque.incompleto
+            ? `${tipo === 'file_create' ? 'Archivo creado' : 'Archivo editado'}: ${nombre} (${contenido.length} chars — puede estar incompleto, el modelo se quedó sin espacio; pedile que lo termine si falta algo)`
+            : `${tipo === 'file_create' ? 'Archivo creado' : 'Archivo editado'}: ${nombre} (${contenido.length} chars)`,
         });
       }
     };

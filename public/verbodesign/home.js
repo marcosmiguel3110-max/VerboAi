@@ -80,16 +80,35 @@
   // y el navegador lo ejecuta como un script normal, no como eval.
   function ejecutarCodigoSonido(codigo) {
     const id = '__verboSonido_' + Math.random().toString(36).slice(2);
+    const errId = id + '_err';
     const script = document.createElement('script');
-    script.textContent = `window.${id} = function(){\n${codigo}\nreturn (typeof reproducirSonido === 'function') ? reproducirSonido() : undefined;\n};`;
+    // El try/catch va ADENTRO del script inyectado: un error de sintaxis en
+    // `codigo` hace que TODO el script falle en silencio al parsear (eso no
+    // se puede atrapar desde afuera, por diseño del navegador), así que se
+    // detecta después chequeando si window[id] llegó a definirse. Un error
+    // en tiempo de ejecución (ej. el navegador no soporta algo de la Web
+    // Audio API usada) SÍ se puede atrapar acá adentro, y se guarda el
+    // mensaje real en vez de perderlo.
+    script.textContent = `window.${id} = function(){
+      try {
+        ${codigo}
+        if (typeof reproducirSonido !== 'function') { window.${errId} = 'El código generado no definió reproducirSonido().'; return; }
+        reproducirSonido();
+      } catch (e) {
+        window.${errId} = (e && e.message) ? e.message : String(e);
+      }
+    };`;
     document.head.appendChild(script);
-    try {
-      if (typeof window[id] !== 'function') throw new Error('El código generado no definió reproducirSonido().');
-      window[id]();
-    } finally {
-      document.head.removeChild(script);
-      delete window[id];
+    document.head.removeChild(script);
+
+    if (typeof window[id] !== 'function') {
+      throw new Error('El código generado tiene un error de sintaxis y no se pudo cargar.');
     }
+    window[id]();
+    const error = window[errId];
+    delete window[id];
+    delete window[errId];
+    if (error) throw new Error(error);
   }
 
   function crearCardLoading() {
