@@ -5307,6 +5307,31 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     // Procesar FILE_CREATE y FILE_EDIT (mismo efecto: crear/reemplazar archivo)
     // Soporta rutas con carpetas: "css/styles.css", "js/app.js", "manifest.json"
     const spansAEliminar = [];
+
+    // Diff simple línea a línea (multiset, no es un diff secuencial perfecto
+    // tipo git, pero da un +N/-M razonable para mostrar de un vistazo sin
+    // tener que traer una librería de diffing).
+    function calcularDiffLineas(anterior, nuevo) {
+      if (anterior === undefined) return { agregadas: nuevo.split('\n').length, eliminadas: 0 };
+      const contarLineas = (s) => {
+        const mapa = new Map();
+        for (const l of s.split('\n')) mapa.set(l, (mapa.get(l) || 0) + 1);
+        return mapa;
+      };
+      const mapaAnterior = contarLineas(anterior);
+      const mapaNuevo = contarLineas(nuevo);
+      let agregadas = 0, eliminadas = 0;
+      for (const [linea, cant] of mapaNuevo) {
+        const enAnterior = mapaAnterior.get(linea) || 0;
+        if (cant > enAnterior) agregadas += cant - enAnterior;
+      }
+      for (const [linea, cant] of mapaAnterior) {
+        const enNuevo = mapaNuevo.get(linea) || 0;
+        if (cant > enNuevo) eliminadas += cant - enNuevo;
+      }
+      return { agregadas, eliminadas };
+    }
+
     const procesarArchivos = (tagName, tipo) => {
       for (const bloque of extraerBloquesConCierre(textoRespuesta, tagName)) {
         const idxSep = bloque.camposCrudo.indexOf('::');
@@ -5314,6 +5339,8 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         const nombre = bloque.camposCrudo.slice(0, idxSep).trim();
         const contenido = bloque.camposCrudo.slice(idxSep + 2);
         if (!nombre) continue;
+        const contenidoAnterior = tipo === 'file_edit' ? proyecto.archivos[nombre] : undefined;
+        const diff = calcularDiffLineas(contenidoAnterior, contenido);
         proyecto.archivos[nombre] = contenido;
         proyectoActualizado = true;
         spansAEliminar.push([bloque.startIndex, bloque.endIndex]);
@@ -5321,9 +5348,11 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
           tipo,
           nombre,
           incompleto: !!bloque.incompleto,
+          agregadas: diff.agregadas,
+          eliminadas: diff.eliminadas,
           descripcion: bloque.incompleto
             ? `${tipo === 'file_create' ? 'Archivo creado' : 'Archivo editado'}: ${nombre} (${contenido.length} chars — puede estar incompleto, el modelo se quedó sin espacio; pedile que lo termine si falta algo)`
-            : `${tipo === 'file_create' ? 'Archivo creado' : 'Archivo editado'}: ${nombre} (${contenido.length} chars)`,
+            : `${tipo === 'file_create' ? 'Archivo creado' : 'Archivo editado'}: ${nombre}`,
         });
       }
     };

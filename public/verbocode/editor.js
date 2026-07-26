@@ -676,8 +676,14 @@ function configurarEventos() {
   // igual que con la profundidad (@extendido / @ultracode).
   const btnDesign = document.getElementById('btnDesign');
   if (btnDesign) {
+    // Restaurar el modo Design tal como quedó la última vez (mismo criterio
+    // que la profundidad) — si por lo que sea el estado en memoria se pierde
+    // (ej. algo re-renderiza el composer sin querer), esto lo repone.
+    estado.modoDesign = localStorage.getItem('vc_modo_design') === '1';
+    btnDesign.classList.toggle('activo', estado.modoDesign);
     btnDesign.addEventListener('click', () => {
       estado.modoDesign = !estado.modoDesign;
+      localStorage.setItem('vc_modo_design', estado.modoDesign ? '1' : '0');
       btnDesign.classList.toggle('activo', estado.modoDesign);
       actualizarTagsComposer();
     });
@@ -1046,6 +1052,7 @@ async function enviarChat() {
   // camino — si quedaba declarado con const adentro del try, el catch ni
   // siquiera podía referenciarlo.
   let msgDiv = null;
+  let accionesGroupEl = null; // card colapsable que agrupa las acciones (archivos creados/editados, comandos, etc) de esta respuesta
 
   const rehabilitarInput = () => {
     try { input.disabled = false; } catch(e) {}
@@ -1056,6 +1063,10 @@ async function enviarChat() {
     try { input.focus(); } catch(e) {}
     // Ocultar indicador Generando Code
     if (indicadorGenerando) indicadorGenerando.classList.add('oculto');
+    // Re-sincronizar los tags del composer (@canvas / @ultracode / etc) con
+    // el estado real por las dudas — así, si algo los llegó a pisar durante
+    // el ciclo de mensaje, quedan bien de nuevo apenas termina.
+    actualizarTagsComposer();
   };
 
   const msgUser = { 
@@ -1224,7 +1235,7 @@ async function enviarChat() {
           }
           scrollChatAbajo();
         } else if (evt.type === 'action') {
-          renderAccion(evt.accion);
+          agregarAccionAlGrupo(evt.accion);
         } else if (evt.type === 'terminal_run') {
           // La IA está corriendo un comando de verdad AHORA MISMO. Prender el
           // punto rojo del botón de terminal y, si el modal está abierto,
@@ -1402,6 +1413,7 @@ async function enviarChat() {
           // que se fue acumulando del streaming en vivo del lado del cliente.
           if (typeof evt.textoFinal === 'string') textoRespuesta = evt.textoFinal;
           msgDiv.innerHTML = formatearMarkdownConColapsado(textoRespuesta);
+          finalizarGrupoAcciones();
           scrollChatAbajo();
           // Salir del while inmediatamente después de done
           break;
@@ -1553,49 +1565,97 @@ function escapeHtmlPlan(texto) {
   return texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function renderAccion(accion) {
+const ICONOS_ACCION = {
+  file_create: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  file_edit: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18l-3-3 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  file_delete: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  image: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  texture: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18" stroke-linecap="round"/></svg>',
+  web: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" stroke-linecap="round"/></svg>',
+  run: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+  npm_install: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  test: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+const ICONO_ACCION_DEFAULT = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+
+// Antes cada acción (archivo creado, comando corrido, etc) se mostraba como
+// una card separada, siempre abierta, una debajo de la otra — con un juego
+// grande de 5-6 archivos quedaba un chorro larguísimo de cards en el chat.
+// Ahora se agrupan todas en UNA sola card colapsable tipo resumen de commit
+// (ver referencia: filename + "+N -M", terminando en "Listo"), igual que un
+// panel de cambios — más compacto y más fácil de escanear de un vistazo.
+function crearGrupoAcciones() {
   const cont = document.getElementById('vcChatMensajes');
-  const div = document.createElement('div');
-  div.className = 'vc-msg-accion';
-  // Iconos SVG reales en vez de emojis
-  const iconos = {
-    file_create: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    file_edit: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18l-3-3 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    file_delete: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    image: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    texture: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18" stroke-linecap="round"/></svg>',
-    web: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20" stroke-linecap="round"/></svg>',
-    run: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
-    npm_install: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    test: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  };
-  const icono = iconos[accion.tipo] || '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
-  if (accion.incompleto) div.classList.add('vc-msg-accion-incompleto');
-  div.innerHTML = `${icono} <span>${accion.descripcion}</span>`;
-  cont.appendChild(div);
-
-  // Si es un comando corrido por la IA, mostrar el output real
-  if (accion.tipo === 'run' && accion.resultado) {
-    const resultDiv = document.createElement('div');
-    resultDiv.className = 'vc-msg-accion vc-test-result';
-    const r = accion.resultado;
-    const output = r.stdout || (r.exito ? '(sin output)' : '');
-    const stderr = r.stderr ? `\n--- stderr ---\n${r.stderr}` : '';
-    resultDiv.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19" stroke-linecap="round"/></svg> <pre>${output}${stderr}</pre>`;
-    cont.appendChild(resultDiv);
-  }
-
-  // Si es un test con resultado, mostrar el output
-  if (accion.tipo === 'test' && accion.resultado) {
-    const resultDiv = document.createElement('div');
-    resultDiv.className = 'vc-msg-accion vc-test-result';
-    const output = accion.resultado.stdout || accion.resultado.error || '(sin output)';
-    const stderr = accion.resultado.stderr ? `\n--- stderr ---\n${accion.resultado.stderr}` : '';
-    resultDiv.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19" stroke-linecap="round"/></svg> <pre>${output}${stderr}</pre>`;
-    cont.appendChild(resultDiv);
-  }
-
+  const card = document.createElement('div');
+  card.className = 'vc-plan-card';
+  card.innerHTML = `
+    <button type="button" class="vc-plan-header">
+      <svg class="vc-plan-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      <div class="vc-spinner" style="width:12px;height:12px;border-width:2px;"></div>
+      <span class="vc-plan-titulo">Trabajando...</span>
+    </button>
+    <div class="vc-plan-body"></div>
+  `;
+  card.querySelector('.vc-plan-header').addEventListener('click', () => {
+    card.classList.toggle('vc-plan-abierto');
+  });
+  card.classList.add('vc-plan-abierto'); // abierta mientras se genera, para ver el progreso en vivo
+  cont.appendChild(card);
   scrollChatAbajo();
+  return card;
+}
+
+function agregarAccionAlGrupo(accion) {
+  if (!accionesGroupEl) accionesGroupEl = crearGrupoAcciones();
+  const body = accionesGroupEl.querySelector('.vc-plan-body');
+  const icono = ICONOS_ACCION[accion.tipo] || ICONO_ACCION_DEFAULT;
+
+  const row = document.createElement('div');
+  row.className = 'vc-plan-row' + (accion.incompleto ? ' vc-plan-row-incompleto' : '');
+
+  let statsHtml = '';
+  if ((accion.tipo === 'file_create' || accion.tipo === 'file_edit') && (accion.agregadas || accion.eliminadas)) {
+    statsHtml = `<span class="vc-plan-stats">${accion.agregadas ? `<span class="vc-plan-add">+${accion.agregadas}</span>` : ''}${accion.eliminadas ? `<span class="vc-plan-del">-${accion.eliminadas}</span>` : ''}</span>`;
+  }
+
+  let descHtml;
+  if (accion.nombre && (accion.tipo === 'file_create' || accion.tipo === 'file_edit')) {
+    const verbo = accion.tipo === 'file_create' ? 'Creó' : 'Editó';
+    descHtml = `${verbo} <span class="vc-plan-file">${accion.nombre}</span>${statsHtml}`;
+  } else {
+    descHtml = accion.descripcion;
+  }
+  row.innerHTML = `${icono}<span class="vc-plan-desc">${descHtml}</span>`;
+  body.appendChild(row);
+
+  // Output real de comandos/tests, colapsado dentro de la misma fila
+  if ((accion.tipo === 'run' || accion.tipo === 'test') && accion.resultado) {
+    const r = accion.resultado;
+    const output = r.stdout || (r.exito || !r.error ? '(sin output)' : '');
+    const stderr = r.stderr || r.error ? `\n--- error ---\n${r.stderr || r.error}` : '';
+    const pre = document.createElement('pre');
+    pre.className = 'vc-plan-output';
+    pre.textContent = (output + stderr).trim();
+    body.appendChild(pre);
+  }
+
+  accionesGroupEl.querySelector('.vc-plan-titulo').textContent = `${body.children.length} cambio${body.children.length === 1 ? '' : 's'}`;
+  scrollChatAbajo();
+}
+
+function finalizarGrupoAcciones() {
+  if (!accionesGroupEl) return;
+  const header = accionesGroupEl.querySelector('.vc-plan-header');
+  const spinner = header.querySelector('.vc-spinner');
+  if (spinner) spinner.outerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#4a9a5c" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>';
+  const body = accionesGroupEl.querySelector('.vc-plan-body');
+  const listo = document.createElement('div');
+  listo.className = 'vc-plan-row vc-plan-row-listo';
+  listo.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#4a9a5c" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg><span class="vc-plan-desc">Listo</span>';
+  body.appendChild(listo);
+  // Colapsar sola después de un rato, igual que la card de "Investigando"
+  setTimeout(() => accionesGroupEl && accionesGroupEl.classList.remove('vc-plan-abierto'), 1800);
+  accionesGroupEl = null;
 }
 
 function formatearMarkdown(texto) {

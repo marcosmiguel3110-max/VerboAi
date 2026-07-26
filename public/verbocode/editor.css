@@ -1462,3 +1462,131 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   font-size: 13px;
   line-height: 1.5;
 }
+
+/* ============================================================
+   Plan card colapsable: agrupa todas las acciones de una respuesta
+   (archivos creados/editados, comandos corridos, etc) en una sola card
+   tipo resumen de commit, en vez de una card larga y separada por cada
+   cosa. Formato: icono + "Creó/Editó archivo.ext +N -M", termina en "Listo".
+   ============================================================ */
+.vc-plan-card {
+  align-self: flex-start;
+  width: min(480px, 92%);
+  background: var(--vc-bg-tertiary);
+  border: 1px solid var(--vc-border);
+  border-radius: 10px;
+  margin: 6px 0 10px;
+  overflow: hidden;
+}
+
+.vc-plan-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  color: var(--vc-text-secondary);
+  font-family: var(--vc-font);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.vc-plan-chevron {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.vc-plan-card.vc-plan-abierto .vc-plan-chevron {
+  transform: rotate(90deg);
+}
+
+.vc-plan-titulo {
+  color: var(--vc-text);
+}
+
+.vc-plan-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid transparent;
+}
+
+.vc-plan-card.vc-plan-abierto .vc-plan-body {
+  max-height: 600px;
+  overflow-y: auto;
+  border-top-color: var(--vc-border);
+}
+
+.vc-plan-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-family: var(--vc-font-mono, monospace);
+  color: var(--vc-text-secondary);
+  border-bottom: 1px solid var(--vc-border);
+}
+.vc-plan-row:last-child {
+  border-bottom: none;
+}
+.vc-plan-row svg {
+  flex-shrink: 0;
+  color: var(--vc-accent);
+}
+
+.vc-plan-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vc-plan-file {
+  color: var(--vc-text);
+  background: var(--vc-bg-secondary);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.vc-plan-stats {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.vc-plan-add { color: #4a9a5c; }
+.vc-plan-del { color: #e5645a; }
+
+.vc-plan-row-listo {
+  color: #4a9a5c;
+  font-weight: 600;
+}
+
+.vc-plan-row-incompleto {
+  color: #e6b84f;
+}
+.vc-plan-row-incompleto svg { color: #e6b84f; }
+
+.vc-plan-output {
+  margin: 0 12px 8px;
+  padding: 8px 10px;
+  background: var(--vc-bg);
+  border: 1px solid var(--vc-border);
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: var(--vc-font-mono, monospace);
+  color: var(--vc-text-secondary);
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow-y: auto;
+}
