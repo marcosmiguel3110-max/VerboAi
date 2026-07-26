@@ -28,6 +28,23 @@
       </div>
     </div>
     <div class="vc-header-right">
+      <div class="vc-profundidad-wrap">
+        <button id="btnProfundidad" class="vc-btn-icon-header" title="Nivel de profundidad del código">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="vcProfundidadLabel">Medium</span>
+        </button>
+        <div id="vcProfundidadPopover" class="vc-profundidad-popover oculto">
+          <div class="vc-profundidad-popover-header">Profundidad del código</div>
+          <input type="range" id="vcProfundidadSlider" class="vc-profundidad-slider" min="0" max="3" step="1" value="0">
+          <div class="vc-profundidad-niveles">
+            <span data-nivel="medium">Medium</span>
+            <span data-nivel="avanzado">Avanzado</span>
+            <span data-nivel="extendido">Extendido</span>
+            <span data-nivel="ultracode">Ultracode</span>
+          </div>
+          <p id="vcProfundidadDesc" class="vc-profundidad-desc">Respuestas normales, rápidas.</p>
+        </div>
+      </div>
       <button id="btnPreview" class="vc-btn-icon-header" title="Vista previa en ventana">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
         Preview
@@ -96,6 +113,7 @@
           <p>Que queres crear hoy?</p>
         </div>
       </div>
+      <div id="vcComposerTags" class="vc-composer-tags oculto"></div>
       <div class="vc-chat-input-wrap">
         <div class="vc-chat-btn-col">
           <button id="btnTerminal" class="vc-chat-btn-terminal" title="Abrir terminal">

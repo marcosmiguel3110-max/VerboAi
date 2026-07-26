@@ -1267,3 +1267,93 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   }
   .vc-chat { border-bottom: none; border-top: 1px solid var(--vc-border); }
 }
+
+/* ============================================================
+   Selector de profundidad (nuevo botón al lado de Preview)
+   ============================================================ */
+.vc-profundidad-wrap {
+  position: relative;
+}
+
+.vc-profundidad-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 260px;
+  background: var(--vc-bg-secondary);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius, 10px);
+  padding: 14px 16px 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  z-index: 50;
+}
+
+.vc-profundidad-popover-header {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--vc-text);
+  margin-bottom: 10px;
+}
+
+.vc-profundidad-slider {
+  width: 100%;
+  accent-color: var(--vc-accent);
+  margin-bottom: 8px;
+}
+
+.vc-profundidad-niveles {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--vc-text-secondary);
+  margin-bottom: 10px;
+}
+
+.vc-profundidad-niveles span {
+  transition: color 0.15s, font-weight 0.15s;
+}
+.vc-profundidad-niveles span.activo {
+  color: var(--vc-accent);
+  font-weight: 700;
+}
+
+.vc-profundidad-desc {
+  font-size: 11px;
+  color: var(--vc-text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ============================================================
+   Tags del composer: reemplazan al toast de "Modo Design activado".
+   En vez de una notificación que desaparece, queda un chip persistente
+   arriba del textarea mientras el modo esté activo — con degradado
+   "rainbow" animado para que se note que es un modificador especial.
+   ============================================================ */
+.vc-composer-tags {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 6px;
+}
+
+.vc-composer-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--vc-font-mono, monospace);
+  background: linear-gradient(90deg, #ff5c5c, #ffbd5c, #5cff8f, #5cc9ff, #b45cff, #ff5c5c);
+  background-size: 300% 100%;
+  animation: vc-rainbow-shift 4s linear infinite;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  cursor: default;
+}
+
+@keyframes vc-rainbow-shift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}

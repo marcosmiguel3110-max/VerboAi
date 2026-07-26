@@ -17,6 +17,7 @@ const estado = {
   imagenPendiente: null,        // base64 de imagen adjunta
   nombreImagenPendiente: null,  // nombre del archivo de imagen
   modoDesign: false,            // modo Design (Canvas/3D) activado desde el botón del chat
+  profundidad: 'medium',        // nivel de profundidad de código: medium | avanzado | extendido | ultracode
 };
 
 // ============================================================
@@ -105,10 +106,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   await cargarUsuario();
   await cargarProyecto();
   await cargarModelos();
-  await initMonaco();
+  // IMPORTANTE: antes esto era `await initMonaco()` ANTES de configurar el
+  // resto de la UI — si Monaco tardaba (o el CDN fallaba y había que esperar
+  // el timeout completo), toda la página quedaba sin ningún botón ni el chat
+  // funcionando durante ese tiempo, porque configurarEventos/configurarChatInput
+  // ni siquiera se habían llamado todavía. Ahora el resto de la UI se activa
+  // de una, y Monaco carga en paralelo sin bloquear nada.
   configurarEventos();
   configurarChatInput();
   configurarResizeSidebars();
+  initMonaco();
 
   // Guardar todo antes de cerrar la pestaña
   window.addEventListener('beforeunload', () => {
@@ -464,6 +471,13 @@ function renderTabs() {
 // Monaco Editor (con fallback a textarea si CDN falla)
 // ============================================================
 async function initMonaco() {
+  // Guarda para que, pase lo que pase, el require(['vs/editor/editor.main'])
+  // de más abajo nunca se dispare dos veces en la misma carga de página — así
+  // es como se producía el "Duplicate definition of module 'vs/editor/editor.main'"
+  // (un módulo AMD no se puede registrar dos veces).
+  if (window.__vcMonacoInitLanzado) return;
+  window.__vcMonacoInitLanzado = true;
+
   return new Promise((resolve) => {
     // Verificar si el loader de Monaco está disponible
     if (typeof require === 'undefined' || typeof require.config !== 'function') {
@@ -478,13 +492,16 @@ async function initMonaco() {
         paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' },
       });
 
-      // Timeout: si Monaco no carga en 15 segundos, usar fallback (silencioso)
+      // Timeout más corto que antes: como ya no bloquea el resto de la
+      // página (el chat y los botones andan desde el vamos), no hace falta
+      // esperar 15s para caer al fallback de textarea si el CDN falla.
       const timeout = setTimeout(() => {
         if (!estado.monaco) {
+          console.warn('[verbocode] Monaco no cargó a tiempo, usando editor de texto simple.');
           initTextareaFallback();
           resolve();
         }
-      }, 15000);
+      }, 8000);
 
       require(['vs/editor/editor.main'], () => {
         clearTimeout(timeout);
@@ -654,19 +671,20 @@ function configurarEventos() {
   // Botón Design (Canvas/3D): antes no tenía ningún listener, no hacía nada
   // al clickear. Ahora activa/desactiva "modo Design": prioriza canvas/three.js
   // y estética visual en lo que la IA genere hasta que se desactive de nuevo.
+  // Antes esto mostraba un toast que desaparecía solo; ahora queda un tag
+  // persistente arriba del textarea (@canvas) mientras el modo esté activo,
+  // igual que con la profundidad (@extendido / @ultracode).
   const btnDesign = document.getElementById('btnDesign');
   if (btnDesign) {
     btnDesign.addEventListener('click', () => {
       estado.modoDesign = !estado.modoDesign;
       btnDesign.classList.toggle('activo', estado.modoDesign);
-      mostrarToast(
-        estado.modoDesign
-          ? 'Modo Design activado: se va a priorizar Canvas/3D y estética visual'
-          : 'Modo Design desactivado',
-        estado.modoDesign ? 'success' : ''
-      );
+      actualizarTagsComposer();
     });
   }
+
+  // Selector de profundidad (nuevo botón al lado de Preview)
+  configurarSelectorProfundidad();
 
   // Botón terminal (abrir modal de terminal)
   document.getElementById('btnTerminal').addEventListener('click', () => {
@@ -687,7 +705,14 @@ function configurarEventos() {
       if (!comando) return;
 
       const output = document.getElementById('vcTerminalOutput');
-      
+
+      // clear/cls: se maneja acá mismo, sin ir al servidor.
+      if (/^(clear|cls)$/i.test(comando)) {
+        output.innerHTML = '';
+        input.value = '';
+        return;
+      }
+
       // Mostrar comando ejecutado
       const cmdLine = document.createElement('div');
       cmdLine.className = 'vc-terminal-line command';
@@ -903,6 +928,89 @@ function finalizarCardCompactando(cardEl) {
   }, 1200);
 }
 
+// Combina modo Design + nivel de profundidad en el/los tag(s) que se
+// muestran arriba del textarea. Reglas pedidas: @canvas solo (Design sin
+// profundidad especial), @extendido / @ultracode solo (profundidad sin
+// Design), y @canvas-ultracode cuando las dos están activas a la vez con
+// ultracode (mismo criterio para @canvas-extendido).
+function actualizarTagsComposer() {
+  const cont = document.getElementById('vcComposerTags');
+  if (!cont) return;
+  const tags = [];
+  const nivel = estado.profundidad;
+  const nivelConTag = nivel === 'extendido' || nivel === 'ultracode';
+
+  if (estado.modoDesign && nivelConTag) {
+    tags.push(`@canvas-${nivel}`);
+  } else {
+    if (estado.modoDesign) tags.push('@canvas');
+    if (nivelConTag) tags.push(`@${nivel}`);
+  }
+
+  if (tags.length === 0) {
+    cont.classList.add('oculto');
+    cont.innerHTML = '';
+    return;
+  }
+  cont.classList.remove('oculto');
+  cont.innerHTML = tags.map((t) => `<span class="vc-composer-tag">${t}</span>`).join('');
+}
+
+const PROFUNDIDAD_INFO = [
+  { nivel: 'medium', label: 'Medium', desc: 'Respuestas normales, rápidas.' },
+  { nivel: 'avanzado', label: 'Avanzado', desc: 'Un poco más de cuidado en el código, sin cambiar mucho el tiempo de respuesta.' },
+  { nivel: 'extendido', label: 'Extendido', desc: 'Más profundidad: arquitectura pensada, casos borde, más funcionalidad de la pedida literalmente.' },
+  { nivel: 'ultracode', label: 'Ultracode', desc: 'El máximo nivel: código lo más completo y pulido posible, verifica lo que genera con la terminal. Consume mucho más — tiene su propio límite de uso.' },
+];
+
+function configurarSelectorProfundidad() {
+  const btn = document.getElementById('btnProfundidad');
+  const popover = document.getElementById('vcProfundidadPopover');
+  const slider = document.getElementById('vcProfundidadSlider');
+  const label = document.getElementById('vcProfundidadLabel');
+  const desc = document.getElementById('vcProfundidadDesc');
+  if (!btn || !popover || !slider) return;
+
+  const aplicarNivel = (idx, guardar) => {
+    const info = PROFUNDIDAD_INFO[idx];
+    estado.profundidad = info.nivel;
+    label.textContent = info.label;
+    desc.textContent = info.desc;
+    popover.querySelectorAll('.vc-profundidad-niveles span').forEach((s) => {
+      s.classList.toggle('activo', s.dataset.nivel === info.nivel);
+    });
+    btn.classList.toggle('activo', info.nivel !== 'medium');
+    actualizarTagsComposer();
+    if (guardar) localStorage.setItem('vc_profundidad', info.nivel);
+  };
+
+  // Restaurar el nivel elegido la última vez
+  const guardado = localStorage.getItem('vc_profundidad');
+  const idxGuardado = Math.max(0, PROFUNDIDAD_INFO.findIndex((p) => p.nivel === guardado));
+  slider.value = idxGuardado;
+  aplicarNivel(idxGuardado, false);
+
+  btn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    popover.classList.toggle('oculto');
+  });
+  document.addEventListener('click', (ev) => {
+    if (!popover.classList.contains('oculto') && !popover.contains(ev.target) && ev.target !== btn) {
+      popover.classList.add('oculto');
+    }
+  });
+  slider.addEventListener('input', () => aplicarNivel(parseInt(slider.value, 10), true));
+
+  // Click directo en el nombre del nivel también lo selecciona
+  popover.querySelectorAll('.vc-profundidad-niveles span').forEach((s, idx) => {
+    s.style.cursor = 'pointer';
+    s.addEventListener('click', () => {
+      slider.value = idx;
+      aplicarNivel(idx, true);
+    });
+  });
+}
+
 function configurarChatInput() {
   const input = document.getElementById('vcChatInput');
   input.addEventListener('keydown', (e) => {
@@ -980,6 +1088,7 @@ async function enviarChat() {
       mensaje: texto, 
       modelo: estado.modeloSeleccionado,
       modoDesign: estado.modoDesign,
+      profundidad: estado.profundidad,
     };
     
     if (estado.imagenPendiente) {

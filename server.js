@@ -212,6 +212,21 @@ const codeRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limit específico para el modo "ultracode" de Verbo Code: usa más
+// max_tokens, más continuaciones automáticas y prompts más pesados, así que
+// consume bastante más que un mensaje normal — un límite más chico evita que
+// alguien lo deje en loop y se coma todo el presupuesto de la cascada de
+// modelos gratis para el resto de los usuarios. Con `skip` no afecta en nada
+// a los mensajes que no piden ultracode (la gran mayoría).
+const ultracodeRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutos
+  max: 6, // Máximo 6 mensajes en modo ultracode cada 10 minutos
+  message: { error: 'Alcanzaste el límite de mensajes en modo Ultracode (consume mucho más). Esperá unos minutos o probá con Extendido/Medium.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.body?.profundidad !== 'ultracode',
+});
+
 // Aplicar rate limiting global
 app.use(globalRateLimit);
 
@@ -1371,7 +1386,7 @@ app.use(helmet({
         'https://*.adtrafficquality.google',
       ],
       scriptSrcAttr: ["'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdn.jsdelivr.net'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
       connectSrc: ["'self'", 'https:'],
@@ -4671,6 +4686,81 @@ function ejecutarComandoProyecto(comando, proyecto) {
     return { manejado: true, salida: `Escrito en: ${nombre}`, modifico: true };
   }
 
+  if (cmd === 'cp' || cmd === 'copy') {
+    const origen = normalizarRutaProyecto(args[0]);
+    const destino = normalizarRutaProyecto(args[1]);
+    if (!origen || !destino) return { manejado: true, error: 'Uso: cp <origen> <destino>' };
+    if (!(origen in (proyecto.archivos || {}))) return { manejado: true, error: `No existe: ${origen}` };
+    proyecto.archivos[destino] = proyecto.archivos[origen];
+    return { manejado: true, salida: `Copiado: ${origen} → ${destino}`, modifico: true };
+  }
+
+  if (cmd === 'grep') {
+    // grep [-i] [-n] "patron" [archivo]  — si no se pasa archivo, busca en todos.
+    const flags = args.filter((a) => a.startsWith('-')).join('');
+    const resto = args.filter((a) => !a.startsWith('-'));
+    const patron = resto[0];
+    if (!patron) return { manejado: true, error: 'Uso: grep [-i] [-n] "patron" [archivo]' };
+    let re;
+    try { re = new RegExp(patron, flags.includes('i') ? 'i' : ''); } catch { return { manejado: true, error: 'Patrón inválido.' }; }
+    const archivoFiltro = resto[1] ? normalizarRutaProyecto(resto[1]) : null;
+    const objetivo = archivoFiltro ? [archivoFiltro] : listarArchivos();
+    const resultados = [];
+    for (const nombre of objetivo) {
+      const contenido = proyecto.archivos[nombre];
+      if (contenido === undefined) continue;
+      contenido.split('\n').forEach((linea, i) => {
+        if (re.test(linea)) resultados.push(`${nombre}${flags.includes('n') ? `:${i + 1}` : ''}: ${linea.trim().slice(0, 200)}`);
+      });
+    }
+    return { manejado: true, salida: resultados.length ? resultados.slice(0, 200).join('\n') : '(sin coincidencias)' };
+  }
+
+  if (cmd === 'find') {
+    // find [patron] — busca por nombre de archivo (substring o regex simple).
+    const patron = args[0] || '';
+    const archivos = listarArchivos().filter((n) => !patron || n.toLowerCase().includes(patron.toLowerCase()));
+    return { manejado: true, salida: archivos.length ? archivos.join('\n') : '(sin coincidencias)' };
+  }
+
+  if (cmd === 'wc') {
+    const nombre = normalizarRutaProyecto(args.filter((a) => !a.startsWith('-'))[0]);
+    if (!nombre) return { manejado: true, error: 'Uso: wc <archivo>' };
+    if (!(nombre in (proyecto.archivos || {}))) return { manejado: true, error: `No existe: ${nombre}` };
+    const contenido = proyecto.archivos[nombre] || '';
+    const lineas = contenido.split('\n').length;
+    const palabras = contenido.split(/\s+/).filter(Boolean).length;
+    return { manejado: true, salida: `${lineas} líneas, ${palabras} palabras, ${contenido.length} caracteres — ${nombre}` };
+  }
+
+  if (cmd === 'head' || cmd === 'tail') {
+    const nArg = args.find((a) => /^-?\d+$/.test(a));
+    const n = nArg ? Math.abs(parseInt(nArg, 10)) : 10;
+    const nombre = normalizarRutaProyecto(args.filter((a) => !/^-?\d+$/.test(a))[0]);
+    if (!nombre) return { manejado: true, error: `Uso: ${cmd} [-n] <archivo>` };
+    if (!(nombre in (proyecto.archivos || {}))) return { manejado: true, error: `No existe: ${nombre}` };
+    const lineas = (proyecto.archivos[nombre] || '').split('\n');
+    const recorte = cmd === 'head' ? lineas.slice(0, n) : lineas.slice(-n);
+    return { manejado: true, salida: recorte.join('\n') };
+  }
+
+  if (cmd === 'tree') {
+    const archivos = listarArchivos();
+    if (!archivos.length) return { manejado: true, salida: '(el proyecto no tiene archivos todavia)' };
+    return { manejado: true, salida: archivos.map((n) => `├─ ${n}`).join('\n') };
+  }
+
+  if (cmd === 'du' || cmd === 'size') {
+    const archivos = listarArchivos();
+    const total = archivos.reduce((acc, n) => acc + (proyecto.archivos[n] || '').length, 0);
+    const detalle = archivos.map((n) => `${(proyecto.archivos[n] || '').length}B\t${n}`).join('\n');
+    return { manejado: true, salida: `${detalle}\n---\nTotal: ${(total / 1024).toFixed(1)} KB en ${archivos.length} archivo(s)` };
+  }
+
+  if (cmd === 'clear' || cmd === 'cls') {
+    return { manejado: true, salida: '__CLEAR__' };
+  }
+
   return { manejado: false };
 }
 
@@ -4725,7 +4815,7 @@ app.post('/api/verbocode/execute', codeRateLimit, requiereAdminVerboCode, async 
 // ============================================================
 // API: chat con IA (con herramientas)
 // ============================================================
-app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => {
+app.post('/api/verbocode/chat/:id', ultracodeRateLimit, requiereAdminVerboCode, async (req, res) => {
   const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
   if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
 
@@ -4733,6 +4823,8 @@ app.post('/api/verbocode/chat/:id', requiereAdminVerboCode, async (req, res) => 
   const imagen = req.body?.imagen || null;
   const nombreImagen = req.body?.nombreImagen || null;
   const modoDesign = !!req.body?.modoDesign; // activado con el botón "Design (Canvas 3D)" del chat
+  const NIVELES_PROFUNDIDAD = ['medium', 'avanzado', 'extendido', 'ultracode'];
+  const profundidad = NIVELES_PROFUNDIDAD.includes(req.body?.profundidad) ? req.body.profundidad : 'medium';
 
   if (!mensaje && !imagen) return res.status(400).json({ error: 'Falta el mensaje o imagen.' });
 
@@ -4787,7 +4879,7 @@ Elimina un archivo.
 Instala un paquete npm. Crea/actualiza package.json. Se carga desde esm.sh CDN.
 
 [[RUN::comando]]
-Ejecuta un comando de terminal REAL vos misma (no hace falta que el usuario lo tipee): comandos de archivos (ls, cat, touch, rm, mv, echo >, mkdir) se aplican directo sobre los archivos reales del proyecto; cualquier otro comando (node script.js, python script.py, npm run algo, etc) corre en el sandbox de ejecución. Se ve en vivo en la terminal del usuario mientras corre. Usalo para verificar que algo funciona, correr un script de build, o cualquier tarea de terminal que el usuario te pida sin tener que decirle "corré esto vos".
+Ejecutá un comando de terminal REAL vos misma — literalmente corre, no hace falta que el usuario lo tipee ni que vos le digas "corré esto en la terminal". Comandos de archivos (ls, cat, touch, rm, mv, echo >, mkdir) se aplican directo sobre los archivos reales del proyecto; cualquier otro comando (node script.js, python script.py, npm run algo, etc) corre en el sandbox de ejecución. El usuario lo ve en vivo en su terminal mientras corre. USÁ ESTO PROACTIVAMENTE, no lo menciones solamente: si el usuario pide instalar algo, verificar que un script funcione, correr tests, hacer un build, listar archivos, o cualquier tarea de terminal — ejecutala vos con [[RUN::...]] en la misma respuesta, en vez de explicarle qué comando debería correr él.
 
 [[TEST::lenguaje::codigo a ejecutar]]
 Ejecuta código y muestra el resultado. Lenguajes: python, javascript, java, c, cpp, go, rust, ruby, php, bash, sql.
@@ -4804,9 +4896,15 @@ Genera CÓDIGO REAL de Web Audio API (osciladores, envolventes ADSR, ruido filtr
 [[WEB::consulta corta]]
 Busca en internet.
 
-${skillsRelevantes(mensaje, modoDesign)}
+${skillsRelevantes(mensaje, modoDesign || profundidad === 'extendido' || profundidad === 'ultracode')}
 ${modoDesign ? `
 MODO DESIGN ACTIVADO (el usuario activó el botón de Canvas/Diseño 3D): priorizá el resultado VISUAL por sobre todo lo demás. Usá <canvas> (2D o three.js/WebGL si el pedido tiene onda 3D) en vez de HTML/CSS plano siempre que se pueda, cuidá la paleta de colores, la composición, la iluminación (si es 3D) y el "juice" (animaciones, transiciones, feedback visual). Si el usuario no fue específico, inclinate por la opción más vistosa dentro de lo razonable.
+` : ''}
+${profundidad === 'extendido' ? `
+NIVEL DE PROFUNDIDAD: EXTENDIDO. Dedicále más cuidado que a un pedido normal: pensá bien la arquitectura antes de escribir, cubrí casos borde razonables, agregá comentarios donde el código no sea obvio, y no te quedes corta en funcionalidad — si el pedido da para más de lo que pidió literalmente (ej. un juego con solo mecánica básica cuando podría tener power-ups, sonido, niveles), agregalo.
+` : ''}
+${profundidad === 'ultracode' ? `
+NIVEL DE PROFUNDIDAD: ULTRACODE (el máximo). Este es el modo más completo: tomate el trabajo de generar algo con el mayor nivel de detalle y pulido posible dentro de una sola respuesta — arquitectura prolija, manejo de errores, animaciones/transiciones cuidadas, canvas/three.js si aplica visualmente, y funcionalidad completa (no una versión recortada "para después"). Usá [[RUN::...]] para verificar que lo que generaste realmente funciona antes de darlo por terminado, si el proyecto lo permite. El usuario eligió explícitamente este nivel sabiendo que consume más, así que aprovechalo.
 ` : ''}
 REGLAS CRÍTICAS:
 
@@ -5022,7 +5120,9 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     // motor, mundo, física, render) y son donde más se corta la respuesta. Les damos más
     // margen de auto-continuación que a un pedido normal.
     const esPedidoDeJuego = /juego|game|minecraft|terraria|motor.{0,15}(3d|2d)|voxel|canvas.*(juego|game)|three\.js|webgl/i.test(mensaje);
-    const opcionesGeneracion = esPedidoDeJuego ? { maxContinuaciones: 4 } : {};
+    const opcionesGeneracion = { maxContinuaciones: esPedidoDeJuego ? 4 : 3 };
+    if (profundidad === 'extendido') opcionesGeneracion.maxContinuaciones = Math.max(opcionesGeneracion.maxContinuaciones, 5);
+    if (profundidad === 'ultracode') opcionesGeneracion.maxContinuaciones = Math.max(opcionesGeneracion.maxContinuaciones, 7);
 
     // 1. Cascada de OpenRouter free — TODOS los modelos la usan primero
     // Todo lo que pasa por Verbo Code ES codigo, asi que si el tier tiene una
