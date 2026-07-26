@@ -1041,6 +1041,11 @@ async function enviarChat() {
   const indicadorGenerando = document.getElementById('vcIndicadorGenerando');
   const texto = input.value.trim();
   if (!texto && !estado.imagenPendiente) return;
+  // Declarado acá afuera (no dentro del try) para que el catch pueda verlo
+  // y limpiar el contenido a medias si la generación se corta a mitad de
+  // camino — si quedaba declarado con const adentro del try, el catch ni
+  // siquiera podía referenciarlo.
+  let msgDiv = null;
 
   const rehabilitarInput = () => {
     try { input.disabled = false; } catch(e) {}
@@ -1127,7 +1132,7 @@ async function enviarChat() {
     // (no simulado) de un archivo grande que la IA está escribiendo ahora.
     let bloqueActivo = null;
 
-    const msgDiv = document.createElement('div');
+    msgDiv = document.createElement('div');
     msgDiv.className = 'vc-msg assistant';
     document.getElementById('vcChatMensajes').appendChild(msgDiv);
     scrollChatAbajo();
@@ -1450,8 +1455,20 @@ async function enviarChat() {
     if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
     const errorMsg = e.name === 'AbortError' ? 'Timeout: el servidor tardó demasiado.' : e.message;
     mostrarToast(errorMsg, 'error');
-    const msgError = { role: 'assistant', content: 'Error: ' + errorMsg + '\n\nIntentá de nuevo.', fecha: new Date().toISOString() };
-    renderMensaje(msgError);
+    // BUG REAL encontrado acá: si la generación fallaba a mitad de camino
+    // (después de ya haber recibido varios 'chunk' en vivo con texto crudo,
+    // tags [[FILE_CREATE::...]] incluidos), el msgDiv que tenía ese texto
+    // NUNCA se borraba ni se reemplazaba — se quedaba pegado en pantalla
+    // para siempre con el tag crudo y todo el código adentro, mientras se
+    // agregaba un mensaje de error APARTE (que además quedaba abajo, poco
+    // visible). Ahora el error reemplaza directamente el contenido del
+    // msgDiv que quedó a medias, en vez de dejarlo ahí y agregar uno nuevo.
+    if (msgDiv && msgDiv.parentNode) {
+      msgDiv.innerHTML = `<div class="vc-msg-error-inline">⚠ ${errorMsg}<br><span style="opacity:.75;font-size:12px">Se cortó la generación — probá pedirlo de nuevo, quizás con menos alcance de una.</span></div>`;
+    } else {
+      const msgError = { role: 'assistant', content: 'Error: ' + errorMsg + '\n\nIntentá de nuevo.', fecha: new Date().toISOString() };
+      renderMensaje(msgError);
+    }
   } finally {
     rehabilitarInput();
   }

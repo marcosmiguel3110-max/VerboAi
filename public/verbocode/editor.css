@@ -1450,3 +1450,15 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   0% { background-position: 0% 50%; }
   100% { background-position: 300% 50%; }
 }
+
+/* Reemplaza el contenido a medias de un mensaje cuando la generación se
+   corta a mitad de camino (ver el catch de enviarChat en editor.js). */
+.vc-msg-error-inline {
+  background: rgba(229, 100, 90, 0.1);
+  border: 1px solid rgba(229, 100, 90, 0.35);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #e5645a;
+  font-size: 13px;
+  line-height: 1.5;
+}

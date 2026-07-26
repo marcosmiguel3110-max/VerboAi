@@ -1393,6 +1393,12 @@ app.use(helmet({
       frameSrc: ['https://googleads.g.doubleclick.net', 'https://tpc.googlesyndication.com', 'https://*.google.com', 'https://*.adtrafficquality.google'],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
+      // Sin esto, el navegador usa script-src como fallback para los workers,
+      // y script-src no tiene "blob:" — eso bloqueaba los web workers de
+      // Monaco (los usa para el resaltado de sintaxis, autocompletado, etc)
+      // y lo obligaba a correr todo en el hilo principal ("might cause UI
+      // freezes", literal el warning que tira Monaco cuando esto pasa).
+      workerSrc: ["'self'", 'blob:'],
     },
   },
   // Sin esto, el embed de anuncios de Google puede quedar bloqueado.
@@ -5321,30 +5327,41 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         });
       }
     };
-    procesarArchivos('FILE_CREATE', 'file_create');
-    procesarArchivos('FILE_EDIT', 'file_edit');
+    // Cada bloque de procesamiento va con su propio try/catch: si UNO falla
+    // por lo que sea, no tiene que tirar abajo toda la respuesta y dejar al
+    // usuario viendo el texto crudo con los tags para siempre (que es
+    // exactamente lo que pasaba antes: una excepción acá arriba saltaba
+    // directo al catch de afuera, que nunca llega a mandar el evento 'done',
+    // así que el cliente se quedaba pegado mostrando el último 'chunk' crudo
+    // que había recibido).
+    try { procesarArchivos('FILE_CREATE', 'file_create'); } catch (e) { console.error('[verbocode] error procesando FILE_CREATE:', e.message); }
+    try { procesarArchivos('FILE_EDIT', 'file_edit'); } catch (e) { console.error('[verbocode] error procesando FILE_EDIT:', e.message); }
 
     // Procesar LINE_EDIT (cambiar una línea específica) — mismo problema y misma solución.
-    for (const bloque of extraerBloquesConCierre(textoRespuesta, 'LINE_EDIT')) {
-      const partes = bloque.camposCrudo.split('::');
-      if (partes.length < 3) continue;
-      const nombre = partes[0].trim();
-      const numLinea = parseInt(partes[1].trim(), 10);
-      const nuevoContenido = partes.slice(2).join('::').replace(/\n$/, '');
-      spansAEliminar.push([bloque.startIndex, bloque.endIndex]);
-      if (proyecto.archivos[nombre] && numLinea > 0) {
-        const lineas = proyecto.archivos[nombre].split('\n');
-        if (numLinea <= lineas.length) {
-          lineas[numLinea - 1] = nuevoContenido;
-          proyecto.archivos[nombre] = lineas.join('\n');
-          proyectoActualizado = true;
-          acciones.push({
-            tipo: 'file_edit',
-            nombre,
-            descripcion: `Línea ${numLinea} editada en: ${nombre}`,
-          });
+    try {
+      for (const bloque of extraerBloquesConCierre(textoRespuesta, 'LINE_EDIT')) {
+        const partes = bloque.camposCrudo.split('::');
+        if (partes.length < 3) continue;
+        const nombre = partes[0].trim();
+        const numLinea = parseInt(partes[1].trim(), 10);
+        const nuevoContenido = partes.slice(2).join('::').replace(/\n$/, '');
+        spansAEliminar.push([bloque.startIndex, bloque.endIndex]);
+        if (proyecto.archivos[nombre] && numLinea > 0) {
+          const lineas = proyecto.archivos[nombre].split('\n');
+          if (numLinea <= lineas.length) {
+            lineas[numLinea - 1] = nuevoContenido;
+            proyecto.archivos[nombre] = lineas.join('\n');
+            proyectoActualizado = true;
+            acciones.push({
+              tipo: 'file_edit',
+              nombre,
+              descripcion: `Línea ${numLinea} editada en: ${nombre}`,
+            });
+          }
         }
       }
+    } catch (e) {
+      console.error('[verbocode] error procesando LINE_EDIT:', e.message);
     }
 
     // Procesar FILE_DELETE
@@ -5411,41 +5428,45 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     // "corriendo...") y otro DESPUÉS con la salida real, apenas termina.
     const reRun = /\[\[RUN::([\s\S]*?)\]\]/g;
     let matchRun;
-    while ((matchRun = reRun.exec(textoRespuesta)) !== null) {
-      const comandoRun = matchRun[1].trim();
-      if (!comandoRun) continue;
-      enviarSSE({ type: 'terminal_run', comando: comandoRun });
-      let resultadoRun;
-      const subcomandos = comandoRun.split(/\s*(?:&&|;)\s*/).filter(Boolean);
-      const salidas = [];
-      let huboError = false;
-      let modifico = false;
-      let todosManejados = subcomandos.length > 0;
-      for (const sub of subcomandos) {
-        const r = ejecutarComandoProyecto(sub, proyecto);
-        if (!r.manejado) { todosManejados = false; break; }
-        if (r.modifico) modifico = true;
-        if (r.error) { huboError = true; salidas.push(`Error: ${r.error}`); }
-        else if (r.salida !== undefined) salidas.push(r.salida);
-      }
-      if (todosManejados) {
-        if (modifico) proyectoActualizado = true;
-        resultadoRun = { stdout: salidas.join('\n'), stderr: huboError ? salidas.filter((s) => s.startsWith('Error:')).join('\n') : '', exito: !huboError };
-      } else {
-        try {
-          const r = await ejecutarCodigoPiston('bash', comandoRun);
-          resultadoRun = { stdout: r.stdout || '', stderr: r.stderr || '', exito: !!r.exito, exitCode: r.exitCode };
-        } catch (e) {
-          resultadoRun = { stdout: '', stderr: e.message, exito: false };
+    try {
+      while ((matchRun = reRun.exec(textoRespuesta)) !== null) {
+        const comandoRun = matchRun[1].trim();
+        if (!comandoRun) continue;
+        enviarSSE({ type: 'terminal_run', comando: comandoRun });
+        let resultadoRun;
+        const subcomandos = comandoRun.split(/\s*(?:&&|;)\s*/).filter(Boolean);
+        const salidas = [];
+        let huboError = false;
+        let modifico = false;
+        let todosManejados = subcomandos.length > 0;
+        for (const sub of subcomandos) {
+          const r = ejecutarComandoProyecto(sub, proyecto);
+          if (!r.manejado) { todosManejados = false; break; }
+          if (r.modifico) modifico = true;
+          if (r.error) { huboError = true; salidas.push(`Error: ${r.error}`); }
+          else if (r.salida !== undefined) salidas.push(r.salida);
         }
+        if (todosManejados) {
+          if (modifico) proyectoActualizado = true;
+          resultadoRun = { stdout: salidas.join('\n'), stderr: huboError ? salidas.filter((s) => s.startsWith('Error:')).join('\n') : '', exito: !huboError };
+        } else {
+          try {
+            const r = await ejecutarCodigoPiston('bash', comandoRun);
+            resultadoRun = { stdout: r.stdout || '', stderr: r.stderr || '', exito: !!r.exito, exitCode: r.exitCode };
+          } catch (e) {
+            resultadoRun = { stdout: '', stderr: e.message, exito: false };
+          }
+        }
+        enviarSSE({ type: 'terminal_result', comando: comandoRun, resultado: resultadoRun });
+        acciones.push({
+          tipo: 'run',
+          comando: comandoRun,
+          resultado: resultadoRun,
+          descripcion: `Comando ejecutado: ${comandoRun}${resultadoRun.exito ? '' : ' (con errores)'}`,
+        });
       }
-      enviarSSE({ type: 'terminal_result', comando: comandoRun, resultado: resultadoRun });
-      acciones.push({
-        tipo: 'run',
-        comando: comandoRun,
-        resultado: resultadoRun,
-        descripcion: `Comando ejecutado: ${comandoRun}${resultadoRun.exito ? '' : ' (con errores)'}`,
-      });
+    } catch (e) {
+      console.error('[verbocode] error procesando RUN:', e.message);
     }
 
     // Procesar NPM_INSTALL (crear/actualizar package.json)
@@ -5586,6 +5607,22 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       .replace(reTest, '')
       .replace(/\[\[RUN::([\s\S]*?)\]\]/g, '')
       .trim();
+
+    // Red de seguridad final: pase lo que pase con el parsing de arriba (un
+    // caso borde no contemplado, un bug futuro, lo que sea), el usuario
+    // NUNCA debería ver un tag [[ALGO::...]] crudo en el chat — mata la
+    // experiencia y además puede volcar código entero como texto plano (fue
+    // exactamente el bug reportado: [[TEXTURE::...]] y [[FILE_CREATE::...]]
+    // apareciendo tal cual). Esto es un "mata todo" best-effort: no intenta
+    // aplicar el contenido a ningún archivo (para eso está la lógica de
+    // arriba), solo evita que se vea texto con pinta de tag sin procesar.
+    if (/\[\[[A-Z_]+::/.test(textoLimpio)) {
+      console.warn('[verbocode] quedó un tag sin procesar en textoLimpio, aplicando limpieza de emergencia. Muestra:', textoLimpio.slice(0, 200));
+      textoLimpio = textoLimpio.replace(/\[\[[A-Z_]+::[\s\S]*?\]\]/g, '[archivo generado]').trim();
+      // Si después de la limpieza de emergencia no quedó nada, mejor un
+      // mensaje explícito que una burbuja vacía.
+      if (!textoLimpio) textoLimpio = 'Listo — revisá los archivos del proyecto, algo salió raro mostrando el resumen del cambio.';
+    }
 
     // Guardar el mensaje del usuario + respuesta en el chat del proyecto
     if (!proyecto.chat) proyecto.chat = [];
