@@ -957,38 +957,49 @@ function actualizarTagsComposer() {
 }
 
 const PROFUNDIDAD_INFO = [
-  { nivel: 'medium', label: 'Medium', desc: 'Respuestas normales, rápidas.' },
-  { nivel: 'avanzado', label: 'Avanzado', desc: 'Un poco más de cuidado en el código, sin cambiar mucho el tiempo de respuesta.' },
-  { nivel: 'extendido', label: 'Extendido', desc: 'Más profundidad: arquitectura pensada, casos borde, más funcionalidad de la pedida literalmente.' },
-  { nivel: 'ultracode', label: 'Ultracode', desc: 'El máximo nivel: código lo más completo y pulido posible, verifica lo que genera con la terminal. Consume mucho más — tiene su propio límite de uso.' },
+  { nivel: 'medium', label: 'Medium', desc: 'Respuestas normales, rápidas.', desde: 0 },
+  { nivel: 'avanzado', label: 'Avanzado', desc: 'Un poco más de cuidado en el código, sin cambiar mucho el tiempo de respuesta.', desde: 25 },
+  { nivel: 'extendido', label: 'Extendido', desc: 'Más profundidad: arquitectura pensada, casos borde, más funcionalidad de la pedida literalmente.', desde: 50 },
+  { nivel: 'ultracode', label: 'Ultracode', desc: 'El máximo nivel: código lo más completo y pulido posible, verifica lo que genera con la terminal. Consume mucho más — tiene su propio límite de uso.', desde: 75 },
 ];
+
+function nivelDesdePosicion(pos) {
+  let elegido = PROFUNDIDAD_INFO[0];
+  for (const info of PROFUNDIDAD_INFO) {
+    if (pos >= info.desde) elegido = info;
+  }
+  return elegido;
+}
 
 function configurarSelectorProfundidad() {
   const btn = document.getElementById('btnProfundidad');
   const popover = document.getElementById('vcProfundidadPopover');
   const slider = document.getElementById('vcProfundidadSlider');
+  const fill = document.getElementById('vcProfundidadTrackFill');
   const label = document.getElementById('vcProfundidadLabel');
+  const headerNivel = document.getElementById('vcProfundidadHeaderNivel');
   const desc = document.getElementById('vcProfundidadDesc');
   if (!btn || !popover || !slider) return;
 
-  const aplicarNivel = (idx, guardar) => {
-    const info = PROFUNDIDAD_INFO[idx];
-    estado.profundidad = info.nivel;
-    label.textContent = info.label;
-    desc.textContent = info.desc;
-    popover.querySelectorAll('.vc-profundidad-niveles span').forEach((s) => {
-      s.classList.toggle('activo', s.dataset.nivel === info.nivel);
-    });
-    btn.classList.toggle('activo', info.nivel !== 'medium');
-    actualizarTagsComposer();
-    if (guardar) localStorage.setItem('vc_profundidad', info.nivel);
+  const aplicarPosicion = (pos, guardar) => {
+    fill.style.width = pos + '%';
+    const info = nivelDesdePosicion(pos);
+    if (info.nivel !== estado.profundidad) {
+      estado.profundidad = info.nivel;
+      label.textContent = info.label;
+      headerNivel.textContent = info.label;
+      desc.textContent = info.desc;
+      btn.classList.toggle('activo', info.nivel !== 'medium');
+      actualizarTagsComposer();
+    }
+    if (guardar) localStorage.setItem('vc_profundidad_pos', pos);
   };
 
-  // Restaurar el nivel elegido la última vez
-  const guardado = localStorage.getItem('vc_profundidad');
-  const idxGuardado = Math.max(0, PROFUNDIDAD_INFO.findIndex((p) => p.nivel === guardado));
-  slider.value = idxGuardado;
-  aplicarNivel(idxGuardado, false);
+  // Restaurar la posición elegida la última vez (posición exacta del
+  // slider, no solo el nivel, para que se sienta igual de "suave" al volver).
+  const posGuardada = parseInt(localStorage.getItem('vc_profundidad_pos') || '0', 10);
+  slider.value = Number.isFinite(posGuardada) ? posGuardada : 0;
+  aplicarPosicion(parseInt(slider.value, 10), false);
 
   btn.addEventListener('click', (ev) => {
     ev.stopPropagation();
@@ -999,16 +1010,10 @@ function configurarSelectorProfundidad() {
       popover.classList.add('oculto');
     }
   });
-  slider.addEventListener('input', () => aplicarNivel(parseInt(slider.value, 10), true));
-
-  // Click directo en el nombre del nivel también lo selecciona
-  popover.querySelectorAll('.vc-profundidad-niveles span').forEach((s, idx) => {
-    s.style.cursor = 'pointer';
-    s.addEventListener('click', () => {
-      slider.value = idx;
-      aplicarNivel(idx, true);
-    });
-  });
+  // 'input' dispara en cada frame del arrastre (no solo al soltar), por eso
+  // el relleno de puntitos se mueve pegado al thumb — nada de saltos ni pasos.
+  slider.addEventListener('input', () => aplicarPosicion(parseInt(slider.value, 10), false));
+  slider.addEventListener('change', () => aplicarPosicion(parseInt(slider.value, 10), true));
 }
 
 function configurarChatInput() {

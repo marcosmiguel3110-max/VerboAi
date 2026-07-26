@@ -1289,32 +1289,125 @@ body.vc-resizing-activo iframe { pointer-events: none; }
 }
 
 .vc-profundidad-popover-header {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--vc-text);
-  margin-bottom: 10px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vc-profundidad-header-nivel {
+  color: var(--vc-accent);
+}
+
+.vc-profundidad-info {
+  margin-left: auto;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--vc-border);
+  color: var(--vc-text-secondary);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+  flex-shrink: 0;
+}
+
+/* Track granulado: un campo de puntitos (textura) + una capa que lo va
+   "revelando" con más brillo desde la izquierda hasta la posición actual —
+   el mismo lenguaje visual que un selector de "esfuerzo" tipo Faster/Smarter.
+   El <input type=range> real queda invisible encima, solo se usa su thumb
+   (así el arrastre es 100% nativo y suave, no hay lag ni snapping propio). */
+.vc-profundidad-track-wrap {
+  position: relative;
+  height: 28px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.vc-profundidad-track-dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 20px;
+  border-radius: 10px;
+  background-color: var(--vc-bg);
+  background-image: radial-gradient(circle, var(--vc-border) 1px, transparent 1.2px);
+  background-size: 6px 6px;
+  overflow: hidden;
+}
+
+.vc-profundidad-track-fill {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 0%;
+  border-radius: 10px;
+  background-color: var(--vc-bg);
+  background-image: radial-gradient(circle, var(--vc-accent) 1.3px, transparent 1.5px);
+  background-size: 6px 6px;
+  pointer-events: none;
+  transition: width 0.05s linear;
 }
 
 .vc-profundidad-slider {
+  position: relative;
+  z-index: 2;
   width: 100%;
-  accent-color: var(--vc-accent);
-  margin-bottom: 8px;
+  height: 28px;
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Thumb: círculo blanco grande y suave, igual que la referencia */
+.vc-profundidad-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  cursor: grab;
+  margin-top: -3px;
+  transition: transform 0.1s ease;
+}
+.vc-profundidad-slider::-webkit-slider-thumb:active {
+  transform: scale(1.08);
+  cursor: grabbing;
+}
+.vc-profundidad-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  cursor: grab;
+}
+.vc-profundidad-slider::-webkit-slider-runnable-track,
+.vc-profundidad-slider::-moz-range-track {
+  background: transparent;
+  height: 20px;
 }
 
 .vc-profundidad-niveles {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 10.5px;
+  font-weight: 600;
   color: var(--vc-text-secondary);
-  margin-bottom: 10px;
-}
-
-.vc-profundidad-niveles span {
-  transition: color 0.15s, font-weight 0.15s;
-}
-.vc-profundidad-niveles span.activo {
-  color: var(--vc-accent);
-  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: 0.02em;
 }
 
 .vc-profundidad-desc {

@@ -2085,7 +2085,13 @@ html.tema-night .cuaderno-header button:hover { background: var(--hover-noche); 
   animation: aparecer 0.25s ease;
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(0,0,0,0.06);
-  transition: max-height 0.35s ease, opacity 0.35s ease;
+  /* max-height necesita un valor numérico de base (no "none") para que la
+     transición hacia 0 al colapsar pueda animarse de verdad — sin esto el
+     navegador no tiene de dónde interpolar y el cambio se aplica de golpe,
+     "aplastando" la card en vez de colapsarla suave. 400px es de sobra para
+     el contenido real de esta card. */
+  max-height: 400px;
+  transition: max-height 0.35s ease, opacity 0.35s ease, margin 0.35s ease, border-width 0.35s ease;
 }
 
 .investigando-topbar {
@@ -3091,6 +3097,22 @@ html.tema-night .selector-modelo-header .opcion-modelo-desc { color: #999 !impor
   margin: 8px 0;
   max-width: 320px;
   font-size: 13px;
+  overflow: hidden;
+  animation: aparecer 0.25s ease;
+  /* Mismo criterio que .frame-investigando: max-height necesita un valor
+     numérico de base para poder animar el colapso al cerrarse, si no el
+     cambio se aplica de golpe en vez de transicionar suave. */
+  max-height: 260px;
+  transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease, padding 0.3s ease, border-width 0.3s ease;
+}
+
+.thinking-lista.thinking-colapsado {
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
 }
 
 .thinking-header {

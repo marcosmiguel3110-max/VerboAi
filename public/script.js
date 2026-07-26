@@ -2278,7 +2278,15 @@ elForm.addEventListener('submit', async (ev) => {
   const finalizarThinking = () => {
     if (intervaloThinking) { clearInterval(intervaloThinking); intervaloThinking = null; }
     if (intervaloWebs) { clearInterval(intervaloWebs); intervaloWebs = null; }
-    if (thinkingDiv && thinkingDiv.parentNode) { thinkingDiv.remove(); }
+    if (thinkingDiv && thinkingDiv.parentNode) {
+      // Antes esto era thinkingDiv.remove() directo: desaparecía de golpe,
+      // sin ninguna transición — se veía como si la card se "aplastara" en
+      // vez de cerrarse suave. Ahora colapsa con la misma animación que la
+      // card de "Investigando" y recién se saca del DOM cuando terminó.
+      const divARemover = thinkingDiv;
+      divARemover.classList.add('thinking-colapsado');
+      setTimeout(() => { if (divARemover.parentNode) divARemover.remove(); }, 320);
+    }
     thinkingDiv = null;
   };
 

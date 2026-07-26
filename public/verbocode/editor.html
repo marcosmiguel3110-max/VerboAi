@@ -34,13 +34,18 @@
           <span id="vcProfundidadLabel">Medium</span>
         </button>
         <div id="vcProfundidadPopover" class="vc-profundidad-popover oculto">
-          <div class="vc-profundidad-popover-header">Profundidad del código</div>
-          <input type="range" id="vcProfundidadSlider" class="vc-profundidad-slider" min="0" max="3" step="1" value="0">
+          <div class="vc-profundidad-popover-header">
+            Effort <span id="vcProfundidadHeaderNivel" class="vc-profundidad-header-nivel">Medium</span>
+            <span class="vc-profundidad-info" title="Cuánto se toma la IA para pensar y escribir el código: más esfuerzo = respuestas más completas pero más lentas.">?</span>
+          </div>
+          <div class="vc-profundidad-track-wrap">
+            <div class="vc-profundidad-track-dots"></div>
+            <div id="vcProfundidadTrackFill" class="vc-profundidad-track-fill"></div>
+            <input type="range" id="vcProfundidadSlider" class="vc-profundidad-slider" min="0" max="100" step="1" value="0">
+          </div>
           <div class="vc-profundidad-niveles">
-            <span data-nivel="medium">Medium</span>
-            <span data-nivel="avanzado">Avanzado</span>
-            <span data-nivel="extendido">Extendido</span>
-            <span data-nivel="ultracode">Ultracode</span>
+            <span>Faster</span>
+            <span>Smarter</span>
           </div>
           <p id="vcProfundidadDesc" class="vc-profundidad-desc">Respuestas normales, rápidas.</p>
         </div>
