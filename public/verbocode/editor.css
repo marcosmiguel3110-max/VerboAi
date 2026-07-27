@@ -1469,7 +1469,7 @@ body.vc-resizing-activo iframe { pointer-events: none; }
    tipo resumen de commit, en vez de una card larga y separada por cada
    cosa. Formato: icono + "Creó/Editó archivo.ext +N -M", termina en "Listo".
    ============================================================ */
-.vc-plan-card {
+.vc-actions-card {
   align-self: flex-start;
   width: min(480px, 92%);
   background: var(--vc-bg-tertiary);
@@ -1479,7 +1479,7 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   overflow: hidden;
 }
 
-.vc-plan-header {
+.vc-actions-header {
   width: 100%;
   display: flex;
   align-items: center;
@@ -1495,19 +1495,19 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   text-align: left;
 }
 
-.vc-plan-chevron {
+.vc-actions-chevron {
   flex-shrink: 0;
   transition: transform 0.2s ease;
 }
-.vc-plan-card.vc-plan-abierto .vc-plan-chevron {
+.vc-actions-card.vc-actions-abierto .vc-actions-chevron {
   transform: rotate(90deg);
 }
 
-.vc-plan-titulo {
+.vc-actions-titulo {
   color: var(--vc-text);
 }
 
-.vc-plan-body {
+.vc-actions-body {
   max-height: 0;
   overflow: hidden;
   transition: max-height 0.25s ease;
@@ -1516,13 +1516,13 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   border-top: 1px solid transparent;
 }
 
-.vc-plan-card.vc-plan-abierto .vc-plan-body {
+.vc-actions-card.vc-actions-abierto .vc-actions-body {
   max-height: 600px;
   overflow-y: auto;
   border-top-color: var(--vc-border);
 }
 
-.vc-plan-row {
+.vc-actions-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1532,15 +1532,15 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   color: var(--vc-text-secondary);
   border-bottom: 1px solid var(--vc-border);
 }
-.vc-plan-row:last-child {
+.vc-actions-row:last-child {
   border-bottom: none;
 }
-.vc-plan-row svg {
+.vc-actions-row svg {
   flex-shrink: 0;
   color: var(--vc-accent);
 }
 
-.vc-plan-desc {
+.vc-actions-desc {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1549,7 +1549,7 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   gap: 6px;
 }
 
-.vc-plan-file {
+.vc-actions-file {
   color: var(--vc-text);
   background: var(--vc-bg-secondary);
   padding: 1px 6px;
@@ -1557,27 +1557,27 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   font-size: 11px;
 }
 
-.vc-plan-stats {
+.vc-actions-stats {
   display: inline-flex;
   gap: 6px;
   font-size: 11px;
   font-weight: 700;
   flex-shrink: 0;
 }
-.vc-plan-add { color: #4a9a5c; }
-.vc-plan-del { color: #e5645a; }
+.vc-actions-add { color: #4a9a5c; }
+.vc-actions-del { color: #e5645a; }
 
-.vc-plan-row-listo {
+.vc-actions-row-listo {
   color: #4a9a5c;
   font-weight: 600;
 }
 
-.vc-plan-row-incompleto {
+.vc-actions-row-incompleto {
   color: #e6b84f;
 }
-.vc-plan-row-incompleto svg { color: #e6b84f; }
+.vc-actions-row-incompleto svg { color: #e6b84f; }
 
-.vc-plan-output {
+.vc-actions-output {
   margin: 0 12px 8px;
   padding: 8px 10px;
   background: var(--vc-bg);

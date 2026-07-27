@@ -1102,7 +1102,7 @@ async function enviarChat() {
   const invViejo = document.getElementById('investigandoIndicator');
   if (invViejo && invViejo.parentNode) invViejo.remove();
 
-  const thinkingEl = document.createElement('div');
+  let thinkingEl = document.createElement('div');
   thinkingEl.className = 'vc-msg-thinking';
   thinkingEl.id = 'thinkingIndicator';
   thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> Creando plan de acción...';
@@ -1194,7 +1194,21 @@ async function enviarChat() {
             planPre.textContent = planTexto.slice(0, planIdx);
             scrollChatAbajo();
           }, 8);
+          // Después del plan viene la parte que más tarda (la generación real
+          // del código, texturas, etc) — antes acá se borraba el indicador de
+          // "pensando" y no quedaba NINGÚN feedback visual hasta que llegara
+          // contenido real, así que en generaciones largas (sobre todo
+          // Ultracode con texturas) la pantalla se veía completamente
+          // congelada durante ese tramo, como si se hubiera colgado. Ahora
+          // se vuelve a mostrar un indicador (se saca solo apenas aparece
+          // contenido de verdad, más abajo en 'chunk'/'action').
+          thinkingEl = document.createElement('div');
+          thinkingEl.className = 'vc-msg-thinking';
+          thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> Desarrollando código...';
+          document.getElementById('vcChatMensajes').appendChild(thinkingEl);
+          scrollChatAbajo();
         } else if (evt.type === 'chunk') {
+          if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
           textoRespuesta += evt.text;
 
           // Si estamos escribiendo un archivo grande, mostrar "Compactando"
@@ -1493,9 +1507,9 @@ async function enviarChat() {
     // sin terminar nunca), sacarla del limbo en vez de dejarla girando para
     // siempre.
     if (accionesGroupEl && accionesGroupEl.parentNode) {
-      const titulo = accionesGroupEl.querySelector('.vc-plan-titulo');
+      const titulo = accionesGroupEl.querySelector('.vc-actions-titulo');
       if (titulo) titulo.textContent = (titulo.textContent || '') + ' (cortado)';
-      accionesGroupEl.classList.remove('vc-plan-abierto');
+      accionesGroupEl.classList.remove('vc-actions-abierto');
     }
     accionesGroupEl = null;
   } finally {
@@ -1604,19 +1618,19 @@ const ICONO_ACCION_DEFAULT = '<svg viewBox="0 0 24 24" width="13" height="13" fi
 function crearGrupoAcciones() {
   const cont = document.getElementById('vcChatMensajes');
   const card = document.createElement('div');
-  card.className = 'vc-plan-card';
+  card.className = 'vc-actions-card';
   card.innerHTML = `
-    <button type="button" class="vc-plan-header">
-      <svg class="vc-plan-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    <button type="button" class="vc-actions-header">
+      <svg class="vc-actions-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
       <div class="vc-spinner" style="width:12px;height:12px;border-width:2px;"></div>
-      <span class="vc-plan-titulo">Trabajando...</span>
+      <span class="vc-actions-titulo">Trabajando...</span>
     </button>
-    <div class="vc-plan-body"></div>
+    <div class="vc-actions-body"></div>
   `;
-  card.querySelector('.vc-plan-header').addEventListener('click', () => {
-    card.classList.toggle('vc-plan-abierto');
+  card.querySelector('.vc-actions-header').addEventListener('click', () => {
+    card.classList.toggle('vc-actions-abierto');
   });
-  card.classList.add('vc-plan-abierto'); // abierta mientras se genera, para ver el progreso en vivo
+  card.classList.add('vc-actions-abierto'); // abierta mientras se genera, para ver el progreso en vivo
   cont.appendChild(card);
   scrollChatAbajo();
   return card;
@@ -1624,25 +1638,25 @@ function crearGrupoAcciones() {
 
 function agregarAccionAlGrupo(accion) {
   if (!accionesGroupEl) accionesGroupEl = crearGrupoAcciones();
-  const body = accionesGroupEl.querySelector('.vc-plan-body');
+  const body = accionesGroupEl.querySelector('.vc-actions-body');
   const icono = ICONOS_ACCION[accion.tipo] || ICONO_ACCION_DEFAULT;
 
   const row = document.createElement('div');
-  row.className = 'vc-plan-row' + (accion.incompleto ? ' vc-plan-row-incompleto' : '');
+  row.className = 'vc-actions-row' + (accion.incompleto ? ' vc-actions-row-incompleto' : '');
 
   let statsHtml = '';
   if ((accion.tipo === 'file_create' || accion.tipo === 'file_edit') && (accion.agregadas || accion.eliminadas)) {
-    statsHtml = `<span class="vc-plan-stats">${accion.agregadas ? `<span class="vc-plan-add">+${accion.agregadas}</span>` : ''}${accion.eliminadas ? `<span class="vc-plan-del">-${accion.eliminadas}</span>` : ''}</span>`;
+    statsHtml = `<span class="vc-actions-stats">${accion.agregadas ? `<span class="vc-actions-add">+${accion.agregadas}</span>` : ''}${accion.eliminadas ? `<span class="vc-actions-del">-${accion.eliminadas}</span>` : ''}</span>`;
   }
 
   let descHtml;
   if (accion.nombre && (accion.tipo === 'file_create' || accion.tipo === 'file_edit')) {
     const verbo = accion.tipo === 'file_create' ? 'Creó' : 'Editó';
-    descHtml = `${verbo} <span class="vc-plan-file">${accion.nombre}</span>${statsHtml}`;
+    descHtml = `${verbo} <span class="vc-actions-file">${accion.nombre}</span>${statsHtml}`;
   } else {
     descHtml = accion.descripcion;
   }
-  row.innerHTML = `${icono}<span class="vc-plan-desc">${descHtml}</span>`;
+  row.innerHTML = `${icono}<span class="vc-actions-desc">${descHtml}</span>`;
   body.appendChild(row);
 
   // Output real de comandos/tests, colapsado dentro de la misma fila
@@ -1651,27 +1665,27 @@ function agregarAccionAlGrupo(accion) {
     const output = r.stdout || (r.exito || !r.error ? '(sin output)' : '');
     const stderr = r.stderr || r.error ? `\n--- error ---\n${r.stderr || r.error}` : '';
     const pre = document.createElement('pre');
-    pre.className = 'vc-plan-output';
+    pre.className = 'vc-actions-output';
     pre.textContent = (output + stderr).trim();
     body.appendChild(pre);
   }
 
-  accionesGroupEl.querySelector('.vc-plan-titulo').textContent = `${body.children.length} cambio${body.children.length === 1 ? '' : 's'}`;
+  accionesGroupEl.querySelector('.vc-actions-titulo').textContent = `${body.children.length} cambio${body.children.length === 1 ? '' : 's'}`;
   scrollChatAbajo();
 }
 
 function finalizarGrupoAcciones() {
   if (!accionesGroupEl) return;
-  const header = accionesGroupEl.querySelector('.vc-plan-header');
+  const header = accionesGroupEl.querySelector('.vc-actions-header');
   const spinner = header.querySelector('.vc-spinner');
   if (spinner) spinner.outerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#4a9a5c" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>';
-  const body = accionesGroupEl.querySelector('.vc-plan-body');
+  const body = accionesGroupEl.querySelector('.vc-actions-body');
   const listo = document.createElement('div');
-  listo.className = 'vc-plan-row vc-plan-row-listo';
-  listo.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#4a9a5c" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg><span class="vc-plan-desc">Listo</span>';
+  listo.className = 'vc-actions-row vc-actions-row-listo';
+  listo.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#4a9a5c" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg><span class="vc-actions-desc">Listo</span>';
   body.appendChild(listo);
   // Colapsar sola después de un rato, igual que la card de "Investigando"
-  setTimeout(() => accionesGroupEl && accionesGroupEl.classList.remove('vc-plan-abierto'), 1800);
+  setTimeout(() => accionesGroupEl && accionesGroupEl.classList.remove('vc-actions-abierto'), 1800);
   accionesGroupEl = null;
 }
 
