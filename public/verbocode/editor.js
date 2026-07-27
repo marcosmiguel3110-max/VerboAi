@@ -1150,6 +1150,11 @@ async function enviarChat() {
     // Ver detectarBloqueEnCurso() / crearCardCompactando(): progreso REAL
     // (no simulado) de un archivo grande que la IA está escribiendo ahora.
     let bloqueActivo = null;
+    // Ver el handler de 'chunk' más abajo: hasta que aparezca el primer tag
+    // [[ALGO::, cualquier texto se considera narración y va al indicador de
+    // "pensando" en vez de al mensaje visible.
+    let vistoPrimerTag = false;
+    let inicioVisible = 0;
 
     msgDiv = document.createElement('div');
     msgDiv.className = 'vc-msg assistant';
@@ -1208,8 +1213,31 @@ async function enviarChat() {
           document.getElementById('vcChatMensajes').appendChild(thinkingEl);
           scrollChatAbajo();
         } else if (evt.type === 'chunk') {
-          if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
           textoRespuesta += evt.text;
+
+          // Antes de que aparezca el primer tag ([[FILE_CREATE::, [[TEXTURE::,
+          // etc), lo que venga es en general narración tipo "Now create the
+          // project files." — el modelo pensando en voz alta a pesar de la
+          // regla del prompt que le pide no hacerlo. En vez de mostrar eso
+          // como si fuera un mensaje real, se lo dejamos puesto en el
+          // indicador de "pensando" (mismo lugar que ya se usa para "Creando
+          // plan de acción..."/"Desarrollando código..."), y esa parte NUNCA
+          // llega a msgDiv — así lo poco que el modelo narre de más queda
+          // afuera del chat en vez de ensuciarlo.
+          if (!vistoPrimerTag) {
+            const idxTag = textoRespuesta.indexOf('[[');
+            if (idxTag === -1) {
+              const narracion = textoRespuesta.trim();
+              if (narracion && thinkingEl && thinkingEl.parentNode) {
+                thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> ' + narracion.slice(-140);
+              }
+              scrollChatAbajo();
+              continue;
+            }
+            vistoPrimerTag = true;
+            inicioVisible = idxTag;
+          }
+          if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
 
           // Si estamos escribiendo un archivo grande, mostrar "Compactando"
           // con progreso REAL (ver detectarBloqueEnCurso) en vez de volcar
@@ -1245,7 +1273,7 @@ async function enviarChat() {
           if (bloqueActivo) cortes.push(bloqueActivo.headerStart);
           if (thinkStart !== null) cortes.push(thinkStart);
           const ocultarDesde = cortes.length ? Math.min(...cortes) : textoRespuesta.length;
-          const textoParaMostrar = textoRespuesta.slice(0, ocultarDesde);
+          const textoParaMostrar = textoRespuesta.slice(inicioVisible, ocultarDesde);
 
           const ultimaLinea = textoParaMostrar.lastIndexOf('\n');
           if (ultimaLinea >= 0) {
