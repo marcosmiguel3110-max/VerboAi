@@ -1022,6 +1022,14 @@ function configurarSelectorProfundidad() {
   slider.addEventListener('change', () => aplicarPosicion(parseInt(slider.value, 10), true));
 }
 
+// Card colapsable que agrupa las acciones (archivos creados/editados,
+// comandos corridos, etc) de la respuesta que se está generando ahora. Tiene
+// que ser una variable de módulo (no local a enviarChat) porque las
+// funciones que la crean/actualizan/cierran están definidas afuera de esa
+// función — antes esto tiraba "accionesGroupEl is not defined" y rompía
+// CUALQUIER respuesta que tocara un archivo, a mitad de la generación.
+let accionesGroupEl = null;
+
 function configurarChatInput() {
   const input = document.getElementById('vcChatInput');
   input.addEventListener('keydown', (e) => {
@@ -1052,7 +1060,7 @@ async function enviarChat() {
   // camino — si quedaba declarado con const adentro del try, el catch ni
   // siquiera podía referenciarlo.
   let msgDiv = null;
-  let accionesGroupEl = null; // card colapsable que agrupa las acciones (archivos creados/editados, comandos, etc) de esta respuesta
+  accionesGroupEl = null; // por si un mensaje anterior falló antes de cerrar su propia card
 
   const rehabilitarInput = () => {
     try { input.disabled = false; } catch(e) {}
@@ -1481,6 +1489,15 @@ async function enviarChat() {
       const msgError = { role: 'assistant', content: 'Error: ' + errorMsg + '\n\nIntentá de nuevo.', fecha: new Date().toISOString() };
       renderMensaje(msgError);
     }
+    // Si había una card de acciones a medio armar (spinner "Trabajando..."
+    // sin terminar nunca), sacarla del limbo en vez de dejarla girando para
+    // siempre.
+    if (accionesGroupEl && accionesGroupEl.parentNode) {
+      const titulo = accionesGroupEl.querySelector('.vc-plan-titulo');
+      if (titulo) titulo.textContent = (titulo.textContent || '') + ' (cortado)';
+      accionesGroupEl.classList.remove('vc-plan-abierto');
+    }
+    accionesGroupEl = null;
   } finally {
     rehabilitarInput();
   }
