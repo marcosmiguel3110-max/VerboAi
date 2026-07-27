@@ -703,6 +703,21 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
           ];
           const rCont = await llamarOpenRouterFree(mensajesContinuar, systemPrompt, modelo, opciones);
           if (!rCont.ok || !rCont.texto) break;
+          // Algunos modelos (sobre todo los que "piensan en voz alta" en texto
+          // plano en vez de usar <think>) no respetan "no repitas nada" y
+          // directamente vuelven a generar un tramo que YA estaba escrito —
+          // eso fue justo el bug reportado: con varias continuaciones pedidas
+          // (hasta 7 en modo ultracode) el mismo bloque de código terminaba
+          // duplicado una y otra vez, cientos de líneas de basura repetida.
+          // Chequeo simple pero efectivo: si el inicio de lo nuevo ya
+          // aparece tal cual en lo acumulado, es una repetición — cortar acá
+          // en vez de seguir pidiendo más (que solo empeoraría las cosas).
+          const muestraNueva = rCont.texto.trim().slice(0, 150);
+          if (muestraNueva.length > 40 && textoAcumulado.includes(muestraNueva)) {
+            console.warn(`[llamarModeloGratis] Continuación ${continuaciones} parece una repetición de contenido ya generado — cortando acá en vez de acumular basura duplicada.`);
+            ultimoFinish = 'stop'; // tratar como terminado, no seguir pidiendo más
+            break;
+          }
           textoAcumulado += rCont.texto;
           ultimoFinish = rCont.finishReason;
         }
@@ -1206,6 +1221,11 @@ async function llamarGlm4Bridge(messages, systemPrompt, opciones = {}) {
     ];
     const rCont = await llamarGlm4BridgeUnaVez(mensajesContinuar, systemPrompt, opciones);
     if (!rCont.ok || !rCont.texto) break;
+    const muestraNueva = rCont.texto.trim().slice(0, 150);
+    if (muestraNueva.length > 40 && textoAcumulado.includes(muestraNueva)) {
+      console.warn(`[glm-4] Continuación ${continuaciones} parece una repetición — cortando.`);
+      break;
+    }
     textoAcumulado += rCont.texto;
     ultimoFinish = rCont.finishReason;
   }
@@ -4913,6 +4933,8 @@ ${profundidad === 'ultracode' ? `
 NIVEL DE PROFUNDIDAD: ULTRACODE (el máximo). Este es el modo más completo: tomate el trabajo de generar algo con el mayor nivel de detalle y pulido posible dentro de una sola respuesta — arquitectura prolija, manejo de errores, animaciones/transiciones cuidadas, canvas/three.js si aplica visualmente, y funcionalidad completa (no una versión recortada "para después"). Usá [[RUN::...]] para verificar que lo que generaste realmente funciona antes de darlo por terminado, si el proyecto lo permite. El usuario eligió explícitamente este nivel sabiendo que consume más, así que aprovechalo.
 ` : ''}
 REGLAS CRÍTICAS:
+
+0. NUNCA PIENSES EN VOZ ALTA EN TU RESPUESTA. Nada de "Necesitamos...", "Ahora vamos a...", "Let's...", "We need to...", "Voy a...", "Primero hagamos X, después Y", ni ningún tipo de narración de tu propio proceso de planificación — eso NO es lo que el usuario tiene que ver, es para vos sola. Andá directo: como mucho una frase corta antes de los tags explicando qué vas a hacer (ej "Dale, te armo el juego completo:"), y después los tags [[FILE_CREATE::...]] uno atrás del otro sin comentario entre medio. Si necesitás pensar la arquitectura antes de escribir código, pensalo pero NO lo escribas en la respuesta — anda directo al resultado. Esta regla es la más importante de todas: una respuesta llena de razonamiento en texto plano en vez de código real es lo peor que podés generar acá.
 
 1. SEPARACIÓN OBLIGATORIA: NUNCA pongas CSS o JS dentro del HTML. SIEMPRE separá:
    - index.html (solo estructura HTML, sin style ni script inline)
