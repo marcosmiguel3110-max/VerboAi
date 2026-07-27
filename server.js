@@ -5165,12 +5165,16 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       // terminaba TODO — parecía que la IA se había colgado. Este heartbeat manda
       // un status cada pocos segundos mientras se sigue esperando, para que quede
       // claro que sigue trabajando (y no silencio total).
+      // Esto SOLO se usa antes de que llegue el primer token real del modelo
+      // (cola/latencia de red) — una vez que arranca el streaming de verdad,
+      // se corta y lo que ve el usuario es contenido real. Por eso el texto
+      // acá es honesto sobre que se está ESPERANDO, no inventa actividad
+      // específica ("Escribiendo el código...") que todavía no está pasando.
       const mensajesHeartbeat = [
-        'Escribiendo el código...',
-        'Sigo generando los archivos...',
-        'Esto puede tardar un poco en pedidos grandes...',
-        'Revisando la estructura del proyecto...',
-        'Casi listo, terminando de escribir...',
+        'Esperando respuesta del modelo...',
+        'Puede tardar más en pedidos grandes o con varios archivos...',
+        'Seguimos esperando, sin errores hasta ahora...',
+        'Esto a veces tarda por la demanda del modelo gratuito...',
       ];
       let heartbeatIdx = 0;
       let recibioPrimerDelta = false;
@@ -5633,6 +5637,132 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         console.error('[verbocode] error generando imagen:', e.message);
         acciones.push({ tipo: 'image', descripcion: `Error generando imagen: ${e.message}` });
       }
+    }
+
+    // ============================================================
+    // AUTO-FIX: loop acotado de "probar → ver error → corregir → volver a
+    // probar" (patrón estándar de auto-corrección de código con feedback de
+    // ejecución — generar, ejecutar, evaluar, si falla reflexionar y volver
+    // a generar). Antes, si un [[RUN::]]/[[TEST::]] daba error, quedaba así
+    // nomás: el usuario tenía que pedir "arreglalo" a mano. Ahora, si algo
+    // falló, se le pide automáticamente al modelo que lo arregle y lo
+    // vuelva a probar — hasta un máximo de rondas (no puede ser infinito,
+    // se comería el presupuesto de la cascada de modelos gratis) y con
+    // corte temprano si el mismo error se repite tal cual (significa que no
+    // se está progresando, seguir insistiendo no ayuda).
+    const MAX_RONDAS_AUTOFIX = 3;
+    let rondaAutofix = 0;
+    let errorAnterior = null;
+    const accionConError = () => acciones.filter((a) => (a.tipo === 'run' || a.tipo === 'test') && a.resultado && a.resultado.exito === false).pop();
+
+    while (rondaAutofix < MAX_RONDAS_AUTOFIX && !clienteDesconectado) {
+      const accionFallida = accionConError();
+      if (!accionFallida) break; // no hay errores, no hace falta arreglar nada
+
+      const errorTexto = (accionFallida.resultado.stderr || accionFallida.resultado.error || '').trim();
+      if (!errorTexto) break; // "falló" pero sin mensaje de error usable, no hay nada que mandarle al modelo
+
+      // Estancamiento: si el error es literalmente el mismo que la ronda
+      // anterior, insistir no va a arreglar nada — cortar acá.
+      if (errorAnterior && errorTexto === errorAnterior) {
+        console.warn('[verbocode] autofix: mismo error que la ronda anterior, cortando (sin progreso).');
+        break;
+      }
+      errorAnterior = errorTexto;
+      rondaAutofix++;
+
+      enviarSSE({ type: 'status', text: `Encontró un error, corrigiendo automáticamente (intento ${rondaAutofix}/${MAX_RONDAS_AUTOFIX})...` });
+
+      const promptAutofix = `El comando "${accionFallida.comando || ''}" dio este error al probarlo:\n\n${errorTexto.slice(0, 1500)}\n\nArreglalo: usá [[FILE_EDIT::archivo::contenido completo corregido]] para el/los archivo(s) que lo causan, y después volvé a probar con [[RUN::mismo comando u otro equivalente]] para confirmar que ahora funciona. Archivos actuales del proyecto:\n${construirContextoArchivosProyecto(proyecto.archivos)}`;
+
+      let resultadoFix;
+      try {
+        resultadoFix = await llamarModeloGratisConReintentos(
+          [{ role: 'user', content: promptAutofix }],
+          systemPrompt,
+          modelosParaGenerar,
+          () => {},
+          { maxContinuaciones: 2 },
+        );
+      } catch (e) {
+        console.error('[verbocode] autofix: llamada al modelo falló:', e.message);
+        break;
+      }
+      if (!resultadoFix.ok || !resultadoFix.texto) break;
+
+      const textoFix = stripThinkTags(resultadoFix.texto);
+
+      // Aplicar los FILE_EDIT del arreglo (misma lógica robusta que la
+      // respuesta principal, pero acotada a este texto nuevo nada más).
+      try {
+        for (const bloque of extraerBloquesConCierre(textoFix, 'FILE_EDIT')) {
+          const idxSep = bloque.camposCrudo.indexOf('::');
+          if (idxSep === -1) continue;
+          const nombre = bloque.camposCrudo.slice(0, idxSep).trim();
+          const contenido = bloque.camposCrudo.slice(idxSep + 2);
+          if (!nombre) continue;
+          const diff = calcularDiffLineas(proyecto.archivos[nombre], contenido);
+          proyecto.archivos[nombre] = contenido;
+          proyectoActualizado = true;
+          acciones.push({
+            tipo: 'file_edit',
+            nombre,
+            agregadas: diff.agregadas,
+            eliminadas: diff.eliminadas,
+            descripcion: `Corrigió: ${nombre} (auto-fix ${rondaAutofix}/${MAX_RONDAS_AUTOFIX})`,
+          });
+        }
+      } catch (e) {
+        console.error('[verbocode] autofix: error aplicando FILE_EDIT:', e.message);
+      }
+
+      // Volver a probar con el/los [[RUN::]] que haya pedido el arreglo.
+      try {
+        const reRunFix = /\[\[RUN::([\s\S]*?)\]\]/g;
+        let matchRunFix;
+        while ((matchRunFix = reRunFix.exec(textoFix)) !== null) {
+          const comandoRun = matchRunFix[1].trim();
+          if (!comandoRun) continue;
+          enviarSSE({ type: 'terminal_run', comando: comandoRun });
+          let resultadoRun;
+          const subcomandos = comandoRun.split(/\s*(?:&&|;)\s*/).filter(Boolean);
+          const salidas = [];
+          let huboError = false;
+          let modifico = false;
+          let todosManejados = subcomandos.length > 0;
+          for (const sub of subcomandos) {
+            const r = ejecutarComandoProyecto(sub, proyecto);
+            if (!r.manejado) { todosManejados = false; break; }
+            if (r.modifico) modifico = true;
+            if (r.error) { huboError = true; salidas.push(`Error: ${r.error}`); }
+            else if (r.salida !== undefined) salidas.push(r.salida);
+          }
+          if (todosManejados) {
+            if (modifico) proyectoActualizado = true;
+            resultadoRun = { stdout: salidas.join('\n'), stderr: huboError ? salidas.filter((s) => s.startsWith('Error:')).join('\n') : '', exito: !huboError };
+          } else {
+            try {
+              const r = await ejecutarCodigoPiston('bash', comandoRun);
+              resultadoRun = { stdout: r.stdout || '', stderr: r.stderr || '', exito: !!r.exito, exitCode: r.exitCode };
+            } catch (e) {
+              resultadoRun = { stdout: '', stderr: e.message, exito: false };
+            }
+          }
+          enviarSSE({ type: 'terminal_result', comando: comandoRun, resultado: resultadoRun });
+          acciones.push({
+            tipo: 'run',
+            comando: comandoRun,
+            resultado: resultadoRun,
+            descripcion: `Re-probó (auto-fix ${rondaAutofix}/${MAX_RONDAS_AUTOFIX}): ${comandoRun}${resultadoRun.exito ? ' — OK' : ' — todavía con errores'}`,
+          });
+        }
+      } catch (e) {
+        console.error('[verbocode] autofix: error re-probando:', e.message);
+        break;
+      }
+      // Si el arreglo no volvió a correr nada, no tiene sentido seguir
+      // insistiendo sin poder verificar si funcionó.
+      if (!/\[\[RUN::/.test(textoFix)) break;
     }
 
     // Limpiar las etiquetas de herramientas del texto visible.

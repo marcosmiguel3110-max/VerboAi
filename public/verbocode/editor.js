@@ -851,13 +851,28 @@ const UMBRAL_ARCHIVO_GRANDE = 1200;
 // devuelve dónde arranca el header, dónde termina (para poder contar
 // caracteres reales escritos desde ahí) y el nombre de archivo/tipo.
 function detectarBloqueEnCurso(texto) {
-  const re = /\[\[(FILE_CREATE|FILE_EDIT)::([^:\n]+)::/g;
+  // Antes esto solo reconocía FILE_CREATE/FILE_EDIT — cualquier otro tag
+  // ([[TEXTURE::, [[IMAGE::, [[NPM_INSTALL::, etc) se mostraba crudo en vivo
+  // mientras se generaba, porque no había nada que lo detectara. Ahora
+  // reconoce CUALQUIER [[TAG:: sin importar cuántos campos tenga adentro.
+  const re = /\[\[([A-Z_]+)::/g;
   let match, ultimo = null;
   while ((match = re.exec(texto)) !== null) ultimo = match;
   if (!ultimo) return null;
   const headerEnd = ultimo.index + ultimo[0].length;
   if (texto.indexOf(']]', headerEnd) !== -1) return null; // ya cerró, no está en curso
-  return { tipo: ultimo[1], archivo: ultimo[2].trim(), headerStart: ultimo.index, headerEnd, cardEl: null };
+  const tipo = ultimo[1];
+  // Para FILE_CREATE/FILE_EDIT el nombre de archivo es el primer campo (sirve
+  // para la card de "Compactando" y para saber el tamaño de referencia en
+  // ediciones). El resto de los tags no tienen esa estructura, así que se
+  // ocultan igual pero sin nombre de archivo asociado.
+  let archivo = null;
+  if (tipo === 'FILE_CREATE' || tipo === 'FILE_EDIT') {
+    const resto = texto.slice(headerEnd);
+    const idxSep = resto.indexOf('::');
+    if (idxSep !== -1) archivo = resto.slice(0, idxSep).trim();
+  }
+  return { tipo, archivo, headerStart: ultimo.index, headerEnd, cardEl: null };
 }
 
 // Igual que detectarBloqueEnCurso pero para bloques <think>...</think> de
@@ -889,7 +904,7 @@ function crearCardCompactando(bloque) {
       </div>
       <div class="vc-creando-bar">
         <svg class="vc-creando-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-        <span class="vc-creando-archivo">${bloque.archivo}</span>
+        <span class="vc-creando-archivo">${bloque.archivo || bloque.tipo.toLowerCase().replace('_', ' ')}</span>
       </div>
       <div class="vc-creando-scan"></div>
     </div>
