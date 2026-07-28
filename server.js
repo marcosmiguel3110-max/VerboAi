@@ -5424,10 +5424,30 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     // "corriendo...") y otro DESPUÉS con la salida real, apenas termina.
     const reRun = /\[\[RUN::([\s\S]*?)\]\]/g;
     let matchRun;
+    // Antes cada [[RUN::...]] se ejecutaba sí o sí, sin importar si YA se
+    // había corrido el mismo comando en esta misma respuesta. Con
+    // continuaciones largas, el modelo a veces repite el mismo [[RUN::npm
+    // install algo]] una y otra vez (se vio un caso real con "npm install
+    // animejs" ejecutado más de 15 veces seguidas) — cada repetición es una
+    // instalación real de npm, nada gratis. Ahora, si el comando exacto ya
+    // se corrió antes en esta respuesta, se salta la ejecución de nuevo y
+    // se avisa que ya estaba hecho, en vez de repetirlo a lo tonto.
+    const comandosYaEjecutados = new Map(); // comando -> resultado
     try {
       while ((matchRun = reRun.exec(textoRespuesta)) !== null) {
         const comandoRun = matchRun[1].trim();
         if (!comandoRun) continue;
+
+        if (comandosYaEjecutados.has(comandoRun)) {
+          acciones.push({
+            tipo: 'run',
+            comando: comandoRun,
+            resultado: comandosYaEjecutados.get(comandoRun),
+            descripcion: `Comando repetido, ya se había ejecutado: ${comandoRun} (omitido)`,
+          });
+          continue;
+        }
+
         enviarSSE({ type: 'terminal_run', comando: comandoRun });
         let resultadoRun;
         const subcomandos = comandoRun.split(/\s*(?:&&|;)\s*/).filter(Boolean);
@@ -5453,6 +5473,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
             resultadoRun = { stdout: '', stderr: e.message, exito: false };
           }
         }
+        comandosYaEjecutados.set(comandoRun, resultadoRun);
         enviarSSE({ type: 'terminal_result', comando: comandoRun, resultado: resultadoRun });
         acciones.push({
           tipo: 'run',
