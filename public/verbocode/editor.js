@@ -7,7 +7,7 @@ const estado = {
   proyectoId: null,
   proyecto: null,
   usuario: null,
-  modeloSeleccionado: 'NewserPro',
+  modeloSeleccionado: 'NewserPlus',
   modelos: [],
   archivos: {},        // {nombre: contenido}
   archivoActual: null, // nombre del archivo activo
@@ -115,7 +115,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarEventos();
   configurarChatInput();
   configurarResizeSidebars();
-  initMonaco();
+  // Monaco es una librería pesada (parsear/ejecutar su JS le pega directo al
+  // Total Blocking Time y al Time to Interactive del reporte de Lighthouse:
+  // 380ms de TBT y 9.4s de TTI con FCP/LCP normales de 2.4s = síntoma
+  // clásico de JS bloqueando el hilo principal DESPUÉS del primer pintado).
+  // Ya no bloqueaba el resto de la UI (fix anterior), pero seguía arrancando
+  // inmediato, compitiendo por el hilo principal justo cuando el navegador
+  // todavía está pintando/procesando el resto de la página. Con
+  // requestIdleCallback, arranca recién cuando el navegador tiene un hueco
+  // libre de verdad — no cambia cuánto tarda Monaco en sí, pero saca ese
+  // costo de la ventana crítica que Lighthouse mide.
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(() => initMonaco(), { timeout: 2000 });
+  } else {
+    setTimeout(() => initMonaco(), 200);
+  }
 
   // Guardar todo antes de cerrar la pestaña
   window.addEventListener('beforeunload', () => {
@@ -875,17 +889,10 @@ function detectarBloqueEnCurso(texto) {
   return { tipo, archivo, headerStart: ultimo.index, headerEnd, cardEl: null };
 }
 
-// Igual que detectarBloqueEnCurso pero para bloques <think>...</think> de
-// razonamiento: si el modelo los usa, nunca se muestran (ni completos ni a
-// medias) — se devuelve dónde empezó el último <think> que todavía no cerró.
-function detectarThinkEnCurso(texto) {
-  const reOpen = /<think(?:ing)?>/gi;
-  let m, ultimo = null;
-  while ((m = reOpen.exec(texto)) !== null) ultimo = m;
-  if (!ultimo) return null;
-  if (/<\/think(?:ing)?>/i.test(texto.slice(ultimo.index))) return null;
-  return ultimo.index;
-}
+// Nota: ya no hace falta una función separada para detectar bloques <think>
+// en curso — con el rediseño de arriba, CUALQUIER texto que no sea parte de
+// un tag [[ALGO::...]] en curso (esto incluye <think>) cae automáticamente
+// en la rama de "narración" y va al indicador de pensando, nunca a msgDiv.
 
 function crearCardCompactando(bloque) {
   const codeDiv = document.createElement('div');
@@ -1165,11 +1172,6 @@ async function enviarChat() {
     // Ver detectarBloqueEnCurso() / crearCardCompactando(): progreso REAL
     // (no simulado) de un archivo grande que la IA está escribiendo ahora.
     let bloqueActivo = null;
-    // Ver el handler de 'chunk' más abajo: hasta que aparezca el primer tag
-    // [[ALGO::, cualquier texto se considera narración y va al indicador de
-    // "pensando" en vez de al mensaje visible.
-    let vistoPrimerTag = false;
-    let inicioVisible = 0;
 
     msgDiv = document.createElement('div');
     msgDiv.className = 'vc-msg assistant';
@@ -1230,34 +1232,19 @@ async function enviarChat() {
         } else if (evt.type === 'chunk') {
           textoRespuesta += evt.text;
 
-          // Antes de que aparezca el primer tag ([[FILE_CREATE::, [[TEXTURE::,
-          // etc), lo que venga es en general narración tipo "Now create the
-          // project files." — el modelo pensando en voz alta a pesar de la
-          // regla del prompt que le pide no hacerlo. En vez de mostrar eso
-          // como si fuera un mensaje real, se lo dejamos puesto en el
-          // indicador de "pensando" (mismo lugar que ya se usa para "Creando
-          // plan de acción..."/"Desarrollando código..."), y esa parte NUNCA
-          // llega a msgDiv — así lo poco que el modelo narre de más queda
-          // afuera del chat en vez de ensuciarlo.
-          if (!vistoPrimerTag) {
-            const idxTag = textoRespuesta.indexOf('[[');
-            if (idxTag === -1) {
-              const narracion = textoRespuesta.trim();
-              if (narracion && thinkingEl && thinkingEl.parentNode) {
-                thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> ' + narracion.slice(-140);
-              }
-              scrollChatAbajo();
-              continue;
-            }
-            vistoPrimerTag = true;
-            inicioVisible = idxTag;
-          }
-          if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
-
-          // Si estamos escribiendo un archivo grande, mostrar "Compactando"
-          // con progreso REAL (ver detectarBloqueEnCurso) en vez de volcar
-          // el tag [[FILE_CREATE::/FILE_EDIT::...]] crudo al chat mientras
-          // llega caracter por caracter.
+          // REDISEÑADO: antes esto trataba de calcular, char a char, qué
+          // parte del texto era "segura" para mostrar en el mensaje — pero
+          // el modelo no solo narra ANTES del primer tag, también narra
+          // ENTRE tags ("Now let's create the HTML.", etc), y esa parte
+          // intermedia se seguía colando porque solo se ocultaba lo de
+          // antes del primer tag. En vez de perseguir cada lugar posible
+          // donde puede aparecer narración, ahora la regla es simple y sin
+          // huecos: msgDiv NUNCA se toca con contenido a medias mientras se
+          // genera — todo el feedback en vivo (narración Y tags) pasa por
+          // el indicador de "pensando" o por las cards de Compactando/
+          // acciones. El mensaje final limpio llega de una sola vez en el
+          // evento 'done' (ver más abajo), así que no hay forma de que se
+          // cuele texto crudo a mitad de camino.
           if (!bloqueActivo) {
             const detectado = detectarBloqueEnCurso(textoRespuesta);
             if (detectado) bloqueActivo = detectado;
@@ -1273,32 +1260,23 @@ async function enviarChat() {
             } else if (escritos > UMBRAL_ARCHIVO_GRANDE) {
               if (!bloqueActivo.cardEl) bloqueActivo.cardEl = crearCardCompactando(bloqueActivo);
               actualizarCardCompactando(bloqueActivo, escritos);
+            } else if (thinkingEl && thinkingEl.parentNode) {
+              // Bloque chico todavía en curso: mantener el indicador vivo
+              // con el nombre del archivo en vez de dejarlo en blanco.
+              thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> Escribiendo ' + (bloqueActivo.archivo || bloqueActivo.tipo.toLowerCase()) + '...';
+            }
+          } else {
+            // No hay ningún tag en curso ahora mismo: lo que haya después
+            // del último "]]" cerrado (o desde el principio si todavía no
+            // cerró ninguno) es narración — mostrarla en el indicador, nunca
+            // en el mensaje.
+            const idxUltimoCierre = textoRespuesta.lastIndexOf(']]');
+            const narracion = textoRespuesta.slice(idxUltimoCierre + 2).trim();
+            if (narracion && thinkingEl && thinkingEl.parentNode) {
+              thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> ' + narracion.slice(-140);
+              scrollChatAbajo();
             }
           }
-
-          // Mostrar línea por línea: solo mostrar hasta el último salto de línea completo
-          // Las líneas incompletas se guardan y se muestran cuando se completen.
-          // Se oculta el texto crudo desde donde empiece CUALQUIER bloque todavía
-          // sin cerrar: un tag [[FILE_CREATE::/FILE_EDIT::...]] (chico o grande,
-          // con card de "Compactando" si es grande) o un bloque <think>...</think>
-          // de razonamiento (que nunca se muestra, ni chico ni grande — antes esto
-          // no hacía falta porque el streaming era fake y ya llegaba limpio).
-          const thinkStart = detectarThinkEnCurso(textoRespuesta);
-          const cortes = [];
-          if (bloqueActivo) cortes.push(bloqueActivo.headerStart);
-          if (thinkStart !== null) cortes.push(thinkStart);
-          const ocultarDesde = cortes.length ? Math.min(...cortes) : textoRespuesta.length;
-          const textoParaMostrar = textoRespuesta.slice(inicioVisible, ocultarDesde);
-
-          const ultimaLinea = textoParaMostrar.lastIndexOf('\n');
-          if (ultimaLinea >= 0) {
-            const textoVisible = textoParaMostrar.slice(0, ultimaLinea + 1);
-            const resto = textoParaMostrar.slice(ultimaLinea + 1);
-            msgDiv.innerHTML = formatearMarkdownConColapsado(textoVisible) + (resto ? '<span class="vc-typing-cursor">▋</span>' : '');
-          } else if (cortes.length === 0) {
-            msgDiv.innerHTML = '<span class="vc-typing-cursor">▋</span>';
-          }
-          scrollChatAbajo();
         } else if (evt.type === 'action') {
           agregarAccionAlGrupo(evt.accion);
         } else if (evt.type === 'terminal_run') {
@@ -1469,6 +1447,7 @@ async function enviarChat() {
           document.getElementById('vcChatMensajes').appendChild(webDiv);
           scrollChatAbajo();
         } else if (evt.type === 'done') {
+          if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
           modeloRecibido = evt.modeloUsado || 'VerboAITeams';
           proyectoActualizado = evt.proyectoActualizado;
           archivosActualizados = evt.archivos;

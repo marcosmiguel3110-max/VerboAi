@@ -163,7 +163,7 @@ let modelosDisponibles = [
   { nombre: 'NewserLiteCompact', descripcion: 'Igual que NewserLite pero mas economico: ~17% mas eficiente en el uso de tokens por respuesta.', costoCreditos: 1, rateLimitMax: 30, rateLimitMaxWeb: 45, badge: 'eco', disponible: true },
   { nombre: 'NewserAdvanced', descripcion: 'Mas potente. Genera imagenes, busca en la web y consulta el clima.', costoCreditos: 6, rateLimitMax: 5, rateLimitMaxWeb: 8, badge: 'beta', disponible: true },
   { nombre: 'NewserAdvanced1.5', descripcion: 'El mas potente. Razonamiento aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Tambien genera imagenes con mas detalle (2 modelos de IA), maximo 2 por hora.', costoCreditos: 15, rateLimitMax: 3, rateLimitMaxWeb: 4, badge: 'pro', disponible: true },
-  { nombre: 'NewserPro', descripcion: 'Exclusivo admin. Razonamiento profundo, ejecuta codigo real, busca en la web y genera imagenes en alta calidad. Mismo feature set que NewserAdvanced1.5.', costoCreditos: 50, rateLimitMax: 5, rateLimitMaxWeb: 6, badge: 'admin', disponible: true, soloAdmin: true },
+  { nombre: 'NewserPlus', descripcion: 'Exclusivo admin. Modelo mas potente para codigo: especializado en programacion, agentic coding y desarrollo, con razonamiento profundo, ejecucion de codigo real, busqueda web y generacion de imagenes en alta calidad.', costoCreditos: 50, rateLimitMax: 5, rateLimitMaxWeb: 6, badge: 'admin', disponible: true, soloAdmin: true },
 ];
 let hayCuaderno = false;
 let chatIdActual = localStorage.getItem('verboAiChatId') || null;
@@ -1313,7 +1313,7 @@ function renderOpcionesModeloEn(contenedor) {
     if (m.badge === 'pro' || m.nombre === 'NewserAdvanced1.5') {
       badges += '<span class="opcion-modelo-badge opcion-modelo-badge-pro">Pro</span>';
     }
-    if (m.badge === 'admin' || m.nombre === 'NewserPro') {
+    if (m.badge === 'admin' || m.nombre === 'NewserPlus') {
       badges += '<span class="opcion-modelo-badge opcion-modelo-badge-admin">Admin</span>';
     }
     if (m.badge === 'eco' || m.nombre === 'NewserLiteCompact') {

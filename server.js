@@ -240,7 +240,7 @@ const PORT = process.env.PORT || 3000;
 // CAPA DE MODELOS GRATIS — Groq fue removido por completo.
 // ============================================================
 // Todos los modelos de VerboAI (NewserLite, NewserAdvanced, NewserAdvanced1.5,
-// NewserPro y NewserAdmin) usan EXCLUSIVAMENTE modelos gratuitos, sin API key
+// NewserPlus y NewserPlus) usan EXCLUSIVAMENTE modelos gratuitos, sin API key
 // obligatoria, listados y actualizados a diario por:
 //   https://github.com/ClawLabsAI/free-ai-models  (data/models.json)
 //
@@ -257,16 +257,16 @@ const PORT = process.env.PORT || 3000;
 //   google/gemma-4-26b-a4b-it:free (vision), google/gemma-4-31b-it:free (vision)
 //   z-ai/glm-4.5-air:free, nousresearch/hermes-3-llama-3.1-405b:free
 
-// Config de Pollinations para NewserPro: flux-realism + enhance + 1536x1536
+// Config de Pollinations para NewserPlus: flux-realism + enhance + 1536x1536
 // (mismo tamaño que NewserAdvanced1.5).
 const POLLINATIONS_PRO_MODEL = process.env.POLLINATIONS_MODEL_PRO || 'flux-realism';
 const POLLINATIONS_PRO_WIDTH = parseInt(process.env.POLLINATIONS_WIDTH_PRO || '1536', 10);
 const POLLINATIONS_PRO_HEIGHT = parseInt(process.env.POLLINATIONS_HEIGHT_PRO || '1536', 10);
 
 // ============================================================
-// CAPA GLM-4 (GPT4Free) — opcional, solo para NewserPro
+// CAPA GLM-4 (GPT4Free) — opcional, solo para NewserPlus
 // ============================================================
-// NewserPro puede usar un puente GPT4Free (ej: gpt4free渲染 en Render)
+// NewserPlus puede usar un puente GPT4Free (ej: gpt4free渲染 en Render)
 // para delegar la redaccion final a "glm-4" en lugar de GPT-OSS-120B.
 // Si GPT4FREE_URL esta vacio o GPT4FREE_ENABLED_PRO=false, se usa el flujo
 // normal (Qwen3 razona -> GPT-OSS-120B redacta). Si esta activado y GLM-4
@@ -289,7 +289,7 @@ const GPT4FREE_API_KEY = process.env.GPT4FREE_API_KEY || ''; // opcional segun e
 // de Pollinations que ya tenes configurada para imagenes, pero para texto.
 // Modelo: openai-fast (GPT-OSS-20B con razonamiento, el mas potente de Pollinations gratis).
 //
-// Si POLLINATIONS_TEXT_ENABLED_PRO=true (default), NewserPro intenta PRIMERO
+// Si POLLINATIONS_TEXT_ENABLED_PRO=true (default), NewserPlus intenta PRIMERO
 // OpenRouter free (cascada de modelos), y si todos fallan cae a Pollinations
 // texto. El puente GLM-4 (g4f) es opcional y solo se usa si esta configurado.
 //
@@ -460,63 +460,8 @@ const MODELOS_DISPONIBLES = {
     badge: 'pro',
     disponible: true,
   },
-  NewserPro: {
-    nombre: 'NewserPro',
-    descripcion: 'Exclusivo admin. Razamiento profundo, ejecuta codigo real, busca en la web y genera imagenes en alta calidad. 50% de la potencia de Admin pero supera a Advanced1.5.',
-    modeloOpenRouter: 'nvidia/nemotron-3-super-120b-a12b:free',
-    modelosOpenRouterTexto: [
-      'nvidia/nemotron-3-super-120b-a12b:free',
-      'nvidia/nemotron-3-ultra-550b-a55b:free',
-      'nvidia/nemotron-3-nano-30b-a3b:free',
-      'meta-llama/llama-3.3-70b-instruct:free',
-      'cohere/north-mini-code:free',
-      'qwen/qwen3-coder:free',
-      'nousresearch/hermes-3-llama-3.1-405b:free',
-      'poolside/laguna-m.1:free',
-      'poolside/laguna-xs-2.1:free',
-      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-    ],
-    modeloOpenRouterRazonamiento: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-    modelosOpenRouterRazonamiento: [
-      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-      'cohere/north-mini-code:free',
-      'qwen/qwen3-coder:free',
-      'nvidia/nemotron-3-super-120b-a12b:free',
-      'nvidia/nemotron-3-ultra-550b-a55b:free',
-    ],
-    // Cascada especifica para Verbo Code (solo se usa cuando el pedido es CODIGO,
-    // no en el chat normal): prioriza los modelos especializados en programacion
-    // por sobre los generalistas, asi la generacion de juegos/apps sale mas prolija.
-    modelosOpenRouterCodigo: [
-      'qwen/qwen3-coder:free',
-      'cohere/north-mini-code:free',
-      'nvidia/nemotron-3-super-120b-a12b:free',
-      'nvidia/nemotron-3-ultra-550b-a55b:free',
-      'nvidia/nemotron-3-nano-30b-a3b:free',
-      'meta-llama/llama-3.3-70b-instruct:free',
-      'nousresearch/hermes-3-llama-3.1-405b:free',
-    ],
-    modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
-    modelosOpenRouterVision: [
-      'google/gemma-4-31b-it:free',
-      'google/gemma-4-26b-a4b-it:free',
-      'nvidia/nemotron-nano-12b-v2-vl:free',
-      'nvidia/nemotron-3.5-content-safety:free',
-    ],
-    costoCreditos: 50,
-    rateLimitMax: 5,
-    rateLimitMaxWeb: 6,
-    maxTokens: 3072,
-    badge: 'admin',
-    disponible: true,
-    soloAdmin: true,
-    imagenModelo: POLLINATIONS_PRO_MODEL,
-    imagenAncho: POLLINATIONS_PRO_WIDTH,
-    imagenAlto: POLLINATIONS_PRO_HEIGHT,
-    imagenEnhance: true,
-  },
-  NewserAdmin: {
-    nombre: 'NewserAdmin',
+  NewserPlus: {
+    nombre: 'NewserPlus',
     descripcion: 'Exclusivo admin. Modelo mas potente para codigo. Usa Cohere North-Mini-Code (modelo especializado en codigo con mejor estabilidad). Especializado en programacion, agentic coding y desarrollo.',
     modeloOpenRouter: 'cohere/north-mini-code:free',
     modelosOpenRouterTexto: [
@@ -1086,7 +1031,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
 // ============================================================
 // Llama a la API de texto de Pollinations (text.pollinations.ai/openai).
 // Modelo: openai-fast (GPT-OSS-20B con razonamiento).
-// Es la opcion MAS RAPIDA y ESTABLE para NewserPro porque:
+// Es la opcion MAS RAPIDA y ESTABLE para NewserPlus porque:
 //   - Usa la misma infraestructura de Pollinations que ya tenes para imagenes
 //   - No requiere puente Python separado
 //   - No requiere API key
@@ -1628,10 +1573,10 @@ function esAdmin(usuario) {
   return ADMIN_EMAILS.has(usuario.toLowerCase());
 }
 
-// "Admin completo" a efectos de NewserPro: incluye tanto al admin local
+// "Admin completo" a efectos de NewserPlus: incluye tanto al admin local
 // (el que entra con APP_USER/APP_PASS, prefix "local:") como a los emails
 // listados en ADMIN_EMAILS. Esto es lo que usa resolverModelo() y el
-// filtro de /api/config para mostrar u ocultar NewserPro.
+// filtro de /api/config para mostrar u ocultar NewserPlus.
 function usuarioEsAdmin(usuario) {
   if (!usuario) return false;
   if (usuario.startsWith('local:')) return true;
@@ -2595,14 +2540,12 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
   } else if (configModelo.nombre === 'NewserAdvanced1.5') {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_ADVANCED_15_EXTRA;
-  } else if (configModelo.nombre === 'NewserPro') {
-    systemPrompt = systemPrompt + SYSTEM_PROMPT_PRO_EXTRA;
-  } else if (configModelo.nombre === 'NewserAdmin') {
+  } else if (configModelo.nombre === 'NewserPlus') {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_ADMIN_EXTRA;
   }
 
   let razonamientoPrevioApi = '';
-  if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && configModelo.modelosOpenRouterRazonamiento) {
+  if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPlus' || configModelo.nombre === 'NewserPlus') && configModelo.modelosOpenRouterRazonamiento) {
     try {
       const respRaz = await llamarModeloGratisConReintentos(
         [{ role: 'user', content: mensaje }],
@@ -2629,16 +2572,16 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
 
   const intencionImagenApi = detectarGeneracionImagen(mensaje);
   if (intencionImagenApi.esGeneracion) {
-    if (configModelo.nombre !== 'NewserAdvanced' && configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPro') {
+    if (configModelo.nombre !== 'NewserAdvanced' && configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPlus') {
       return res.status(400).json({
         ok: false,
-        error: 'La generacion de imagenes solo esta disponible con NewserAdvanced, NewserAdvanced1.5 o NewserPro. Mandá "modelo":"NewserAdvanced", "NewserAdvanced1.5" o "NewserPro" en el body para usarla.',
+        error: 'La generacion de imagenes solo esta disponible con NewserAdvanced, NewserAdvanced1.5 o NewserPlus. Mandá "modelo":"NewserAdvanced", "NewserAdvanced1.5" o "NewserPlus" en el body para usarla.',
       });
     }
 
     const tokenActual = buscarTokenPorValor(valorToken);
     const esDetallada = configModelo.nombre === 'NewserAdvanced1.5';
-    const esPro = configModelo.nombre === 'NewserPro';
+    const esPro = configModelo.nombre === 'NewserPlus';
 
     if (esDetallada) {
       const controlImg15 = verificarLimiteImagen15(tokenActual ? `token:${tokenActual.id}` : null);
@@ -2737,9 +2680,9 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
     }
 
     // ============================================================
-    // CAPA G4F — fallback opcional para NewserPro y NewserAdmin
+    // CAPA G4F — fallback opcional para NewserPlus y NewserPlus
     // ============================================================
-    if (!glmUsado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED) {
+    if (!glmUsado && (configModelo.nombre === 'NewserPlus' || configModelo.nombre === 'NewserPlus') && GPT4FREE_ENABLED) {
       const mensajesParaGlm = mensajesParaModelo.filter((m) => m.role !== 'system');
       const resultadoGlm = await llamarGlm4Bridge(mensajesParaGlm, systemPrompt);
       if (resultadoGlm.ok) {
@@ -2779,15 +2722,15 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
 
     const reCodeApi = /\[\[CODE::([^:\]]+)::([\s\S]*?)\]\]/g;
     const mCode = [...texto.matchAll(reCodeApi)];
-    if (mCode.length && (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro')) { codeQueryApi = { lenguaje: mCode[0][1].trim(), codigo: mCode[0][2].trim() }; }
+    if (mCode.length && (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPlus')) { codeQueryApi = { lenguaje: mCode[0][1].trim(), codigo: mCode[0][2].trim() }; }
     textoLimpio = textoLimpio.replace(reCodeApi, '');
 
     const reApidataApi = /\[\[APIDATA::([^\]]+)\]\]/g;
     const mApidata = [...texto.matchAll(reApidataApi)];
-    if (mApidata.length && (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro')) { apidataQueryApi = mApidata[0][1].trim(); }
+    if (mApidata.length && (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPlus')) { apidataQueryApi = mApidata[0][1].trim(); }
     textoLimpio = textoLimpio.replace(reApidataApi, '');
 
-    if (configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPro') {
+    if (configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPlus') {
       const reClimaApi = /\[\[CLIMA::([^\]]+)\]\]/g;
       const mClima = [...texto.matchAll(reClimaApi)];
       if (mClima.length) { climaQueryApi = mClima[0][1].trim(); textoLimpio = textoLimpio.replace(reClimaApi, ''); }
@@ -3025,11 +2968,11 @@ app.get('/api/v1/chats', (req, res) => {
 });
 
 // ============================================================
-// /api/v1/pro-hybrid — endpoint dedicado al flujo hibrido NewserPro
+// /api/v1/pro-hybrid — endpoint dedicado al flujo hibrido NewserPlus
 // ============================================================
 // Llama al razonamiento previo (cascada OpenRouter free) y despues redacta la
 // respuesta final con OpenRouter free -> GLM-4 (puente GPT4Free, opcional) ->
-// Pollinations texto. Todo gratis, sin Groq. Requiere token admin (NewserPro
+// Pollinations texto. Todo gratis, sin Groq. Requiere token admin (NewserPlus
 // es solo admin).
 //
 // Body:
@@ -3044,7 +2987,7 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
   if (!token) return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
 
   if (!usuarioEsAdmin(token.propietario)) {
-    return res.status(403).json({ ok: false, error: 'NewserPro hibrido es exclusivo para cuentas administrador.' });
+    return res.status(403).json({ ok: false, error: 'NewserPlus hibrido es exclusivo para cuentas administrador.' });
   }
 
   const mensaje = (typeof req.body?.mensaje === 'string' ? req.body.mensaje : '').trim();
@@ -3059,7 +3002,7 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
   if (mensaje.length > 8000) return res.status(400).json({ ok: false, error: 'El mensaje es demasiado largo (max 8000 caracteres).' });
 
   const forzarGlm = req.body?.forzarGlm !== false; // default true
-  const configPro = MODELOS_DISPONIBLES.NewserPro;
+  const configPro = MODELOS_DISPONIBLES.NewserPlus;
 
   // ============================================================
   // Si hay imagenes, usamos un modelo de vision gratis de OpenRouter
@@ -3091,14 +3034,14 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
   // 2) Redaccion final:
   //    - Si hay imagenes: cascada de modelos de vision de OpenRouter free
   //    - Si no hay imagenes: OpenRouter free (cascada) -> GLM-4 (puente, opcional) -> Pollinations
-  let systemPrompt = SYSTEM_PROMPT + SYSTEM_PROMPT_PRO_EXTRA;
+  let systemPrompt = SYSTEM_PROMPT + SYSTEM_PROMPT_ADMIN_EXTRA;
   if (razonamientoPrevio) {
     systemPrompt += `\n\n[RAZONAMIENTO INTERNO PREVIO generado por ${modeloRazonamientoUsado || 'el modulo de razonamiento'}, no lo repitas ni menciones, usalo como guia]:\n${razonamientoPrevio}`;
   }
   if (hayImagenes) {
     systemPrompt += `\n\nNOTA SOBRE IMAGENES ADJUNTAS: el usuario adjunto ${imagenes.length > 1 ? 'imagenes' : 'una imagen'} en este mensaje. Antes de responder, analizala con maxima atencion y en detalle: fijate bien en TODOS los elementos visibles (texto, numeros, colores, personas, objetos, disposicion, errores, codigo, capturas de pantalla, etc.), no te quedes con una descripcion superficial ni generica. Si el usuario pide una tarea concreta sobre la imagen (resolver algo, identificar un error, transcribir texto, explicar un codigo, comparar cosas, etc.), primero examina la imagen a fondo y recien despues cumplí exactamente lo que se te pide, basandote solo en lo que realmente se ve, sin inventar ni asumir detalles que no esten claramente visibles.`;
   }
-  systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, 'NewserPro');
+  systemPrompt = systemPrompt.replace(/__NOMBRE_MODELO__/g, 'NewserPlus');
 
   let textoFinal = '';
   let modeloReal = configPro.modeloOpenRouter;
@@ -3218,7 +3161,7 @@ app.get('/api/v1/creditos', (req, res) => {
 // ============================================================
 // Verbo Code es un editor tipo ChatGPT Work dentro de Verbo AI.
 // Permite crear proyectos, editar archivos con Monaco Editor, y chatear
-// con la IA (NewserAdvanced1.5 o NewserPro) que tiene herramientas para
+// con la IA (NewserAdvanced1.5 o NewserPlus) que tiene herramientas para
 // crear/editar archivos, generar imágenes, buscar en web, etc.
 //
 // Solo los administradores pueden acceder (botón en el sidebar + check
@@ -3570,11 +3513,10 @@ const VERBOCODE_DIR = path.join(MEMORY_DIR, 'verbocode');
 if (!fs.existsSync(VERBOCODE_DIR)) fs.mkdirSync(VERBOCODE_DIR, { recursive: true });
 
 // Modelos disponibles en Verbo Code (públicos dentro de Verbo Code,
-// aunque NewserPro sea solo-admin en el chat normal).
+// aunque NewserPlus sea solo-admin en el chat normal).
 const MODELOS_VERBO_CODE = {
   'NewserAdvanced1.5': MODELOS_DISPONIBLES['NewserAdvanced1.5'],
-  'NewserPro': MODELOS_DISPONIBLES['NewserPro'],
-  'NewserAdmin': MODELOS_DISPONIBLES['NewserAdmin'],
+  'NewserPlus': MODELOS_DISPONIBLES['NewserPlus'],
 };
 
 function leerProyectosVerboCode(usuario) {
@@ -4572,7 +4514,7 @@ El código debe:
     const resultado = await llamarModeloGratisConReintentos(
       [{ role: 'user', content: `Generá el efecto de sonido: ${descripcion}` }],
       systemPrompt,
-      MODELOS_VERBO_CODE['NewserPro'].modelosOpenRouterCodigo || MODELOS_VERBO_CODE['NewserPro'].modelosOpenRouterTexto,
+      MODELOS_VERBO_CODE['NewserPlus'].modelosOpenRouterCodigo || MODELOS_VERBO_CODE['NewserPlus'].modelosOpenRouterTexto,
       () => {},
       { maxContinuaciones: 0 },
     );
@@ -4854,8 +4796,8 @@ app.post('/api/verbocode/chat/:id', ultracodeRateLimit, requiereAdminVerboCode, 
 
   if (!mensaje && !imagen) return res.status(400).json({ error: 'Falta el mensaje o imagen.' });
 
-  const modeloPedido = req.body?.modelo || 'NewserPro';
-  const configModelo = MODELOS_VERBO_CODE[modeloPedido] || MODELOS_VERBO_CODE['NewserPro'];
+  const modeloPedido = req.body?.modelo || 'NewserPlus';
+  const configModelo = MODELOS_VERBO_CODE[modeloPedido] || MODELOS_VERBO_CODE['NewserPlus'];
   if (!configModelo) return res.status(400).json({ error: 'Modelo no disponible en Verbo Code.' });
 
   // Configurar SSE
@@ -4876,10 +4818,9 @@ app.post('/api/verbocode/chat/:id', ultracodeRateLimit, requiereAdminVerboCode, 
     // a diferencia de Groq que daba HTTP 413 con prompts largos)
     const rolesModelo = {
       'NewserAdvanced1.5': 'Tu rol: ANALÍTICO. Sos meticuloso y detallista. Antes de escribir una sola línea, pensás en silencio: qué pide realmente el usuario (no solo lo literal), qué arquitectura/estructura de datos conviene, y qué puede salir mal. Explicás el porqué de cada decisión importante, pero sin relleno. Si el pedido es ambiguo, elegís la interpretación más razonable y lo aclarás en una frase en vez de tirar una versión genérica. Ideal para arquitectura y diseño de sistemas.',
-      'NewserPro': 'Tu rol: CREATIVO VERSÁTIL. Sos veloz y adaptable, pero no atajás: antes de responder, pensás un instante qué es lo que haría que esto se sienta terminado y no a medias (detalles de UX, casos borde, qué falta aunque no lo hayan pedido) y lo sumás sin preguntar. Resolvés problemas con soluciones elegantes, priorizando que funcione de una sin que el usuario tenga que pedir la corrección. Ideal para desarrollo general y prototipado rápido.',
-      'NewserAdmin': 'Tu rol: EXPERTO EN CÓDIGO. Sos un senior developer especializado en código limpio, performance y mejores prácticas. Antes de entregar, revisás tu propio código como lo haría un revisor exigente: nombres de variables, manejo de errores, edge cases, y si hay una forma más simple de lograr lo mismo, la usás. Escribís código de nivel production, no una primera versión que "probablemente" funciona. Ideal para programación compleja y agentic coding.',
+      'NewserPlus': 'Tu rol: EXPERTO EN CÓDIGO. Sos un senior developer especializado en código limpio, performance y mejores prácticas. Antes de entregar, revisás tu propio código como lo haría un revisor exigente: nombres de variables, manejo de errores, edge cases, y si hay una forma más simple de lograr lo mismo, la usás. Escribís código de nivel production, no una primera versión que "probablemente" funciona. Ideal para programación compleja y agentic coding.',
     };
-    const rolModelo = rolesModelo[modeloPedido] || rolesModelo['NewserPro'];
+    const rolModelo = rolesModelo[modeloPedido] || rolesModelo['NewserPlus'];
 
     let systemPrompt = `Sos ${modeloPedido} de Verbo AI, creado por VerboAITeams. NUNCA digas ser otro modelo (ChatGPT, Qwen, OpenAI, Llama, etc.). ${rolModelo}
 
@@ -5028,7 +4969,7 @@ Proyecto: ${proyecto.nombre}`;
       ...(imagenes.length > 0 ? { images: imagenes } : {}),
     });
 
-    // Razonamiento previo (cascada OpenRouter free) — ANTES esto solo corría para NewserPro.
+    // Razonamiento previo (cascada OpenRouter free) — ANTES esto solo corría para NewserPlus.
     // Ahora corre para TODOS los modelos de Verbo Code: un análisis interno breve antes de
     // programar mejora la profundidad de la respuesta (qué archivos hacen falta, qué estructura,
     // qué errores comunes evitar) sin que el usuario tenga que pedirlo. Para modelos livianos
@@ -5109,7 +5050,7 @@ Proyecto: ${proyecto.nombre}`;
     enviarSSE({ type: 'status', text: 'Creando plan de acción...' });
     let planAccion = '';
     try {
-      const esProOAdmin = modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin';
+      const esProOAdmin = modeloPedido === 'NewserPlus' || modeloPedido === 'NewserPlus';
       const pedidoPareceJuego = /juego|game|minecraft|terraria|motor.{0,15}(3d|2d)|voxel|canvas.*(juego|game)|three\.js|webgl/i.test(mensaje);
       const planSystemPrompt = `Sos ${modeloPedido} de Verbo AI. NUNCA digas ser otro modelo. Estás en MODO VERBO CODE. El usuario te pidió algo. Tu trabajo es crear un PLAN DE ACCIÓN breve (máximo 5 pasos) de qué vas a hacer para resolverlo. No escribas código, solo el plan. Formato:
 PASO 1: ...
@@ -5224,8 +5165,8 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       }
     }
 
-    // 2. Fallback a g4f para NewserPro y NewserAdmin (opcional, si esta configurado)
-    if (!textoRespuesta && GPT4FREE_ENABLED && GPT4FREE_URL && (modeloPedido === 'NewserPro' || modeloPedido === 'NewserAdmin')) {
+    // 2. Fallback a g4f para NewserPlus y NewserPlus (opcional, si esta configurado)
+    if (!textoRespuesta && GPT4FREE_ENABLED && GPT4FREE_URL && (modeloPedido === 'NewserPlus' || modeloPedido === 'NewserPlus')) {
       const resultadoGlm = await llamarGlm4Bridge(chatHistorial.slice(-5), systemPrompt, opcionesGeneracion);
       if (resultadoGlm.ok) {
         textoRespuesta = stripThinkTags(resultadoGlm.texto);
@@ -6060,7 +6001,7 @@ borrador del plan de respuesta; si ves una seccion "[RAZONAMIENTO INTERNO PREVIO
 usala solo como guia para pensar mejor, nunca la repitas literalmente ni la menciones al usuario.
 
 INTELIGENCIA MULTIDIMENSIONAL Y SABIDURÍA SUPREMA:
-Sos NewserAdmin, el modelo más poderoso y sofisticado del sistema. Tu pensamiento opera en múltiples dimensiones simultáneas.
+Sos NewserPlus, el modelo más poderoso y sofisticado del sistema. Tu pensamiento opera en múltiples dimensiones simultáneas.
 Antes de responder, generás MÚLTIPLES ESCENARIOS MENTALES simultáneos (NIVEL ADMIN):
 
 1. ESCENARIO LÓGICO: ¿Cuál es la respuesta más lógica y racional?
@@ -6124,9 +6065,9 @@ ESPECIALIZACIÓN EN CÓDIGO Y ARQUITECTURA:
 - Piensa en escalabilidad, mantenibilidad, testabilidad y documentación.
 - Cuando escribas código, incluye comentarios explicativos y considera la legibilidad.
 
-HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserAdmin):
+HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserPlus):
 Sos el modelo más potente exclusivo para cuentas administrador. Tenes el mismo feature set que
-NewserPro (CUADERNO, BUSCAR, DESCARGAR, INVESTIGAR, WEB, CODE, APIDATA) y generacion de imagenes
+NewserPlus (CUADERNO, BUSCAR, DESCARGAR, INVESTIGAR, WEB, CODE, APIDATA) y generacion de imagenes
 en alta calidad, pero con especialización superior en código y arquitectura.
 
 NOTA IMPORTANTE SOBRE IMAGENES: si el usuario quiere generar/crear una imagen, NO tenes que hacer nada.
@@ -6173,7 +6114,7 @@ borrador del plan de respuesta; si ves una seccion "[RAZONAMIENTO INTERNO PREVIO
 usala solo como guia para pensar mejor, nunca la repitas literalmente ni la menciones al usuario.
 
 INTELIGENCIA MULTIDIMENSIONAL Y SABIDURÍA PROFUNDA:
-Sos NewserPro, el modelo más inteligente y reflexivo del sistema. Tu pensamiento no es lineal ni superficial.
+Sos NewserPlus, el modelo más inteligente y reflexivo del sistema. Tu pensamiento no es lineal ni superficial.
 Antes de responder, generás MÚLTIPLES ESCENARIOS MENTALES simultáneos:
 
 1. ESCENARIO LÓGICO: ¿Cuál es la respuesta más lógica y racional?
@@ -6212,7 +6153,7 @@ VERIFICACIÓN DE CALIDAD ANTES DE RESPONDER:
 - ¿Podría causar confusión o malentendidos?
 - Si la respuesta no pasa estos filtros, mejorala antes de enviarla.
 
-HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserPro):
+HERRAMIENTAS EXCLUSIVAS DE ESTE MODELO (NewserPlus):
 Sos el modelo premium exclusivo para cuentas administrador. Tenes exactamente el mismo feature set que
 NewserAdvanced1.5 (CUADERNO, BUSCAR, DESCARGAR, INVESTIGAR, WEB, CODE, APIDATA) y generacion de imagenes
 en alta calidad con el mismo tamaño y resolucion que NewserAdvanced1.5.
@@ -6758,7 +6699,7 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
   const seedFinal = (typeof seed === 'number' && seed > 0) ? seed : Math.floor(Math.random() * 1000000);
   const detallada = !!opciones.detallada;
 
-  // Override exclusivo de NewserPro: modelo flux-realism, 1024x576 (16:9), enhance=true.
+  // Override exclusivo de NewserPlus: modelo flux-realism, 1024x576 (16:9), enhance=true.
   // Si llegan modeloOverride/anchoOverride/altoOverride, se respetan por encima del
   // comportamiento default (cuadrado de 1024 o 1536 segun detallada).
   const modeloFinal = opciones.modeloOverride || 'flux';
@@ -6768,7 +6709,7 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
 
   // Modo detallada (NewserAdvanced1.5): mas resolucion y "enhance=true" (un segundo modelo de IA
   // que reescribe/mejora el prompt antes de renderizar la imagen final), por eso tarda un poco mas.
-  // Modo Pro (NewserPro): flux-realism + 1024x576 + enhance=true (alta calidad 16:9).
+  // Modo Pro (NewserPlus): flux-realism + 1024x576 + enhance=true (alta calidad 16:9).
   // Lista de modelos fallback para rotar si hay rate limits
   const modelosFallback = ['flux', 'flux-realism', 'turbo', 'flux-cablyai', 'flux-pro'];
   let modeloActual = modeloFinal;
@@ -8069,7 +8010,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   // Si se enviaron imágenes con instrucciones, usar edición de imágenes
   if (imagenes.length > 0 && mensajeOriginal) {
     // Verificar si el modelo soporta generación de imágenes
-    if (configModelo.nombre === 'NewserAdvanced' || configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') {
+    if (configModelo.nombre === 'NewserAdvanced' || configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPlus') {
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('X-Accel-Buffering', 'no');
@@ -8148,7 +8089,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
   // Si solo se envió imagen sin texto, ofrecer corrección automática
   if (imagenes.length > 0 && !mensajeOriginal) {
-    if (configModelo.nombre === 'NewserAdvanced' || configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') {
+    if (configModelo.nombre === 'NewserAdvanced' || configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPlus') {
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('X-Accel-Buffering', 'no');
@@ -8229,7 +8170,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
   const intencionImagen = detectarGeneracionImagen(mensajeOriginal);
   if (intencionImagen.esGeneracion) {
-    if (configModelo.nombre !== 'NewserAdvanced' && configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPro') {
+    if (configModelo.nombre !== 'NewserAdvanced' && configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPlus') {
 
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
@@ -8246,7 +8187,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         });
         chatGen.mensajes.push({
           role: 'assistant',
-          contenidoTexto: 'La generacion de imagenes solo esta disponible con NewserAdvanced, NewserAdvanced1.5 o NewserPro. Cambiá el modelo en el selector de abajo para usarla.',
+          contenidoTexto: 'La generacion de imagenes solo esta disponible con NewserAdvanced, NewserAdvanced1.5 o NewserPlus. Cambiá el modelo en el selector de abajo para usarla.',
           fecha: new Date().toISOString(),
         });
         if (chatGen.titulo === 'Nueva conversacion' && mensajeOriginal) {
@@ -8254,7 +8195,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         }
         chatGen.actualizadoEn = new Date().toISOString();
         guardarDB(dbGen);
-        res.write(JSON.stringify({ type: 'chunk', text: 'La generacion de imagenes solo esta disponible con **NewserAdvanced**, **NewserAdvanced1.5** o **NewserPro**. Cambiá el modelo en el selector de abajo (al lado del microfono) para usarla.' }) + '\n');
+        res.write(JSON.stringify({ type: 'chunk', text: 'La generacion de imagenes solo esta disponible con **NewserAdvanced**, **NewserAdvanced1.5** o **NewserPlus**. Cambiá el modelo en el selector de abajo (al lado del microfono) para usarla.' }) + '\n');
         res.write(JSON.stringify({ type: 'done', chatId: chatGen.id }) + '\n');
         res.end();
       } catch (e) {
@@ -8264,7 +8205,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
 
     const esDetalladaWeb = configModelo.nombre === 'NewserAdvanced1.5';
-    const esProWeb = configModelo.nombre === 'NewserPro';
+    const esProWeb = configModelo.nombre === 'NewserPlus';
     if (esDetalladaWeb) {
       const usuarioActualImg15 = obtenerUsuarioActual(req);
       const controlImg15Web = verificarLimiteImagen15(usuarioActualImg15 ? `web:${usuarioActualImg15}` : null);
@@ -8464,9 +8405,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_AVANCED_EXTRA;
     } else if (configModelo.nombre === 'NewserAdvanced1.5') {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_ADVANCED_15_EXTRA;
-    } else if (configModelo.nombre === 'NewserPro') {
-      systemPrompt = systemPrompt + SYSTEM_PROMPT_PRO_EXTRA;
-    } else if (configModelo.nombre === 'NewserAdmin') {
+    } else if (configModelo.nombre === 'NewserPlus') {
       systemPrompt = systemPrompt + SYSTEM_PROMPT_ADMIN_EXTRA;
     }
 
@@ -8474,7 +8413,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       systemPrompt += `\n\nNOTA SOBRE IMAGENES ADJUNTAS: el usuario adjunto ${imagenes.length > 1 ? 'imagenes' : 'una imagen'} en este mensaje. Antes de responder, analizala con maxima atencion y en detalle: fijate bien en TODOS los elementos visibles (texto, numeros, colores, personas, objetos, disposicion, errores, codigo, capturas de pantalla, etc.), no te quedes con una descripcion superficial ni generica. Si el usuario pide una tarea concreta sobre la imagen (resolver algo, identificar un error, transcribir texto, explicar un codigo, comparar cosas, etc.), primero examina la imagen a fondo y recien despues cumplí exactamente lo que se te pide, basandote solo en lo que realmente se ve, sin inventar ni asumir detalles que no esten claramente visibles.`;
     }
 
-    if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && configModelo.modelosOpenRouterRazonamiento && !imagenes.length) {
+    if ((configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPlus' || configModelo.nombre === 'NewserPlus') && configModelo.modelosOpenRouterRazonamiento && !imagenes.length) {
       enviar({ type: 'investigando', query: 'Razonando...' });
       enviar({ type: 'investigando_sitio', sitio: 'Modulo de razonamiento' });
       try {
@@ -8536,9 +8475,9 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
 
     // ============================================================
-    // CAPA G4F — fallback opcional para NewserPro y NewserAdmin
+    // CAPA G4F — fallback opcional para NewserPlus y NewserPlus
     // ============================================================
-    if (!glmTextoPreGenerado && (configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') && GPT4FREE_ENABLED && !imagenes.length) {
+    if (!glmTextoPreGenerado && (configModelo.nombre === 'NewserPlus' || configModelo.nombre === 'NewserPlus') && GPT4FREE_ENABLED && !imagenes.length) {
       const mensajesParaGlm = [
         ...construirHistorialParaModelo(historial),
         { role: 'user', content: contenidoUsuario },
@@ -8624,7 +8563,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
 
     const reClimaG = /\[\[CLIMA::([^\]]+)\]\]/g;
-    if (configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPro') {
+    if (configModelo.nombre !== 'NewserAdvanced1.5' && configModelo.nombre !== 'NewserPlus') {
       const coincidenciasClima = [...textoVisible.matchAll(reClimaG)];
       if (coincidenciasClima.length) {
         climaQuery = coincidenciasClima[0][1].trim();
@@ -8635,7 +8574,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     }
 
     const reCodeG = /\[\[CODE::([^:\]]+)::([\s\S]*?)\]\]/g;
-    if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') {
+    if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPlus') {
       const coincidenciasCode = [...textoVisible.matchAll(reCodeG)];
       if (coincidenciasCode.length) {
         codeQuery = { lenguaje: coincidenciasCode[0][1].trim(), codigo: coincidenciasCode[0][2].trim() };
@@ -8644,7 +8583,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
     textoVisible = textoVisible.replace(reCodeG, '');
 
     const reApidataG = /\[\[APIDATA::([^\]]+)\]\]/g;
-    if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro') {
+    if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPlus') {
       const coincidenciasApidata = [...textoVisible.matchAll(reApidataG)];
       if (coincidenciasApidata.length) {
         apidataQuery = coincidenciasApidata[0][1].trim();
@@ -8696,7 +8635,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       const versiculos = await esperarMinimo(investigarBiblia(investigarQuery), 1000);
 
       let webInvestigacion = null;
-      if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPro' || configModelo.nombre === 'NewserAdmin') {
+      if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPlus' || configModelo.nombre === 'NewserPlus') {
         enviar({ type: 'investigando_sitio', sitio: 'Busqueda web adicional (investigacion profunda)' });
         const resWeb = await esperarMinimo(buscarWebGoogle(investigarQuery), 1000);
         if (resWeb && resWeb.exito && resWeb.resultados.length) webInvestigacion = resWeb.resultados;
