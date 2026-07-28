@@ -517,7 +517,12 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   border-radius: 8px;
   margin: 8px 0;
   overflow: hidden;
-  transition: max-height 0.35s ease, opacity 0.35s ease;
+  /* Sin un max-height numérico de base, la transición hacia 0 al colapsar
+     no tiene de dónde animar y el navegador la aplica de golpe — la card
+     se "aplasta" en vez de cerrarse suave. Mismo bug ya encontrado antes en
+     .frame-investigando (chat normal) y .thinking-lista. */
+  max-height: 400px;
+  transition: max-height 0.35s ease, opacity 0.35s ease, margin 0.35s ease;
 }
 
 .vc-investigando-topbar {
@@ -650,7 +655,10 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   border-radius: 8px;
   margin: 8px 0;
   overflow: hidden;
-  transition: max-height 0.35s ease, opacity 0.35s ease;
+  /* Mismo bug de siempre: sin max-height numérico de base no hay de dónde
+     animar la transición al colapsar. */
+  max-height: 300px;
+  transition: max-height 0.35s ease, opacity 0.35s ease, margin 0.35s ease;
 }
 
 .vc-creando-topbar {
@@ -1589,4 +1597,29 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   white-space: pre-wrap;
   max-height: 160px;
   overflow-y: auto;
+}
+
+/* Banner de éxito al terminar de implementar código de verdad (creó/editó
+   archivos y no quedó ningún error sin resolver). */
+.vc-success-banner {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(74, 154, 92, 0.12);
+  border: 1px solid rgba(74, 154, 92, 0.35);
+  color: #4a9a5c;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  margin: 2px 0 10px;
+  animation: vc-aparecer 0.25s ease;
+}
+.vc-success-banner svg {
+  flex-shrink: 0;
+}
+@keyframes vc-aparecer {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }

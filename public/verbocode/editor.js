@@ -931,6 +931,8 @@ function actualizarCardCompactando(bloque, escritos) {
   if (!cardEl) return;
   const porcentajeEl = cardEl.querySelector('.vc-creando-porcentaje');
   const scanEl = cardEl.querySelector('.vc-creando-scan');
+  const archivoEl = cardEl.querySelector('.vc-creando-archivo');
+  if (archivoEl && bloque.archivo) archivoEl.textContent = bloque.archivo;
   const refLen = (bloque.tipo === 'FILE_EDIT' && estado.archivos[bloque.archivo]) ? estado.archivos[bloque.archivo].length : null;
   if (refLen && refLen > 0) {
     const pct = Math.max(1, Math.min(99, Math.round((escritos / refLen) * 100)));
@@ -1248,6 +1250,16 @@ async function enviarChat() {
           if (!bloqueActivo) {
             const detectado = detectarBloqueEnCurso(textoRespuesta);
             if (detectado) bloqueActivo = detectado;
+          } else if (!bloqueActivo.archivo && (bloqueActivo.tipo === 'FILE_CREATE' || bloqueActivo.tipo === 'FILE_EDIT')) {
+            // El bloque ya se había detectado, pero en ese momento el nombre
+            // de archivo todavía no había terminado de llegar por el stream
+            // (solo llegó "[[FILE_CREATE::" y nada más todavía) — antes esto
+            // quedaba pegado en null para siempre y la card mostraba
+            // "file create" en vez del nombre real. Ahora se reintenta
+            // extraerlo en cada chunk hasta que aparezca.
+            const resto = textoRespuesta.slice(bloqueActivo.headerEnd);
+            const idxSep = resto.indexOf('::');
+            if (idxSep !== -1) bloqueActivo.archivo = resto.slice(0, idxSep).trim();
           }
 
           if (bloqueActivo) {
@@ -1660,6 +1672,8 @@ function crearGrupoAcciones() {
 
 function agregarAccionAlGrupo(accion) {
   if (!accionesGroupEl) accionesGroupEl = crearGrupoAcciones();
+  accionesGroupEl._acciones = accionesGroupEl._acciones || [];
+  accionesGroupEl._acciones.push(accion);
   const body = accionesGroupEl.querySelector('.vc-actions-body');
   const icono = ICONOS_ACCION[accion.tipo] || ICONO_ACCION_DEFAULT;
 
@@ -1706,9 +1720,28 @@ function finalizarGrupoAcciones() {
   listo.className = 'vc-actions-row vc-actions-row-listo';
   listo.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#4a9a5c" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg><span class="vc-actions-desc">Listo</span>';
   body.appendChild(listo);
+
+  // Banner de éxito: cuando terminó de escribir/aplicar código de verdad
+  // (creó o editó al menos un archivo), mostrar una confirmación clara de
+  // que quedó implementado — en vez de que el usuario tenga que asumirlo
+  // por la ausencia de errores. Si algún RUN/TEST quedó con error sin
+  // resolver (el auto-fix se dio por vencido), no se muestra el banner de
+  // éxito — mejor no decir "listo" si en realidad no lo está.
+  const lista = accionesGroupEl._acciones || [];
+  const huboArchivos = lista.some((a) => a.tipo === 'file_create' || a.tipo === 'file_edit');
+  const huboErrorSinResolver = lista.some((a) => (a.tipo === 'run' || a.tipo === 'test') && a.resultado && a.resultado.exito === false);
+  if (huboArchivos && !huboErrorSinResolver) {
+    const banner = document.createElement('div');
+    banner.className = 'vc-success-banner';
+    const cantidadArchivos = new Set(lista.filter((a) => a.tipo === 'file_create' || a.tipo === 'file_edit').map((a) => a.nombre)).size;
+    banner.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke-linecap="round" stroke-linejoin="round"/><polyline points="22 4 12 14.01 9 11.01" stroke-linecap="round" stroke-linejoin="round"/></svg> Implementado con éxito — ${cantidadArchivos} archivo${cantidadArchivos === 1 ? '' : 's'} listo${cantidadArchivos === 1 ? '' : 's'}.`;
+    document.getElementById('vcChatMensajes').appendChild(banner);
+  }
+
   // Colapsar sola después de un rato, igual que la card de "Investigando"
   setTimeout(() => accionesGroupEl && accionesGroupEl.classList.remove('vc-actions-abierto'), 1800);
   accionesGroupEl = null;
+  scrollChatAbajo();
 }
 
 function formatearMarkdown(texto) {
