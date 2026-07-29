@@ -79,7 +79,7 @@ setInterval(() => {
 // ============================================================
 // Sistema simple de colas para limitar concurrencia en endpoints críticos
 const queues = new Map();
-const QUEUE_CONCURRENCY = 5; // Default para colas sin override especifico (wikipedia, biblia, piston, etc).
+const QUEUE_CONCURRENCY = 5; // Default para colas sin override especifico (wikipedia, biblia, judge0, etc).
 // Pollinations (imagen.pollinations.ai) tiene su propio limite de rate. Con las optimizaciones de
 // reintentos, jitter y timeouts aumentados, podemos manejar un poco más de concurrencia.
 // Default aumentado a 3 (antes 2) para mejor throughput sin saturar el rate limit de Pollinations.
@@ -308,6 +308,11 @@ const POLLINATIONS_TEXT_MODEL = process.env.POLLINATIONS_TEXT_MODEL || 'openai-f
 const POLLINATIONS_TEXT_URL = process.env.POLLINATIONS_TEXT_URL || 'https://text.pollinations.ai/openai';
 const POLLINATIONS_TEXT_TIMEOUT = parseInt(process.env.POLLINATIONS_TEXT_TIMEOUT || '60000', 10);
 const POLLINATIONS_TEXT_REFERER = process.env.POLLINATIONS_TEXT_REFERER || 'https://verboai.duckdns.org';
+
+// ============================================================
+// JUDGE0 — Ejecución de código
+// ============================================================
+const JUDGE0_URL = "http://localhost:2358";
 // Token OPCIONAL de Pollinations (registrarse gratis en https://enter.pollinations.ai).
 // Si esta seteado, se envia como Authorization: Bearer <token> y desbloquea los
 // modelos "nectar" (glm-5.2, etc). Sin token, solo openai-fast (anonimo).
@@ -3449,7 +3454,7 @@ async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE
       lenguaje,
       codigo: codigo.slice(0, 200) + (codigo.length > 200 ? '...' : ''),
       resultado: resultadoTest,
-      descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Piston API)'}`,
+      descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Judge0 API)'}`,
     });
   }
 
@@ -4564,12 +4569,12 @@ El código debe:
 });
 
 // ============================================================
-// API: ejecutar código con Piston API (para terminal de Verbo Code)
+// API: ejecutar código con Judge0 (para terminal de Verbo Code)
 // ============================================================
 // ============================================================
 // Terminal de Verbo Code: comandos que tocan el proyecto de verdad
 // ============================================================
-// Antes, TODO lo que se tipeaba en la terminal se mandaba a Piston (un sandbox
+// Antes, TODO lo que se tipeaba en la terminal se mandaba a Judge0 (un sandbox
 // aislado y descartable). Eso significa que comandos como "mkdir", "touch",
 // "echo x > archivo" o "rm archivo" se ejecutaban en un contenedor que se tira
 // apenas termina, sin ningun contacto con proyecto.archivos: el usuario veia
@@ -4578,7 +4583,7 @@ El código debe:
 // proyecto real (persistido con guardarProyectoVerboCode), devolviendo tambien
 // `archivosActualizados` para que el cliente pueda refrescar el arbol sin
 // esperar a que la IA responda. Todo lo que NO es una operacion de archivo
-// (scripts, algoritmos, "python calc.py", etc) sigue yendo a Piston como antes.
+// (scripts, algoritmos, "python calc.py", etc) sigue yendo a Judge0.
 function normalizarRutaProyecto(ruta) {
   return (ruta || '').trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
 }
@@ -4740,7 +4745,7 @@ app.post('/api/verbocode/execute', codeRateLimit, requiereAdminVerboCode, async 
   if (!codigo) return res.status(400).json({ error: 'Falta el código a ejecutar.' });
 
   // Si el comando es bash y hay un proyecto activo, intentar resolverlo contra
-  // el proyecto real ANTES de mandarlo a Piston (que es un sandbox descartable
+  // el proyecto real ANTES de mandarlo a Judge0 (que es un sandbox descartable
   // sin acceso al proyecto).
   if (lenguaje === 'bash' && proyectoId) {
     const proyecto = leerProyectoVerboCode(proyectoId, req.usuarioVerboCode);
@@ -5419,7 +5424,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     // no una simulación: corre exactamente lo mismo que corre el usuario a
     // mano en la terminal de Verbo Code — primero contra el proyecto virtual
     // (ls/cat/echo/touch/rm/mv, etc), y si no es un comando de archivo, en el
-    // sandbox real de Piston). Se manda un evento SSE ANTES de ejecutar (para
+    // sandbox real de Judge0). Se manda un evento SSE ANTES de ejecutar (para
     // que el punto rojo de la terminal se prenda y, si está abierta, se vea
     // "corriendo...") y otro DESPUÉS con la salida real, apenas termina.
     const reRun = /\[\[RUN::([\s\S]*?)\]\]/g;
@@ -5538,7 +5543,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         lenguaje,
         codigo: codigo.slice(0, 200) + (codigo.length > 200 ? '...' : ''),
         resultado: resultadoTest,
-        descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Piston API)'}`,
+        descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Judge0 API)'}`,
       });
     }
 
@@ -5996,7 +6001,7 @@ Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real d
 Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
 rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r.
 Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
-Esto ejecuta el codigo REAL en un sandbox (Piston API) y el resultado real (stdout/stderr) se agrega
+Esto ejecuta el codigo REAL en un sandbox (Judge0 API) y el resultado real (stdout/stderr) se agrega
 despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
 esta herramienta en vez de imaginarte el resultado.
 
@@ -6109,7 +6114,7 @@ Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real d
 Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
 rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r.
 Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
-Esto ejecuta el codigo REAL en un sandbox (Piston API) y el resultado real (stdout/stderr) se agrega
+Esto ejecuta el codigo REAL en un sandbox (Judge0 API) y el resultado real (stdout/stderr) se agrega
 despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
 esta herramienta en vez de imaginarte el resultado.
 
@@ -6198,7 +6203,7 @@ Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real d
 Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
 rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r.
 Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
-Esto ejecuta el codigo REAL en un sandbox (Piston API) y el resultado real (stdout/stderr) se agrega
+Esto ejecuta el codigo REAL en un sandbox (Judge0 API) y el resultado real (stdout/stderr) se agrega
 despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
 esta herramienta en vez de imaginarte el resultado.
 
@@ -7600,167 +7605,25 @@ async function ejecutarCodigoJudge0(lenguaje, codigo) {
   }
 }
 
-// Piston API: API de ejecución de código open-source
-// NOTA (jul 2026): Desde el 15 feb 2026 la API pública de emkc.org exige
-// autorización (401 sin key). Los fallbacks viejos (piston-api.vercel.app,
-// piston.fly.dev) están muertos (404 / timeout permanente) — probablemente
-// mirrors comunitarios abandonados. Se reemplazan por Judge0 CE
-// (https://ce.judge0.com), que es publica, gratuita, y NO requiere API key
-// (confirmado: "Authentication is not required to access the Judge0 CE API").
-// Si en el futuro conseguís una API key de emkc.org (pedila por Discord a
-// EngineerMan) o levantás tu propio Piston con Docker, esta va a seguir
-// siendo la opción mas robusta a largo plazo porque no depende de terceros.
-const PISTON_API_URL = process.env.PISTON_API_URL || 'https://emkc.org/api/v2/piston';
-const PISTON_API_KEY = process.env.PISTON_API_KEY || '';
-// URL de una instancia propia de Piston (self-hosted), si la configurás via env.
-// Si existe, se prueba ANTES que Judge0 porque tiene prioridad (es tuya, sin límites).
-const PISTON_SELF_HOSTED_URL = process.env.PISTON_SELF_HOSTED_URL || '';
-
-// Mapeo de lenguajes para Piston API
-const PISTON_LANGUAGE_MAP = {
-  python: { language: 'python', version: '3.10.0' },
-  javascript: { language: 'javascript', version: '18.15.0' },
-  typescript: { language: 'typescript', version: '5.0.3' },
-  java: { language: 'java', version: '15.0.2' },
-  c: { language: 'c', version: '10.2.1' },
-  cpp: { language: 'c++', version: '10.2.1' },
-  csharp: { language: 'csharp', version: '6.12.0' },
-  go: { language: 'go', version: '1.19.1' },
-  rust: { language: 'rust', version: '1.68.2' },
-  ruby: { language: 'ruby', version: '3.2.1' },
-  php: { language: 'php', version: '8.2.8' },
-  bash: { language: 'bash', version: '5.2.0' },
-  sql: { language: 'sql', version: 'sqlite3.3.0' },
-  kotlin: { language: 'kotlin', version: '1.8.20' },
-  swift: { language: 'swift', version: '5.8.0' },
-  perl: { language: 'perl', version: '5.38.0' },
-  lua: { language: 'lua', version: '5.4.6' },
-  r: { language: 'r', version: '4.3.1' },
-};
-
-// Ejecuta contra una instancia de Piston (self-hosted o emkc.org)
-async function ejecutarEnPiston(apiUrl, lang, langConfig, fuente, apiKey, timeout) {
-  const resp = await axios.post(`${apiUrl}/execute`, {
-    language: langConfig.language,
-    version: langConfig.version,
-    files: [{ name: 'main', content: fuente }],
-  }, {
-    timeout,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}),
-    },
-    validateStatus: () => true,
-  });
-
-  if (resp.status !== 200) {
-    return { exito: false, error: `HTTP ${resp.status}` };
-  }
-
-  const data = resp.data;
-  const run = data.run || {};
-  const compile = data.compile || {};
-  const stdout = run.stdout || '';
-  const stderr = run.stderr || '';
-  const compileStderr = compile.stderr || '';
-  const compileStdout = compile.stdout || '';
-  const salidaCompleta = [compileStdout, compileStderr, stdout, stderr].filter(Boolean).join('\n');
-  const error = (run.code !== null && run.code !== 0) ? `Exit code: ${run.code}` : null;
-
-  return {
-    exito: true,
-    lenguaje: lang,
-    version: `${langConfig.language} ${langConfig.version}`,
-    stdout: salidaCompleta || '(sin salida)',
-    stderr: stderr || compileStderr || '',
-    tiempo: run.cpu_time || 0,
-    memoria: run.memory || 0,
-    exitCode: run.code,
-    error,
-  };
-}
+// Piston API eliminado - ahora usa solo Judge0
 
 async function ejecutarCodigoPiston(lenguaje, codigo) {
-  const lang = (lenguaje || '').trim().toLowerCase();
-  const fuente = (codigo || '').replace(/\\n/g, '\n');
-  if (!lang || !fuente.trim()) return { exito: false, error: 'Falta lenguaje o codigo.' };
-  if (fuente.length > 10000) return { exito: false, error: 'El codigo es demasiado largo (max 10000 caracteres).' };
-
-  const langConfig = PISTON_LANGUAGE_MAP[lang];
-  const judge0LangId = JUDGE0_LANGUAGE_IDS[lang];
-  if (!langConfig) {
-    return { exito: false, error: `Lenguaje "${lang}" no soportado por Piston. Usa: ${Object.keys(PISTON_LANGUAGE_MAP).join(', ')}.` };
-  }
-
-  // Cadena de proveedores a probar, en orden de prioridad. Se arma dinámicamente:
-  // solo se intenta emkc.org si hay API key configurada (si no, un 401 es 100% seguro
-  // y no vale la pena gastar tiempo/timeout en eso).
-  const proveedores = [];
-  if (PISTON_SELF_HOSTED_URL) {
-    proveedores.push({ nombre: 'self-hosted', tipo: 'piston', url: PISTON_SELF_HOSTED_URL, key: '' });
-  }
-  if (PISTON_API_KEY) {
-    proveedores.push({ nombre: 'emkc.org', tipo: 'piston', url: PISTON_API_URL, key: PISTON_API_KEY });
-  }
-  if (judge0LangId) {
-    proveedores.push({ nombre: 'judge0', tipo: 'judge0' });
-  }
-
-  if (proveedores.length === 0) {
-    return { exito: false, error: `Lenguaje "${lang}" no tiene ningún proveedor de ejecución disponible.` };
-  }
-
-  // Usar queue para limitar concurrencia de ejecución de código
-  return await enqueue('piston', async () => {
-    let ultimoError = null;
-
-    for (let i = 0; i < proveedores.length; i++) {
-      const prov = proveedores[i];
-      // Timeout corto y fijo por proveedor: si un servicio no responde en 8s
-      // no vale la pena esperar mas, mejor pasar rápido al siguiente.
-      const timeout = 8000;
-
-      if (i > 0) {
-        await new Promise((r) => setTimeout(r, 300));
-      }
-
-      try {
-        console.log(`[piston] Intento ${i + 1}/${proveedores.length} - lenguaje: ${lang}, timeout: ${timeout}ms, proveedor: ${prov.nombre}`);
-
-        const resultado = prov.tipo === 'judge0'
-          ? await (async () => {
-              const r = await ejecutarCodigoJudge0(lang, fuente);
-              if (!r.exito) return r;
-              // Adaptar forma de ejecutarCodigoJudge0 a la forma comun de este pipeline
-              return {
-                exito: true,
-                lenguaje: r.lenguaje,
-                version: r.version,
-                stdout: r.stdout || '(sin salida)',
-                stderr: r.stderr || '',
-                tiempo: 0,
-                memoria: 0,
-                exitCode: r.codigoSalida,
-                error: null,
-              };
-            })()
-          : await ejecutarEnPiston(prov.url, lang, langConfig, fuente, prov.key, timeout);
-
-        if (resultado.exito) {
-          console.log(`[piston] OK - lenguaje: ${lang}, proveedor: ${prov.nombre}, tiempo: ${resultado.tiempo}ms`);
-          return resultado;
-        }
-
-        ultimoError = resultado.error;
-        console.warn(`[piston] Intento ${i + 1} (${prov.nombre}) devolvio ${resultado.error}`);
-      } catch (e) {
-        ultimoError = e.message;
-        console.warn(`[piston] Intento ${i + 1} (${prov.nombre}) fallo: ${e.message}`);
-      }
-    }
-
-    console.error(`[piston] Todos los proveedores fallaron. Ultimo error: ${ultimoError}`);
-    return { exito: false, error: ultimoError || 'Todos los proveedores de ejecución de código fallaron.' };
+  // Simplificado: usa solo Judge0 (sin Piston)
+  return await enqueue('judge0', async () => {
+    const resultado = await ejecutarCodigoJudge0(lenguaje, codigo);
+    if (!resultado.exito) return resultado;
+    // Adaptar formato para compatibilidad con código existente
+    return {
+      exito: true,
+      lenguaje: resultado.lenguaje,
+      version: resultado.version,
+      stdout: resultado.stdout || '(sin salida)',
+      stderr: resultado.stderr || '',
+      tiempo: 0,
+      memoria: 0,
+      exitCode: resultado.codigoSalida,
+      error: null,
+    };
   });
 }
 

@@ -21,6 +21,11 @@ const estado = {
 };
 
 // ============================================================
+// JUDGE0 — Ejecución de código
+// ============================================================
+const JUDGE0_URL = "https://verboai.duckdns.org/api/ejecutar";
+
+// ============================================================
 // Inicialización
 // ============================================================
 // Resize de sidebars con el mouse: arrastrás la barrita entre paneles y el
