@@ -231,3 +231,39 @@ formNombre.addEventListener('submit', async (ev) => {
     btnConfirmarNombre.textContent = 'Aceptar y continuar';
   }
 });
+
+// ============================================================
+// Botón para ver landing page
+// ============================================================
+function configurarBotonLanding() {
+  const btn = document.getElementById('btnVerLanding');
+  const showcase = document.querySelector('.panel-showcase');
+  const tarjeta = document.querySelector('.tarjeta-envoltorio');
+  
+  if (btn && showcase && tarjeta) {
+    let landingVisible = false;
+    
+    btn.addEventListener('click', () => {
+      landingVisible = !landingVisible;
+      
+      if (landingVisible) {
+        showcase.style.display = 'block';
+        tarjeta.style.display = 'none';
+        btn.innerHTML = `
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Volver al login
+        `;
+      } else {
+        showcase.style.display = 'none';
+        tarjeta.style.display = 'block';
+        btn.innerHTML = `
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Ver landing page
+        `;
+      }
+    });
+  }
+}
+
+// Llamar a la función al cargar
+document.addEventListener('DOMContentLoaded', configurarBotonLanding);
