@@ -80,3 +80,240 @@
 }
 .vc-proyecto-card:hover .vc-proyecto-delete { opacity: 1; }
 .vc-proyecto-delete:hover { background: rgba(220,38,38,0.1); color: var(--vc-danger); }
+
+/* ============================================================
+   SWE-Bench Pro Styles
+   ============================================================ */
+.vc-header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.vc-btn-secondary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--vc-bg-tertiary);
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+  color: var(--vc-text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.vc-btn-secondary:hover {
+  background: var(--vc-bg-secondary);
+  border-color: var(--vc-accent);
+}
+
+.vc-modal-large {
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.vc-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--vc-border);
+}
+
+.vc-modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--vc-text-muted);
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.vc-modal-close:hover {
+  background: var(--vc-bg-tertiary);
+  color: var(--vc-text);
+}
+
+.vc-swe-bench-intro {
+  background: var(--vc-bg-tertiary);
+  padding: 16px;
+  border-radius: var(--vc-radius);
+  margin-bottom: 20px;
+  border-left: 3px solid var(--vc-accent);
+}
+
+.vc-swe-bench-intro p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--vc-text);
+}
+
+.vc-swe-bench-intro p:last-child {
+  margin-bottom: 0;
+}
+
+.vc-swe-bench-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--vc-border);
+  padding-bottom: 0;
+}
+
+.vc-tab {
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--vc-text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.vc-tab:hover {
+  color: var(--vc-text);
+}
+
+.vc-tab.active {
+  color: var(--vc-accent);
+  border-bottom-color: var(--vc-accent);
+}
+
+.vc-tab-content {
+  display: none;
+}
+
+.vc-tab-content.active {
+  display: block;
+}
+
+.vc-form-group {
+  margin-bottom: 16px;
+}
+
+.vc-form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vc-text);
+}
+
+.vc-status {
+  margin-top: 20px;
+  padding: 16px;
+  background: var(--vc-bg-tertiary);
+  border-radius: var(--vc-radius);
+  text-align: center;
+}
+
+.vc-status p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: var(--vc-text);
+}
+
+.vc-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--vc-bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 12px 0;
+}
+
+.vc-progress-fill {
+  height: 100%;
+  background: var(--vc-accent);
+  border-radius: 4px;
+  transition: width 0.3s;
+  width: 0%;
+}
+
+.vc-empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--vc-text-muted);
+  font-size: 14px;
+}
+
+.vc-dataset-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--vc-border);
+  border-radius: var(--vc-radius);
+}
+
+.vc-dataset-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--vc-border);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.vc-dataset-item:hover {
+  background: var(--vc-bg-tertiary);
+}
+
+.vc-dataset-item:last-child {
+  border-bottom: none;
+}
+
+.vc-dataset-item-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--vc-text);
+  margin-bottom: 4px;
+}
+
+.vc-dataset-item-meta {
+  font-size: 12px;
+  color: var(--vc-text-muted);
+}
+
+.vc-result-item {
+  padding: 16px;
+  background: var(--vc-bg-tertiary);
+  border-radius: var(--vc-radius);
+  margin-bottom: 12px;
+}
+
+.vc-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.vc-result-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--vc-text);
+}
+
+.vc-result-score {
+  padding: 4px 8px;
+  background: var(--vc-accent);
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vc-result-details {
+  font-size: 13px;
+  color: var(--vc-text-muted);
+  line-height: 1.5;
+}

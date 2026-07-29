@@ -309,6 +309,134 @@ body {
   line-height: 1.5;
 }
 
+/* ---------- Panel Showcase (Landing Page) ---------- */
+.pagina-inicio {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.panel-showcase {
+  text-align: center;
+  padding: 20px;
+}
+
+.showcase-marca {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.showcase-logo {
+  width: 48px;
+  height: auto;
+  display: block;
+}
+
+.showcase-marca span {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.showcase-titulo {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 600;
+  color: var(--texto);
+  margin: 0 0 16px;
+  line-height: 1.2;
+}
+
+.showcase-sub {
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  color: var(--texto-suave);
+  max-width: 700px;
+  margin: 0 auto 32px;
+  line-height: 1.6;
+}
+
+.showcase-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.showcase-feature {
+  background: rgba(255, 252, 246, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: left;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.showcase-feature:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(69, 47, 30, 0.12);
+}
+
+.showcase-feature-icono {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--azul-logo), #5BA3D0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  color: white;
+}
+
+.showcase-feature strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--texto);
+  margin-bottom: 6px;
+}
+
+.showcase-feature p {
+  font-size: 13px;
+  color: var(--texto-suave);
+  margin: 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .pagina-inicio {
+    padding: 20px 16px;
+    gap: 30px;
+  }
+  
+  .showcase-features {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 420px) {
   .tarjeta { padding: 28px 22px 24px; }
+  
+  .showcase-marca {
+    margin-bottom: 20px;
+  }
+  
+  .showcase-logo {
+    width: 40px;
+  }
+  
+  .showcase-marca span {
+    font-size: 20px;
+  }
 }

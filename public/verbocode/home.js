@@ -184,6 +184,9 @@ function configurarEventos() {
   });
 
   btnCrear.addEventListener('click', crearProyecto);
+
+  // SWE-Bench Pro events
+  configurarSWE BenchEvents();
 }
 
 function cerrarModal() {
@@ -227,4 +230,179 @@ function mostrarToast(msg, tipo = '') {
   toast.textContent = msg;
   toast.className = 'vc-toast ' + tipo;
   setTimeout(() => toast.classList.add('oculto'), 3000);
+}
+
+// ============================================================
+// SWE-Bench Pro Modal Logic
+// ============================================================
+function configurarSWEBenchEvents() {
+  const btnSWE = document.getElementById('btnSWEBench');
+  const modalSWE = document.getElementById('modalSWEBench');
+  const btnCerrarSWE = document.getElementById('btnCerrarSWEBench');
+  const backdropSWE = modalSWE.querySelector('.vc-modal-backdrop');
+  const btnEjecutarSWE = document.getElementById('btnEjecutarSWE');
+
+  btnSWE.addEventListener('click', () => {
+    modalSWE.classList.remove('oculto');
+    cargarDatasetSWE();
+  });
+
+  btnCerrarSWE.addEventListener('click', () => modalSWE.classList.add('oculto'));
+  backdropSWE.addEventListener('click', () => modalSWE.classList.add('oculto'));
+
+  // Tab switching
+  const tabs = modalSWE.querySelectorAll('.vc-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      
+      const tabId = tab.dataset.tab;
+      modalSWE.querySelectorAll('.vc-tab-content').forEach(content => {
+        content.classList.remove('active');
+        if (content.id === `tab-${tabId}`) content.classList.add('active');
+      });
+
+      if (tabId === 'resultados') cargarResultadosSWE();
+      if (tabId === 'dataset') cargarDatasetSWE();
+    });
+  });
+
+  // Execute benchmark
+  btnEjecutarSWE.addEventListener('click', ejecutarBenchmarkSWE);
+
+  // Dataset search
+  const searchInput = document.getElementById('sweDatasetSearch');
+  let searchTimeout;
+  searchInput.addEventListener('input', (e) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      buscarDatasetSWE(e.target.value);
+    }, 300);
+  });
+}
+
+async function ejecutarBenchmarkSWE() {
+  const benchmark = document.getElementById('sweBenchmarkSelect').value;
+  const modelo = document.getElementById('sweModelSelect').value;
+  const limite = document.getElementById('sweLimitInput').value;
+  const statusDiv = document.getElementById('sweEjecucionStatus');
+  const progressFill = document.getElementById('sweProgressFill');
+  const progressText = document.getElementById('sweProgressText');
+
+  statusDiv.classList.remove('oculto');
+  progressFill.style.width = '0%';
+  progressText.textContent = 'Iniciando benchmark...';
+
+  try {
+    const r = await fetch('/api/swe-bench/ejecutar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ benchmark, modelo, limite: limite ? parseInt(limite) : null }),
+    });
+
+    if (!r.ok) throw new Error('Error al ejecutar benchmark');
+
+    const data = await r.json();
+    
+    // Simular progreso (en producción esto vendría del servidor)
+    let progreso = 0;
+    const intervalo = setInterval(() => {
+      progreso += Math.random() * 15;
+      if (progreso >= 100) {
+        progreso = 100;
+        clearInterval(intervalo);
+        statusDiv.classList.add('oculto');
+        mostrarToast('Benchmark completado', 'success');
+        cargarResultadosSWE();
+      }
+      progressFill.style.width = `${progreso}%`;
+      progressText.textContent = `${Math.floor(progreso)}% completado`;
+    }, 500);
+
+  } catch (e) {
+    statusDiv.classList.add('oculto');
+    mostrarToast(e.message, 'error');
+  }
+}
+
+async function cargarResultadosSWE() {
+  const container = document.getElementById('sweResultadosContainer');
+  
+  try {
+    const r = await fetch('/api/swe-bench/resultados');
+    if (!r.ok) throw new Error('Error al cargar resultados');
+    
+    const data = await r.json();
+    
+    if (!data.resultados || data.resultados.length === 0) {
+      container.innerHTML = '<p class="vc-empty-state">No hay resultados aún. Ejecuta un benchmark primero.</p>';
+      return;
+    }
+
+    container.innerHTML = data.resultados.map(r => `
+      <div class="vc-result-item">
+        <div class="vc-result-header">
+          <span class="vc-result-title">${r.benchmark} - ${r.modelo}</span>
+          <span class="vc-result-score">${r.puntuacion}%</span>
+        </div>
+        <div class="vc-result-details">
+          ${r.problemasResueltos}/${r.problemasTotales} problemas resueltos<br>
+          Ejecutado: ${new Date(r.fecha).toLocaleString('es-AR')}
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = '<p class="vc-empty-state">Error al cargar resultados.</p>';
+  }
+}
+
+async function cargarDatasetSWE() {
+  const container = document.getElementById('sweDatasetContainer');
+  
+  try {
+    const r = await fetch('/api/swe-bench/dataset');
+    if (!r.ok) throw new Error('Error al cargar dataset');
+    
+    const data = await r.json();
+    
+    if (!data.problemas || data.problemas.length === 0) {
+      container.innerHTML = '<p class="vc-empty-state">No hay problemas disponibles.</p>';
+      return;
+    }
+
+    container.innerHTML = data.problemas.slice(0, 50).map(p => `
+      <div class="vc-dataset-item" data-id="${p.id}">
+        <div class="vc-dataset-item-title">${p.titulo}</div>
+        <div class="vc-dataset-item-meta">${p.repositorio} • ${p.dificultad}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = '<p class="vc-empty-state">Error al cargar dataset.</p>';
+  }
+}
+
+async function buscarDatasetSWE(query) {
+  const container = document.getElementById('sweDatasetContainer');
+  
+  try {
+    const r = await fetch(`/api/swe-bench/dataset?buscar=${encodeURIComponent(query)}`);
+    if (!r.ok) throw new Error('Error al buscar');
+    
+    const data = await r.json();
+    
+    if (!data.problemas || data.problemas.length === 0) {
+      container.innerHTML = '<p class="vc-empty-state">No se encontraron resultados.</p>';
+      return;
+    }
+
+    container.innerHTML = data.problemas.map(p => `
+      <div class="vc-dataset-item" data-id="${p.id}">
+        <div class="vc-dataset-item-title">${p.titulo}</div>
+        <div class="vc-dataset-item-meta">${p.repositorio} • ${p.dificultad}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = '<p class="vc-empty-state">Error al buscar.</p>';
+  }
 }

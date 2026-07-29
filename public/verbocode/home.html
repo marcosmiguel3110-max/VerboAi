@@ -34,10 +34,16 @@
   <main class="vc-main">
     <div class="vc-section-header">
       <h1 class="vc-title">Mis proyectos</h1>
-      <button id="btnNuevoProyecto" class="vc-btn-primary">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
-        Nuevo proyecto
-      </button>
+      <div class="vc-header-actions">
+        <button id="btnSWEBench" class="vc-btn-secondary" title="SWE-Bench Pro - Evaluación de código IA">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          SWE-Bench Pro
+        </button>
+        <button id="btnNuevoProyecto" class="vc-btn-primary">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+          Nuevo proyecto
+        </button>
+      </div>
     </div>
 
     <div id="vcProyectos" class="vc-proyectos-grid">
@@ -65,6 +71,84 @@
       <div class="vc-modal-actions">
         <button id="btnCancelarProyecto" class="vc-btn-ghost">Cancelar</button>
         <button id="btnCrearProyecto" class="vc-btn-primary" disabled>Crear proyecto</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal SWE-Bench Pro -->
+  <div id="modalSWEBench" class="vc-modal oculto">
+    <div class="vc-modal-backdrop"></div>
+    <div class="vc-modal-content vc-modal-large">
+      <div class="vc-modal-header">
+        <h2 class="vc-modal-title">SWE-Bench Pro - Evaluación de Código IA</h2>
+        <button id="btnCerrarSWEBench" class="vc-modal-close" title="Cerrar">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6l-6 18" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="vc-modal-body">
+        <div class="vc-swe-bench-intro">
+          <p><strong>SWE-Bench Pro</strong> es un benchmark para evaluar agentes de IA en tareas de ingeniería de software reales.</p>
+          <p>Este sistema te permite ejecutar benchmarks, ver puntuaciones y acceder al dataset de problemas.</p>
+        </div>
+        
+        <div class="vc-swe-bench-tabs">
+          <button class="vc-tab active" data-tab="ejecutar">Ejecutar Benchmark</button>
+          <button class="vc-tab" data-tab="resultados">Resultados</button>
+          <button class="vc-tab" data-tab="dataset">Dataset</button>
+        </div>
+
+        <div id="tab-ejecutar" class="vc-tab-content active">
+          <div class="vc-form-group">
+            <label>Selecciona el benchmark:</label>
+            <select id="sweBenchmarkSelect" class="vc-input">
+              <option value="swe-bench-lite">SWE-Bench Lite (50 problemas)</option>
+              <option value="swe-bench-pro">SWE-Bench Pro (2294 problemas)</option>
+              <option value="swe-bench-verifiable">SWE-Bench Verifiable (subset)</option>
+            </select>
+          </div>
+          <div class="vc-form-group">
+            <label>Modelo a evaluar:</label>
+            <select id="sweModelSelect" class="vc-input">
+              <option value="newserplus">NewserPlus (Verbo AI)</option>
+              <option value="newseradvanced">NewserAdvanced</option>
+              <option value="custom">Personalizado</option>
+            </select>
+          </div>
+          <div class="vc-form-group">
+            <label>Límite de problemas (dejar vacío para todos):</label>
+            <input type="number" id="sweLimitInput" class="vc-input" placeholder="Ej: 10" min="1" max="100">
+          </div>
+          <button id="btnEjecutarSWE" class="vc-btn-primary">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Ejecutar Benchmark
+          </button>
+          <div id="sweEjecucionStatus" class="vc-status oculto">
+            <div class="vc-spinner"></div>
+            <p>Ejecutando benchmark...</p>
+            <div class="vc-progress-bar">
+              <div class="vc-progress-fill" id="sweProgressFill"></div>
+            </div>
+            <p id="sweProgressText">0/0 problemas completados</p>
+          </div>
+        </div>
+
+        <div id="tab-resultados" class="vc-tab-content oculto">
+          <div id="sweResultadosContainer">
+            <p class="vc-empty-state">No hay resultados aún. Ejecuta un benchmark primero.</p>
+          </div>
+        </div>
+
+        <div id="tab-dataset" class="vc-tab-content oculto">
+          <div class="vc-form-group">
+            <input type="text" id="sweDatasetSearch" class="vc-input" placeholder="Buscar problemas...">
+          </div>
+          <div id="sweDatasetContainer" class="vc-dataset-list">
+            <div class="vc-loading">
+              <div class="vc-spinner"></div>
+              <p>Cargando dataset...</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
