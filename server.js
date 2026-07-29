@@ -9000,23 +9000,27 @@ app.get('/api/mongo-status', (req, res) => {
 
 const servidorHttp = app.listen(PORT, () => {
   console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
-  try {
-    const os = require('os');
-    const interfaces = os.networkInterfaces();
-    const ips = [];
-    Object.values(interfaces).forEach((lista) => {
-      (lista || []).forEach((info) => {
-        if (info.family === 'IPv4' && !info.internal) ips.push(info.address);
+  
+  // En Render, no mostrar IPs locales (solo funciona en desarrollo)
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      const os = require('os');
+      const interfaces = os.networkInterfaces();
+      const ips = [];
+      Object.values(interfaces).forEach((lista) => {
+        (lista || []).forEach((info) => {
+          if (info.family === 'IPv4' && !info.internal) ips.push(info.address);
+        });
       });
-    });
-    if (ips.length) {
-      console.log('Para entrar desde tu celular (misma red WiFi):');
-      ips.forEach((ip) => console.log(`  http://${ip}:${PORT}`));
-      console.log('Importante: esa(s) URL tambien tienen que estar agregadas en');
-      console.log('Google Cloud Console -> Credenciales -> tu cliente OAuth -> "URIs de');
-      console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
-    }
-  } catch (e) {  }
+      if (ips.length) {
+        console.log('Para entrar desde tu celular (misma red WiFi):');
+        ips.forEach((ip) => console.log(`  http://${ip}:${PORT}`));
+        console.log('Importante: esa(s) URL tambien tienen que estar agregadas en');
+        console.log('Google Cloud Console -> Credenciales -> tu cliente OAuth -> "URIs de');
+        console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
+      }
+    } catch (e) {  }
+  }
 
   (async () => {
     try {
@@ -9026,8 +9030,18 @@ const servidorHttp = app.listen(PORT, () => {
       console.log('[startup] Mongo listo. Estado:', mongoDb.estaConectado() ? 'CONECTADO' : 'NO conectado (usando archivos locales)');
     } catch (e) {
       console.error('[startup] Error en inicializacion Mongo:', e.message);
+      console.log('[startup] La app sigue funcionando con archivos locales.');
     }
   })();
+});
+
+// Manejar errores del servidor para que no cierre el proceso
+servidorHttp.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`[error] El puerto ${PORT} ya está en uso`);
+  } else {
+    console.error('[error] Error del servidor HTTP:', error);
+  }
 });
 
 app.get('/api/test-btatesters', async (req, res) => {

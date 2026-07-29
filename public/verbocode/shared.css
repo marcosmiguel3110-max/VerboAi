@@ -132,6 +132,9 @@ input, textarea { font-family: inherit; }
   align-items: center;
   justify-content: space-between;
   margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
 }
 
 .vc-title { font-size: 24px; font-weight: 600; color: var(--vc-text); }
