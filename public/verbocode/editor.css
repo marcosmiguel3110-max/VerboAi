@@ -442,27 +442,85 @@ body.vc-resizing-activo iframe { pointer-events: none; }
 }
 
 .vc-chat-bienvenida {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
   background: transparent;
   border: none;
-  padding: 0;
-  font-size: 13px;
+  padding: 48px 12px 12px;
   color: var(--vc-text-secondary);
-  line-height: 1.7;
+  line-height: 1.6;
+  max-width: 480px;
+  margin: 0 auto;
 }
-.vc-chat-bienvenida ul { list-style: none; padding: 8px 0; }
-.vc-chat-bienvenida li {
-  padding: 4px 0;
+
+.vc-bienvenida-icono {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--vc-accent), #a78bfa);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
+}
+
+.vc-chat-bienvenida h1 {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--vc-text);
+  margin-bottom: 8px;
+}
+
+.vc-bienvenida-sub {
+  font-size: 12.5px;
+  color: var(--vc-text-secondary);
+  margin-bottom: 24px;
+  max-width: 360px;
+}
+
+.vc-sugerencias-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.vc-sugerencia-card {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.vc-chat-bienvenida li svg { color: var(--vc-accent); flex-shrink: 0; }
-.vc-chat-bienvenida p { margin-bottom: 4px; }
-.vc-chat-bienvenida p:last-child {
-  margin-top: 12px;
-  font-weight: 500;
+  text-align: left;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--vc-border);
+  background: var(--vc-bg-tertiary);
   color: var(--vc-text);
-  font-size: 14px;
+  font-family: var(--vc-font);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, background 0.15s;
+}
+.vc-sugerencia-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--vc-accent);
+  background: var(--vc-bg-secondary);
+}
+.vc-sugerencia-icono {
+  flex-shrink: 0;
+  color: var(--vc-accent);
+  display: flex;
+}
+.vc-sugerencia-titulo {
+  line-height: 1.3;
+}
+
+@media (max-width: 380px) {
+  .vc-sugerencias-grid { grid-template-columns: 1fr; }
 }
 
 /* Mensajes — estilo Claude (sin burbujas pesadas, solo texto claro) */

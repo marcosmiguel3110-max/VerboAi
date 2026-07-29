@@ -828,7 +828,17 @@ function configurarEventos() {
   document.getElementById('btnLimpiarChat').addEventListener('click', () => {
     if (!confirm('¿Limpiar toda la conversación?')) return;
     estado.proyecto.chat = [];
-    document.getElementById('vcChatMensajes').innerHTML = '<div class="vc-chat-bienvenida"><p>Conversación limpiada.</p></div>';
+    document.getElementById('vcChatMensajes').innerHTML = `
+      <div class="vc-chat-bienvenida">
+        <div class="vc-bienvenida-icono">
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+        </div>
+        <h1>¿Qué querés crear hoy?</h1>
+        <p class="vc-bienvenida-sub">Conversación limpiada. Describí tu idea o elegí un punto de partida.</p>
+        <div class="vc-sugerencias-grid" id="vcSugerenciasGrid"></div>
+      </div>
+    `;
+    poblarSugerencias();
     guardarArchivos();
   });
 
@@ -1069,7 +1079,64 @@ function configurarChatInput() {
     cont.innerHTML = '';
     estado.proyecto.chat.forEach(m => renderMensaje(m));
     scrollChatAbajo();
+  } else {
+    poblarSugerencias();
   }
+}
+
+// Sugerencias de arranque tipo "¿qué querés crear hoy?" — variadas a
+// propósito (juego, landing, dashboard, 3D) para que se note de un vistazo
+// todo lo que Verbo Code puede armar, no solo una categoría.
+const SUGERENCIAS_INICIO = [
+  {
+    icono: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="6"/><path d="M8 12h.01M6 10v4" stroke-linecap="round"/><circle cx="16" cy="10" r="1"/><circle cx="18" cy="13" r="1"/></svg>',
+    titulo: 'Un juego 2D',
+    prompt: 'Creame un juego 2D estilo plataformas, con un personaje que salta, enemigos simples y sistema de puntos.',
+  },
+  {
+    icono: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9" stroke-linecap="round"/></svg>',
+    titulo: 'Landing page',
+    prompt: 'Armame una landing page moderna para un producto, con hero, features y un formulario de contacto.',
+  },
+  {
+    icono: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18" stroke-linecap="round"/><path d="M7 16l4-6 4 3 5-8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    titulo: 'Dashboard con gráficos',
+    prompt: 'Armame un dashboard con tarjetas de métricas y un par de gráficos de ejemplo con canvas.',
+  },
+  {
+    icono: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12l8.73-5.04M12 22.08V12" stroke-linecap="round"/></svg>',
+    titulo: 'Escena 3D',
+    prompt: 'Creame una escena 3D simple con three.js: un objeto que rota, con luces e interacción con el mouse.',
+  },
+  {
+    icono: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
+    titulo: 'App con sonido',
+    prompt: 'Armame una app simple de piano/drum machine que reproduzca sonidos al tocar los botones.',
+  },
+  {
+    icono: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    titulo: 'Editor de texto',
+    prompt: 'Creame un editor de notas simple con lista de notas, autoguardado y modo oscuro/claro.',
+  },
+];
+
+function poblarSugerencias() {
+  const grid = document.getElementById('vcSugerenciasGrid');
+  if (!grid) return;
+  grid.innerHTML = SUGERENCIAS_INICIO.map((s) => `
+    <button type="button" class="vc-sugerencia-card" data-prompt="${s.prompt.replace(/"/g, '&quot;')}">
+      <span class="vc-sugerencia-icono">${s.icono}</span>
+      <span class="vc-sugerencia-titulo">${s.titulo}</span>
+    </button>
+  `).join('');
+  grid.querySelectorAll('.vc-sugerencia-card').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const input = document.getElementById('vcChatInput');
+      input.value = btn.dataset.prompt;
+      input.focus();
+      input.dispatchEvent(new Event('input'));
+    });
+  });
 }
 
 async function enviarChat() {

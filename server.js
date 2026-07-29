@@ -4863,6 +4863,7 @@ Genera CÓDIGO REAL de Web Audio API (osciladores, envolventes ADSR, ruido filtr
 [[WEB::consulta corta]]
 Busca en internet.
 
+${cargarSkill('html-fundamentales.md')}
 ${skillsRelevantes(mensaje, modoDesign || profundidad === 'extendido' || profundidad === 'ultracode')}
 ${modoDesign ? `
 MODO DESIGN ACTIVADO (el usuario activó el botón de Canvas/Diseño 3D): priorizá el resultado VISUAL por sobre todo lo demás. Usá <canvas> (2D o three.js/WebGL si el pedido tiene onda 3D) en vez de HTML/CSS plano siempre que se pueda, cuidá la paleta de colores, la composición, la iluminación (si es 3D) y el "juice" (animaciones, transiciones, feedback visual). Si el usuario no fue específico, inclinate por la opción más vistosa dentro de lo razonable.
@@ -5115,7 +5116,6 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         'Esperando respuesta del modelo...',
         'Puede tardar más en pedidos grandes o con varios archivos...',
         'Seguimos esperando, sin errores hasta ahora...',
-        'Esto a veces tarda por la demanda del modelo gratuito...',
       ];
       let heartbeatIdx = 0;
       let recibioPrimerDelta = false;
