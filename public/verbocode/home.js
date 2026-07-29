@@ -186,7 +186,7 @@ function configurarEventos() {
   btnCrear.addEventListener('click', crearProyecto);
 
   // SWE-Bench Pro events
-  configurarSWE BenchEvents();
+  configurarSWEBenchEvents();
 }
 
 function cerrarModal() {

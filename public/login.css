@@ -31,6 +31,7 @@ body {
   justify-content: center;
   overflow-x: hidden;
   position: relative;
+  background: linear-gradient(180deg, var(--cielo-1) 0%, var(--cielo-2) 38%, var(--cielo-3) 62%, var(--cielo-4) 100%);
 }
 
 /* ---------- Fondo: amanecer sobre montañas, paleta calida original ---------- */
@@ -318,11 +319,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 40px;
+  min-height: 100vh;
 }
 
 .panel-showcase {
   text-align: center;
   padding: 20px;
+  display: none; /* Oculto en login, solo visible en landing page principal */
 }
 
 .showcase-marca {
