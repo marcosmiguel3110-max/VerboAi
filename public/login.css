@@ -352,7 +352,7 @@ body {
 .panel-showcase {
   text-align: center;
   padding: 20px;
-  display: none; /* Oculto en login, solo visible en landing page principal */
+  display: none;
 }
 
 .showcase-marca {
