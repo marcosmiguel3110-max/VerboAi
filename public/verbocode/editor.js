@@ -210,7 +210,7 @@ async function cargarProyecto() {
 
     // Si no hay archivos, crear index.html por defecto
     if (Object.keys(estado.archivos).length === 0) {
-      estado.archivos['index.html'] = '<!DOCTYPE html>\n<html>\n<head>\n  <meta charset="UTF-8">\n  <title>Mi Proyecto</title>\n</head>\n<body>\n  <h1>Hola Verbo Code</h1>\n  <p>Edita este archivo o pedile a la IA que cree algo.</p>\n</body>\n</html>';
+      estado.archivos['index.html'] = '<!DOCTYPE html>\n<html lang="es">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Mi Proyecto</title>\n</head>\n<body>\n  <h1>Hola Verbo Code</h1>\n  <p>Edita este archivo o pedile a la IA que cree algo.</p>\n</body>\n</html>';
       await guardarArchivos();
       renderArchivos();
     }
