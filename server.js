@@ -679,6 +679,13 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
         break;
       }
       
+      // Si es 400 (invalid request), saltar al siguiente modelo inmediatamente
+      // Esto suele pasar cuando el modelo no soporta el formato de mensaje o tool calls
+      if (typeof r.error === 'string' && r.error.includes('HTTP 400')) {
+        console.log(`[llamarModeloGratis] Modelo ${modelo} rechazó la petición (400), probando siguiente...`);
+        break;
+      }
+      
       // Si es 429 y no es el último intento, reintentar con backoff
       if (typeof r.error === 'string' && r.error.includes('HTTP 429') && intento < maxIntentosPorModelo) {
         console.log(`[llamarModeloGratis] Rate limit en ${modelo}, reintentando...`);
@@ -5544,6 +5551,48 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     // que había recibido).
     try { procesarArchivos('FILE_CREATE', 'file_create'); } catch (e) { console.error('[verbocode] error procesando FILE_CREATE:', e.message); }
     try { procesarArchivos('FILE_EDIT', 'file_edit'); } catch (e) { console.error('[verbocode] error procesando FILE_EDIT:', e.message); }
+
+    // CASCADE: Si hay archivos incompletos, intentar completarlos con otro modelo
+    const archivosIncompletos = acciones.filter(a => a.incompleto);
+    if (archivosIncompletos.length > 0 && !opciones.signal?.aborted) {
+      console.log(`[verbocode] ${archivosIncompletos.length} archivo(s) incompleto(s), iniciando cascade para completar...`);
+      enviarSSE({ type: 'status', text: `Completando ${archivosIncompletos.length} archivo(s) incompleto(s) con cascade...` });
+      
+      for (const accion of archivosIncompletos) {
+        const nombre = accion.nombre;
+        const contenidoActual = proyecto.archivos[nombre] || '';
+        
+        // Pedir al modelo que complete el archivo
+        const promptCompletar = `Completá este archivo que quedó incompleto. Solo agregá el contenido faltante al final, NO repitas lo que ya está escrito. Archivo: ${nombre}\n\nContenido actual:\n${contenidoActual.slice(-500)}\n\nContinuá exactamente desde donde se cortó, sin repetir nada.`;
+        
+        try {
+          const rCompletar = await llamarModeloGratisConReintentos(
+            [{ role: 'user', content: promptCompletar }],
+            'Sos un asistente de programación. Solo completá el código faltante, sin explicaciones ni repetición.',
+            configModelo.modelosOpenRouterTexto,
+            () => {},
+            { maxContinuaciones: 2, signal: opciones.signal }
+          );
+          
+          if (rCompletar.ok) {
+            // Extraer solo el código nuevo (sin explicaciones)
+            const nuevoContenido = rCompletar.texto.trim();
+            if (nuevoContenido && nuevoContenido !== contenidoActual.slice(-500)) {
+              proyecto.archivos[nombre] = contenidoActual + '\n' + nuevoContenido;
+              proyectoActualizado = true;
+              acciones.push({
+                tipo: 'file_edit',
+                nombre,
+                descripcion: `Archivo completado (cascade): ${nombre}`,
+              });
+              console.log(`[verbocode] Archivo completado con cascade: ${nombre}`);
+            }
+          }
+        } catch (e) {
+          console.error(`[verbocode] Error completando archivo ${nombre} con cascade:`, e.message);
+        }
+      }
+    }
 
     // Procesar LINE_EDIT (cambiar una línea específica) — mismo problema y misma solución.
     try {
