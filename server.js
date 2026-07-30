@@ -5,8 +5,10 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { spawn } = require('child_process');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 let puppeteer = null;
@@ -1214,6 +1216,139 @@ function stripThinkTags(texto) {
     .replace(/<think>[\s\S]*?<\/think>/gi, '')   // bloques completos
     .replace(/<think>[\s\S]*$/gi, '')             // bloque abierto (streaming parcial)
     .replace(/^[\s\r\n]+/, '');                   // espacios/saltos al inicio despues de limpiar
+}
+
+function esRunPlaceholder(comando) {
+  const c = String(comando || '').trim();
+  if (!c) return true;
+  if (/^(?:\.{3,}|…+)$/.test(c)) return true;
+  if (!/[a-z0-9]/i.test(c)) return true;
+  if (/^(?:ahora|necesitamos|probemos|usemos|vamos a|voy a|ejecutemos)\b/i.test(c)) return true;
+  return false;
+}
+
+function limpiarResumenVisibleVerboCode(texto, acciones = []) {
+  let limpio = stripThinkTags(texto || '').replace(/\r\n/g, '\n');
+  if (!limpio.trim()) return '';
+
+  const huboAcciones = Array.isArray(acciones) && acciones.length > 0;
+  const lineas = limpio.split('\n');
+  const filtradas = [];
+
+  for (const lineaOriginal of lineas) {
+    const linea = String(lineaOriginal || '').replace(/\]+$/g, '').trim();
+    if (!linea) {
+      if (filtradas.length && filtradas[filtradas.length - 1] !== '') filtradas.push('');
+      continue;
+    }
+
+    if (/^(?:-+|=+|\[+|\]+)$/.test(linea)) continue;
+    if (/^(?:ahora|a continuaci[oó]n|luego|despu[eé]s|siguiente),?\s+[\w./-]+\.(?:html|css|js|mjs|cjs|ts|tsx|jsx|json|md|py|sh|bat)\.?$/i.test(linea)) continue;
+    if (/^(?:ahora|a continuaci[oó]n|luego|despu[eé]s),?\s+necesitamos\b/i.test(linea)) continue;
+    if (/^(?:probemos|usemos|vamos a|voy a|necesitamos|ejecutemos|procedamos a)\b/i.test(linea)) continue;
+    if (/^comando ejecutado:/i.test(linea)) continue;
+    if (/^c[oó]digo ejecutado\b/i.test(linea)) continue;
+    if (/^verificaci[oó]n final swe-bench\b/i.test(linea)) continue;
+    if (/^(?:score|estructura|errores|edge cases|performance|mejores pr[aá]cticas):\s*\d/i.test(linea)) continue;
+    if (huboAcciones && /^(?:implementado con [ée]xito|listo)\b/i.test(linea)) continue;
+
+    filtradas.push(linea);
+  }
+
+  limpio = filtradas.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  if (!limpio && huboAcciones) return 'Listo.';
+  return limpio;
+}
+
+function esComandoLocalProyectoPermitido(comandoRun) {
+  const comando = String(comandoRun || '').trim();
+  if (!comando || esRunPlaceholder(comando)) return false;
+  const primerToken = (comando.match(/^([^\s]+)/) || [])[1]?.toLowerCase() || '';
+  const permitidos = new Set([
+    'node', 'nodejs',
+    'npm', 'npx',
+    'python', 'python3', 'py',
+    'pytest',
+    'ts-node', 'tsx', 'tsc',
+    'vitest', 'vite',
+    'jest', 'mocha',
+    'bun', 'deno',
+    'yarn', 'pnpm',
+  ]);
+  return permitidos.has(primerToken);
+}
+
+function volcarProyectoATemporal(baseDir, proyecto) {
+  for (const [nombre, contenido] of Object.entries(proyecto?.archivos || {})) {
+    const rel = String(nombre || '').replace(/^[/\\]+/, '');
+    if (!rel || rel.includes('..')) continue;
+    const destino = path.join(baseDir, rel);
+    fs.mkdirSync(path.dirname(destino), { recursive: true });
+    fs.writeFileSync(destino, typeof contenido === 'string' ? contenido : String(contenido ?? ''), 'utf8');
+  }
+}
+
+async function ejecutarComandoLocalConProyecto(comandoRun, proyecto) {
+  const dirTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'verbocode-run-'));
+  try {
+    volcarProyectoATemporal(dirTmp, proyecto);
+    const esWindows = process.platform === 'win32';
+    const shell = esWindows ? 'powershell.exe' : 'bash';
+    const args = esWindows
+      ? ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', comandoRun]
+      : ['-lc', comandoRun];
+
+    return await new Promise((resolve) => {
+      let stdout = '';
+      let stderr = '';
+      let timeoutHit = false;
+      const LIMITE_SALIDA = 200000;
+      const recortar = (acumulado, chunk) => (acumulado + chunk).slice(-LIMITE_SALIDA);
+
+      const child = spawn(shell, args, {
+        cwd: dirTmp,
+        windowsHide: true,
+      });
+
+      const timer = setTimeout(() => {
+        timeoutHit = true;
+        try { child.kill(); } catch (_) { }
+      }, 20000);
+
+      child.stdout.on('data', (buf) => {
+        stdout = recortar(stdout, buf.toString());
+      });
+      child.stderr.on('data', (buf) => {
+        stderr = recortar(stderr, buf.toString());
+      });
+      child.on('error', (err) => {
+        clearTimeout(timer);
+        resolve({
+          resultadoRun: {
+            stdout: stdout.trim(),
+            stderr: [stderr, err.message].filter(Boolean).join('\n').trim(),
+            exito: false,
+            exitCode: null,
+          },
+          modifico: false,
+        });
+      });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({
+          resultadoRun: {
+            stdout: stdout.trim(),
+            stderr: timeoutHit ? [stderr, 'Tiempo agotado al ejecutar el comando.'].filter(Boolean).join('\n').trim() : stderr.trim(),
+            exito: !timeoutHit && code === 0,
+            exitCode: typeof code === 'number' ? code : null,
+          },
+          modifico: false,
+        });
+      });
+    });
+  } finally {
+    try { fs.rmSync(dirTmp, { recursive: true, force: true }); } catch (_) { }
+  }
 }
 
 const MEMORY_DIR = path.join(__dirname, 'memory');
@@ -3780,6 +3915,8 @@ async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE
     .replace(reSWE, '')
     .trim();
 
+  textoLimpio = limpiarResumenVisibleVerboCode(textoLimpio, acciones);
+
   return { textoLimpio, acciones, proyectoActualizado };
 }
 
@@ -5159,6 +5296,13 @@ function ejecutarComandoProyecto(comando, proyecto) {
 }
 
 async function ejecutarRunVerboCode(comandoRun, proyecto) {
+  if (esRunPlaceholder(comandoRun)) {
+    return {
+      resultadoRun: { stdout: '', stderr: 'Comando RUN invalido o incompleto.', exito: false, exitCode: null },
+      modifico: false,
+    };
+  }
+
   const subcomandos = String(comandoRun || '').split(/\s*(?:&&|;)\s*/).filter(Boolean);
   const salidas = [];
   let huboError = false;
@@ -5186,6 +5330,10 @@ async function ejecutarRunVerboCode(comandoRun, proyecto) {
       },
       modifico,
     };
+  }
+
+  if (esComandoLocalProyectoPermitido(comandoRun)) {
+    return await ejecutarComandoLocalConProyecto(comandoRun, proyecto);
   }
 
   try {
@@ -5935,7 +6083,10 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     try {
       while ((matchRun = reRun.exec(textoRespuesta)) !== null) {
         const comandoRun = matchRun[1].trim();
-        if (!comandoRun) continue;
+        if (!comandoRun || esRunPlaceholder(comandoRun)) {
+          console.warn('[verbocode] RUN omitido por incompleto/invalido:', comandoRun);
+          continue;
+        }
 
         if (comandosYaEjecutados.has(comandoRun)) {
           acciones.push({
@@ -6191,7 +6342,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         let matchRunFix;
         while ((matchRunFix = reRunFix.exec(textoFix)) !== null) {
           const comandoRun = matchRunFix[1].trim();
-          if (!comandoRun) continue;
+          if (!comandoRun || esRunPlaceholder(comandoRun)) continue;
           enviarSSE({ type: 'terminal_run', comando: comandoRun });
           const { resultadoRun, modifico } = await ejecutarRunVerboCode(comandoRun, proyecto);
           if (modifico) proyectoActualizado = true;
@@ -6288,7 +6439,7 @@ ${construirContextoArchivosProyecto(proyecto.archivos)}`;
       let matchRunVerificacion;
       while ((matchRunVerificacion = reRunVerificacion.exec(textoVerificacion)) !== null) {
         const comandoRun = matchRunVerificacion[1].trim();
-        if (!comandoRun) continue;
+        if (!comandoRun || esRunPlaceholder(comandoRun)) continue;
         corrioAlgo = true;
         enviarSSE({ type: 'terminal_run', comando: comandoRun });
         const { resultadoRun, modifico } = await ejecutarRunVerboCode(comandoRun, proyecto);
@@ -6355,6 +6506,8 @@ ${construirContextoArchivosProyecto(proyecto.archivos)}`;
       // mensaje explícito que una burbuja vacía.
       if (!textoLimpio) textoLimpio = 'Listo — revisá los archivos del proyecto, algo salió raro mostrando el resumen del cambio.';
     }
+
+    textoLimpio = limpiarResumenVisibleVerboCode(textoLimpio, acciones);
 
     // Guardar el mensaje del usuario + respuesta en el chat del proyecto
     if (!proyecto.chat) proyecto.chat = [];

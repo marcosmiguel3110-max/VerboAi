@@ -1552,7 +1552,7 @@ async function enviarChat() {
           // Usar el texto LIMPIO que manda el server (sin tags crudos ni
           // bloques <think>) para el render final, en vez del buffer crudo
           // que se fue acumulando del streaming en vivo del lado del cliente.
-          if (typeof evt.textoFinal === 'string') textoRespuesta = evt.textoFinal;
+          if (typeof evt.textoFinal === 'string') textoRespuesta = evt.textoFinal.trim();
           msgDiv.innerHTML = formatearMarkdownConColapsado(textoRespuesta);
           finalizarGrupoAcciones();
           scrollChatAbajo();
@@ -1687,9 +1687,11 @@ function renderMensaje(m) {
   // primera vez: bloques de código con su header/contenedor propio en vez de un
   // <pre> plano suelto, que es lo que causaba que el panel se viera "tapado" o
   // descuadrado la segunda vez que se abría la conversación.
-  const contentDiv = document.createElement('div');
-  contentDiv.innerHTML = formatearMarkdownConColapsado(m.content || '');
-  div.appendChild(contentDiv);
+  if ((m.content || '').trim()) {
+    const contentDiv = document.createElement('div');
+    contentDiv.innerHTML = formatearMarkdownConColapsado(m.content || '');
+    div.appendChild(contentDiv);
+  }
 
   // Si es mensaje del assistant y tiene modelo, mostrarlo abajo
   if (m.role === 'assistant' && m.modelo) {
@@ -1784,7 +1786,7 @@ function agregarAccionAlGrupo(accion) {
   // Output real de comandos/tests, colapsado dentro de la misma fila
   if ((accion.tipo === 'run' || accion.tipo === 'test') && accion.resultado) {
     const r = accion.resultado;
-    const output = r.stdout || (r.exito || !r.error ? '(sin output)' : '');
+    const output = r.stdout || (r.exito || !r.error ? '(sin salida)' : '');
     const stderr = r.stderr || r.error ? `\n--- error ---\n${r.stderr || r.error}` : '';
     const pre = document.createElement('pre');
     pre.className = 'vc-actions-output';
@@ -1817,7 +1819,8 @@ function agregarAccionAlGrupo(accion) {
     body.appendChild(div);
   }
 
-  accionesGroupEl.querySelector('.vc-actions-titulo').textContent = `${body.children.length} cambio${body.children.length === 1 ? '' : 's'}`;
+  const cantidadAcciones = (accionesGroupEl._acciones || []).length;
+  accionesGroupEl.querySelector('.vc-actions-titulo').textContent = `${cantidadAcciones} cambio${cantidadAcciones === 1 ? '' : 's'}`;
   scrollChatAbajo();
 }
 
