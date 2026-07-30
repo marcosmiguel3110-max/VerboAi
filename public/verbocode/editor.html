@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,10 +11,14 @@
   <link rel="stylesheet" href="/verbocode/shared.css">
   <link rel="stylesheet" href="/verbocode/editor.css">
 </head>
+
 <body class="vc-page vc-editor-page">
   <!-- Indicador Generando Code -->
   <div id="vcIndicadorGenerando" class="vc-indicador-generando oculto">
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+      <path
+        d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+    </svg>
     Generando Code...
   </div>
 
@@ -21,27 +26,35 @@
   <header class="vc-editor-header">
     <div class="vc-header-left">
       <a href="/verbocode/home/" class="vc-back-btn" title="Volver a proyectos">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 12H5M12 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
       </a>
       <div class="vc-editor-titulo">
         <input type="text" id="vcProyectoNombre" class="vc-editor-titulo-input" value="Cargando..." disabled>
+        <span id="vcWebIdeEstado" class="vc-webide-estado">Sin conectar</span>
       </div>
     </div>
     <div class="vc-header-right">
       <div class="vc-profundidad-wrap">
         <button id="btnProfundidad" class="vc-btn-icon-header" title="Nivel de profundidad del código">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+            <path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
           <span id="vcProfundidadLabel">Medium</span>
         </button>
         <div id="vcProfundidadPopover" class="vc-profundidad-popover oculto">
           <div class="vc-profundidad-popover-header">
             Effort <span id="vcProfundidadHeaderNivel" class="vc-profundidad-header-nivel">Medium</span>
-            <span class="vc-profundidad-info" title="Cuánto se toma la IA para pensar y escribir el código: más esfuerzo = respuestas más completas pero más lentas.">?</span>
+            <span class="vc-profundidad-info"
+              title="Cuánto se toma la IA para pensar y escribir el código: más esfuerzo = respuestas más completas pero más lentas.">?</span>
           </div>
           <div class="vc-profundidad-track-wrap">
             <div class="vc-profundidad-track-dots"></div>
             <div id="vcProfundidadTrackFill" class="vc-profundidad-track-fill"></div>
-            <input type="range" id="vcProfundidadSlider" class="vc-profundidad-slider" min="0" max="100" step="1" value="0">
+            <input type="range" id="vcProfundidadSlider" class="vc-profundidad-slider" min="0" max="100" step="1"
+              value="0">
           </div>
           <div class="vc-profundidad-niveles">
             <span>Faster</span>
@@ -50,16 +63,33 @@
           <p id="vcProfundidadDesc" class="vc-profundidad-desc">Respuestas normales, rápidas.</p>
         </div>
       </div>
+      <button id="btnWebIde" class="vc-btn-icon-header"
+        title="Descargar el BAT para conectar esta carpeta a Verbo Code">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 12h8M12 8v8" />
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M7 20v-3a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v3" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        Web-IDE
+      </button>
       <button id="btnPreview" class="vc-btn-icon-header" title="Vista previa en ventana">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
         Preview
       </button>
       <button id="btnProbar" class="vc-btn-icon-header" title="Probar el proyecto en vivo (ejecutar)">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3" />
+        </svg>
         Probar
       </button>
       <button id="btnExportar" class="vc-btn-icon-header primary" title="Descargar como ZIP/MCPACK/JAR">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round"
+            stroke-linejoin="round" />
+        </svg>
         Exportar
       </button>
     </div>
@@ -80,7 +110,9 @@
         <h3 class="vc-sidebar-title">
           Archivos
           <button id="btnNuevoArchivo" class="vc-icon-btn" title="Nuevo archivo">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14" stroke-linecap="round" />
+            </svg>
           </button>
         </h3>
         <div id="vcArchivos" class="vc-archivos-list"></div>
@@ -102,16 +134,25 @@
       <div class="vc-chat-header">
         <h3>Asistente IA</h3>
         <button id="btnLimpiarChat" class="vc-icon-btn" title="Limpiar conversación">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
         </button>
       </div>
       <div id="vcChatMensajes" class="vc-chat-mensajes">
         <div class="vc-chat-bienvenida">
           <div class="vc-bienvenida-icono">
-            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M12 19l7-7 3 3-7 7-3-3z" />
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+              <path d="M2 2l7.586 7.586" />
+              <circle cx="11" cy="11" r="2" />
+            </svg>
           </div>
           <h1>¿Qué querés crear hoy?</h1>
-          <p class="vc-bienvenida-sub">Describí tu idea o elegí un punto de partida — puedo buscar en internet, crear y editar archivos, generar imágenes, escribir y depurar código, y exportar el proyecto como ZIP, MCPACK o JAR.</p>
+          <p class="vc-bienvenida-sub">Describí tu idea o elegí un punto de partida — puedo buscar en internet, crear y
+            editar archivos, generar imágenes, escribir y depurar código, y exportar el proyecto como ZIP, MCPACK o JAR.
+          </p>
           <div class="vc-sugerencias-grid" id="vcSugerenciasGrid"></div>
         </div>
       </div>
@@ -119,20 +160,35 @@
       <div class="vc-chat-input-wrap">
         <div class="vc-chat-btn-col">
           <button id="btnTerminal" class="vc-chat-btn-terminal" title="Abrir terminal">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-            <span id="vcTerminalDot" class="vc-terminal-dot oculto" title="Hay un comando corriendo — click para verlo en vivo"></span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+            <span id="vcTerminalDot" class="vc-terminal-dot oculto"
+              title="Hay un comando corriendo — click para verlo en vivo"></span>
           </button>
           <button id="btnImagenChat" class="vc-chat-btn-imagen" title="Subir imagen para análisis">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="9" cy="9" r="2" />
+              <path d="m21 15-5-5L5 21" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
           </button>
         </div>
         <textarea id="vcChatInput" class="vc-chat-input" placeholder="Pedime lo que quieras..." rows="3"></textarea>
         <div class="vc-chat-btn-col">
           <button id="btnDesign" class="vc-chat-btn-design" title="Activar modo Design (Canvas 3D)">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 19l7-7 3 3-7 7-3-3z" />
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+              <path d="M2 2l7.586 7.586" />
+              <circle cx="11" cy="11" r="2" />
+            </svg>
           </button>
           <button id="btnEnviarChat" class="vc-btn-primary" title="Enviar (Enter)">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7Z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7Z" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
           </button>
         </div>
       </div>
@@ -144,7 +200,8 @@
     <div class="vc-modal-backdrop"></div>
     <div class="vc-modal-content">
       <h2 class="vc-modal-title">Crear nuevo archivo</h2>
-      <p class="vc-modal-desc">Poné el nombre con extensión (ej: <code>index.html</code>, <code>styles.css</code>, <code>script.js</code>).</p>
+      <p class="vc-modal-desc">Poné el nombre con extensión (ej: <code>index.html</code>, <code>styles.css</code>,
+        <code>script.js</code>).</p>
       <input type="text" id="inputNombreArchivo" class="vc-input" placeholder="nombre.ext" autocomplete="off">
       <div class="vc-modal-actions">
         <button id="btnCancelarArchivo" class="vc-btn-ghost">Cancelar</button>
@@ -160,7 +217,9 @@
       <div class="vc-modal-preview-header">
         <h2 class="vc-modal-title">Vista previa</h2>
         <button id="btnCerrarPreview" class="vc-icon-btn">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
+          </svg>
         </button>
       </div>
       <iframe id="vcPreviewFrame" class="vc-preview-frame"></iframe>
@@ -174,14 +233,17 @@
       <div class="vc-terminal-header">
         <h2 class="vc-modal-title">Terminal</h2>
         <button id="btnCerrarTerminal" class="vc-icon-btn">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
+          </svg>
         </button>
       </div>
       <div class="vc-terminal-body">
         <div id="vcTerminalOutput" class="vc-terminal-output"></div>
         <div class="vc-terminal-input-line">
-          <span class="vc-terminal-prompt">$</span>
-          <input type="text" id="vcTerminalInput" class="vc-terminal-input" placeholder="Ejecutar comando..." autocomplete="off">
+          <span id="vcTerminalPrompt" class="vc-terminal-prompt">/proyecto&gt;</span>
+          <input type="text" id="vcTerminalInput" class="vc-terminal-input" placeholder="Ejecutar comando..."
+            autocomplete="off">
         </div>
       </div>
     </div>
@@ -196,4 +258,5 @@
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="/verbocode/editor.js"></script>
 </body>
+
 </html>

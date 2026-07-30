@@ -18,6 +18,7 @@ const estado = {
   nombreImagenPendiente: null,  // nombre del archivo de imagen
   modoDesign: false,            // modo Design (Canvas/3D) activado desde el botón del chat
   profundidad: 'medium',        // nivel de profundidad de código: medium | avanzado | extendido | ultracode
+  webIdeStatusTimer: null,
 };
 
 // ============================================================
@@ -27,6 +28,7 @@ const estado = {
 const JUDGE0_URL_LOCAL = "http://localhost:2358";
 // API pública para acceso externo (desde otras PCs)
 const JUDGE0_URL = "https://verboai.duckdns.org/api/ejecutar";
+const WEBIDE_STATUS_REFRESH_MS = 5000;
 
 // ============================================================
 // Inicialización
@@ -133,6 +135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarEventos();
   configurarChatInput();
   configurarResizeSidebars();
+  iniciarPollingWebIde();
   // Monaco es una librería pesada (parsear/ejecutar su JS le pega directo al
   // Total Blocking Time y al Time to Interactive del reporte de Lighthouse:
   // 380ms de TBT y 9.4s de TTI con FCP/LCP normales de 2.4s = síntoma
@@ -155,6 +158,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       estado.archivos[estado.archivoActual] = estado.monaco.getValue();
       guardarArchivos();
     }
+  });
+
+  window.addEventListener('pagehide', () => {
+    if (estado.webIdeStatusTimer) clearInterval(estado.webIdeStatusTimer);
   });
 
   // Guardar cada 30 segundos por las dudas
@@ -218,6 +225,7 @@ async function cargarProyecto() {
 
     document.getElementById('vcProyectoNombre').value = estado.proyecto.nombre;
     document.getElementById('vcProyectoNombre').disabled = false;
+    actualizarUiWebIde();
 
     renderArchivos();
 
@@ -239,16 +247,156 @@ async function cargarProyecto() {
 
 async function guardarArchivos() {
   try {
-    await fetch(`/api/verbocode/projects/${estado.proyectoId}`, {
+    const r = await fetch(`/api/verbocode/projects/${estado.proyectoId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nombre: estado.proyecto.nombre,
         archivos: estado.archivos,
+        chat: estado.proyecto.chat || [],
       }),
     });
+    if (!r.ok) throw new Error('No se pudo guardar el proyecto');
+    const data = await r.json().catch(() => null);
+    if (data?.proyecto) {
+      estado.proyecto = { ...estado.proyecto, ...data.proyecto };
+      estado.archivos = data.proyecto.archivos || estado.archivos;
+      actualizarUiWebIde();
+    }
   } catch (e) {
     console.error('Error guardando:', e);
+  }
+}
+
+function obtenerEstadoConexionWebIde() {
+  return estado.proyecto?.webIde?.estadoConexion || null;
+}
+
+function webIdeConectado() {
+  return !!obtenerEstadoConexionWebIde()?.conectado;
+}
+
+function obtenerRutaTerminalActual() {
+  const estadoConexion = obtenerEstadoConexionWebIde();
+  return estadoConexion?.cwd || estadoConexion?.folderPath || '/proyecto';
+}
+
+function actualizarUiWebIde() {
+  const badge = document.getElementById('vcWebIdeEstado');
+  const prompt = document.getElementById('vcTerminalPrompt');
+  const btn = document.getElementById('btnWebIde');
+  const estadoConexion = obtenerEstadoConexionWebIde();
+  const conectado = !!estadoConexion?.conectado;
+  const ruta = estadoConexion?.folderPath || estadoConexion?.cwd || '';
+  const promptTexto = obtenerRutaTerminalActual();
+
+  if (badge) {
+    badge.textContent = conectado ? `Conectado${ruta ? ` · ${ruta}` : ''}` : 'Sin conectar';
+    badge.className = `vc-webide-estado ${conectado ? 'conectado' : 'desconectado'}`;
+    badge.title = conectado
+      ? `Web IDE conectado${ruta ? ` en ${ruta}` : ''}`
+      : 'Descargá el BAT para conectar una carpeta local a este proyecto';
+  }
+
+  if (prompt) {
+    prompt.textContent = `${promptTexto}>`;
+    prompt.title = promptTexto;
+  }
+
+  if (btn) {
+    btn.classList.toggle('activo', conectado);
+    btn.title = conectado
+      ? `Web IDE conectado${ruta ? `: ${ruta}` : ''}`
+      : 'Descargar el BAT para conectar esta carpeta a Verbo Code';
+  }
+}
+
+function actualizarEstadoWebIde(webIde) {
+  if (!estado.proyecto) return;
+  estado.proyecto.webIde = {
+    ...(estado.proyecto.webIde || {}),
+    ...(webIde || {}),
+    estadoConexion: webIde?.estadoConexion || estado.proyecto.webIde?.estadoConexion || null,
+  };
+  actualizarUiWebIde();
+}
+
+async function refrescarEstadoWebIde(silencioso = false) {
+  if (!estado.proyectoId) return null;
+  try {
+    const r = await fetch(`/api/verbocode/projects/${estado.proyectoId}/web-ide/status`);
+    if (!r.ok) throw new Error('No se pudo leer el estado de Web IDE');
+    const data = await r.json();
+    if (data?.webIde) actualizarEstadoWebIde(data.webIde);
+    return data;
+  } catch (e) {
+    if (!silencioso) mostrarToast(e.message, 'error');
+    return null;
+  }
+}
+
+function iniciarPollingWebIde() {
+  if (estado.webIdeStatusTimer) clearInterval(estado.webIdeStatusTimer);
+  refrescarEstadoWebIde(true);
+  estado.webIdeStatusTimer = setInterval(() => {
+    if (document.visibilityState === 'hidden') return;
+    refrescarEstadoWebIde(true);
+  }, WEBIDE_STATUS_REFRESH_MS);
+}
+
+function agregarMensajeLocalAsistente(content, modelo = 'Web IDE') {
+  const mensaje = {
+    role: 'assistant',
+    content,
+    fecha: new Date().toISOString(),
+    modelo,
+  };
+  if (!estado.proyecto.chat) estado.proyecto.chat = [];
+  estado.proyecto.chat.push(mensaje);
+  renderMensaje(mensaje);
+  guardarArchivos();
+}
+
+async function descargarWebIde() {
+  const btn = document.getElementById('btnWebIde');
+  if (btn) btn.disabled = true;
+
+  try {
+    const r = await fetch(`/api/verbocode/projects/${estado.proyectoId}/web-ide`);
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.error || 'No se pudo preparar la conexión Web IDE');
+    }
+
+    const data = await r.json();
+    if (data?.webIde) actualizarEstadoWebIde(data.webIde);
+
+    const url = data.downloadWindowsUrl || `/api/verbocode/projects/${estado.proyectoId}/web-ide/download.bat`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    const carpeta = data.carpetaSugerida || estado.proyecto?.nombre || 'tu proyecto';
+    agregarMensajeLocalAsistente(
+      [
+        'Descargué el lanzador de **Web IDE** para este proyecto.',
+        '',
+        '1. Mové el `.bat` a la carpeta real que querés vincular.',
+        '2. Abrilo y dejá esa ventana abierta mientras trabajás.',
+        `3. Si todavía no existe la carpeta, podés crear una nueva llamada \`${carpeta}\` y ejecutar el BAT ahí.`,
+        '4. Cuando conecte, el badge de arriba y la terminal van a mostrar la ruta real de esa carpeta.',
+      ].join('\n'),
+      'Web IDE'
+    );
+    mostrarToast('BAT de Web IDE descargado', 'success');
+    refrescarEstadoWebIde(true);
+  } catch (e) {
+    mostrarToast(e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -669,6 +817,9 @@ function configurarEventos() {
   // Preview
   document.getElementById('btnPreview').addEventListener('click', mostrarPreview);
 
+  // Web IDE
+  document.getElementById('btnWebIde').addEventListener('click', descargarWebIde);
+
   // Probar (ejecutar HTML en nueva ventana full-screen)
   document.getElementById('btnProbar').addEventListener('click', probarProyecto);
 
@@ -743,6 +894,7 @@ function configurarEventos() {
       if (!comando) return;
 
       const output = document.getElementById('vcTerminalOutput');
+      const promptTexto = obtenerRutaTerminalActual();
 
       // clear/cls: se maneja acá mismo, sin ir al servidor.
       if (/^(clear|cls)$/i.test(comando)) {
@@ -754,7 +906,7 @@ function configurarEventos() {
       // Mostrar comando ejecutado
       const cmdLine = document.createElement('div');
       cmdLine.className = 'vc-terminal-line command';
-      cmdLine.textContent = `$ ${comando}`;
+      cmdLine.textContent = `${promptTexto}> ${comando}`;
       output.appendChild(cmdLine);
 
       input.value = '';
@@ -765,15 +917,20 @@ function configurarEventos() {
         let lenguaje = 'bash';
         let codigo = comando;
 
-        if (comando.startsWith('python ') || comando.startsWith('python3 ')) {
-          lenguaje = 'python';
-          codigo = comando.replace(/^python3?\s+/, '');
-        } else if (comando.startsWith('node ') || comando.startsWith('nodejs ')) {
-          lenguaje = 'javascript';
-          codigo = comando.replace(/^node(js)?\s+/, '');
-        } else if (comando.startsWith('js ')) {
-          lenguaje = 'javascript';
-          codigo = comando.replace(/^js\s+/, '');
+        // Si la carpeta está conectada por Web IDE, el backend ejecuta el
+        // comando crudo en la terminal real de esa carpeta remota. No
+        // reinterpretamos "python"/"node" porque ya no estamos usando Piston.
+        if (!webIdeConectado()) {
+          if (comando.startsWith('python ') || comando.startsWith('python3 ')) {
+            lenguaje = 'python';
+            codigo = comando.replace(/^python3?\s+/, '');
+          } else if (comando.startsWith('node ') || comando.startsWith('nodejs ')) {
+            lenguaje = 'javascript';
+            codigo = comando.replace(/^node(js)?\s+/, '');
+          } else if (comando.startsWith('js ')) {
+            lenguaje = 'javascript';
+            codigo = comando.replace(/^js\s+/, '');
+          }
         }
 
         // Ejecutar: si es un comando de archivos (ls/cat/touch/rm/echo >/mv) se
@@ -785,6 +942,17 @@ function configurarEventos() {
         });
 
         const data = await resp.json();
+        if ((data.cwd || data.folderPath) && estado.proyecto?.webIde) {
+          actualizarEstadoWebIde({
+            ...estado.proyecto.webIde,
+            estadoConexion: {
+              ...(estado.proyecto.webIde.estadoConexion || {}),
+              conectado: webIdeConectado(),
+              cwd: data.cwd || estado.proyecto.webIde.estadoConexion?.cwd || '',
+              folderPath: data.folderPath || estado.proyecto.webIde.estadoConexion?.folderPath || '',
+            },
+          });
+        }
 
         if (data.exito) {
           const resultLine = document.createElement('div');

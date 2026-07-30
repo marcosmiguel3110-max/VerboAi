@@ -1612,7 +1612,7 @@ app.use((req, res, next) => {
   if (req.path === '/info') return res.redirect(301, '/info.html');
   // URL limpia: /login.html pasa a /login (sin extension) via redireccion permanente.
   if (req.path === '/login.html') return res.redirect(301, '/login');
-  if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/')) return next();
+  if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/') || req.path.startsWith('/api/v1/verbocode/link/')) return next();
   if (estaAutenticado(req)) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
   return res.redirect('/login');
@@ -3945,16 +3945,18 @@ if (!fs.existsSync(VERBOCODE_DIR)) fs.mkdirSync(VERBOCODE_DIR, { recursive: true
 
 function normalizarSyncIdWebIde(texto) {
   const base = String(texto || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '')
-    .slice(0, 32);
+    .slice(0, 96);
   return base || 'proyecto';
 }
 
-function generarSyncIdWebIde(nombre, proyectoIdActual = null) {
-  const base = normalizarSyncIdWebIde(nombre);
+function generarSecretoWebIde(longitudBytes = 32) {
+  return crypto.randomBytes(longitudBytes).toString('hex');
+}
+
+function generarSyncIdWebIde(_nombre, proyectoIdActual = null) {
   const archivos = fs.existsSync(VERBOCODE_DIR)
     ? fs.readdirSync(VERBOCODE_DIR).filter((f) => f.endsWith('.json') && f !== '.gitkeep')
     : [];
@@ -3968,12 +3970,11 @@ function generarSyncIdWebIde(nombre, proyectoIdActual = null) {
     } catch (_) { }
   }
 
-  if (!usados.has(base)) return base;
-  for (let i = 0; i < 40; i++) {
-    const candidato = `${base}${crypto.randomBytes(2).toString('hex')}`;
+  for (let i = 0; i < 120; i++) {
+    const candidato = generarSecretoWebIde(32);
     if (!usados.has(candidato)) return candidato;
   }
-  return `${base}${Date.now().toString(36).slice(-4)}`;
+  return generarSecretoWebIde(40);
 }
 
 function hashProyectoVerboCode(proyecto) {
@@ -3990,10 +3991,13 @@ function asegurarMetadatosWebIdeProyecto(proyecto, opciones = {}) {
   if (!Array.isArray(proyecto.chat)) proyecto.chat = [];
   if (!proyecto.webIde || typeof proyecto.webIde !== 'object') proyecto.webIde = {};
 
-  if (!proyecto.webIde.syncId) {
+  if (!proyecto.webIde.syncId || normalizarSyncIdWebIde(proyecto.webIde.syncId).length < 40) {
     proyecto.webIde.syncId = generarSyncIdWebIde(proyecto.nombre || proyecto.id || 'proyecto', opciones.proyectoIdActual || proyecto.id || null);
   } else {
     proyecto.webIde.syncId = normalizarSyncIdWebIde(proyecto.webIde.syncId);
+  }
+  if (!proyecto.webIde.clientSecret || String(proyecto.webIde.clientSecret).length < 40) {
+    proyecto.webIde.clientSecret = generarSecretoWebIde(32);
   }
 
   if (!Number.isFinite(proyecto.webIde.revision) || proyecto.webIde.revision < 1) {
@@ -4014,6 +4018,21 @@ function buscarProyectoVerboCodePorSyncId(syncId, usuario) {
       try {
         const data = asegurarMetadatosWebIdeProyecto(JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, arch), 'utf-8')), {});
         if (data.usuario === usuario && data.webIde?.syncId === objetivo) return data;
+      } catch (_) { }
+    }
+  } catch (_) { }
+  return null;
+}
+
+function buscarProyectoVerboCodePorSyncIdGlobal(syncId) {
+  const objetivo = normalizarSyncIdWebIde(syncId);
+  if (!objetivo) return null;
+  try {
+    const archivos = fs.readdirSync(VERBOCODE_DIR).filter((f) => f.endsWith('.json') && f !== '.gitkeep');
+    for (const arch of archivos) {
+      try {
+        const data = asegurarMetadatosWebIdeProyecto(JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, arch), 'utf-8')), {});
+        if (data.webIde?.syncId === objetivo) return data;
       } catch (_) { }
     }
   } catch (_) { }
@@ -4114,6 +4133,159 @@ function guardarProyectoVerboCode(proyecto) {
   }
 }
 
+const webIdeSessions = new Map();
+const WEBIDE_ONLINE_WINDOW_MS = 15000;
+const WEBIDE_POLL_INTERVAL_MS = 2200;
+const WEBIDE_COMMAND_TIMEOUT_MS = 120000;
+
+function limpiarTextoPlanoWebIde(valor, max = 280) {
+  return String(valor || '').replace(/\0/g, '').trim().slice(0, max);
+}
+
+function sanitizarNombreCarpetaWebIde(nombre) {
+  return String(nombre || 'proyecto')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[. ]+$/g, '')
+    .slice(0, 80) || 'proyecto';
+}
+
+function obtenerSesionWebIde(syncId) {
+  const clave = normalizarSyncIdWebIde(syncId);
+  return clave ? webIdeSessions.get(clave) || null : null;
+}
+
+function obtenerSesionWebIdeActiva(syncId) {
+  const sesion = obtenerSesionWebIde(syncId);
+  if (!sesion) return null;
+  if (Date.now() - (sesion.lastSeen || 0) > WEBIDE_ONLINE_WINDOW_MS) return null;
+  return sesion;
+}
+
+function asegurarSesionWebIde(proyecto) {
+  const syncId = proyecto?.webIde?.syncId;
+  if (!syncId) return null;
+  const clave = normalizarSyncIdWebIde(syncId);
+  let sesion = webIdeSessions.get(clave);
+  if (!sesion) {
+    sesion = {
+      syncId: clave,
+      projectId: proyecto.id,
+      usuario: proyecto.usuario,
+      createdAt: Date.now(),
+      connectedAt: null,
+      lastSeen: 0,
+      folderPath: '',
+      cwd: '',
+      machineName: '',
+      clientVersion: '',
+      nextCommandId: 1,
+      commands: [],
+    };
+    webIdeSessions.set(clave, sesion);
+  }
+  sesion.projectId = proyecto.id;
+  sesion.usuario = proyecto.usuario;
+  return sesion;
+}
+
+function serializarEstadoConexionWebIde(proyecto) {
+  const sesion = obtenerSesionWebIdeActiva(proyecto?.webIde?.syncId);
+  return {
+    conectado: !!sesion,
+    texto: sesion ? 'Conectado' : 'Sin conectar',
+    ultimoPing: sesion ? new Date(sesion.lastSeen).toISOString() : null,
+    conectadoDesde: sesion?.connectedAt ? new Date(sesion.connectedAt).toISOString() : null,
+    folderPath: sesion?.folderPath || '',
+    cwd: sesion?.cwd || '',
+    machineName: sesion?.machineName || '',
+    clientVersion: sesion?.clientVersion || '',
+    pollIntervalMs: WEBIDE_POLL_INTERVAL_MS,
+  };
+}
+
+function construirProyectoVerboCodePublico(proyecto, opciones = {}) {
+  const incluirArchivos = opciones.incluirArchivos !== false;
+  return {
+    id: proyecto.id,
+    nombre: proyecto.nombre,
+    usuario: proyecto.usuario,
+    creadoEn: proyecto.creadoEn,
+    actualizadoEn: proyecto.actualizadoEn,
+    numArchivos: Object.keys(proyecto.archivos || {}).length,
+    chat: Array.isArray(proyecto.chat) ? proyecto.chat : [],
+    archivos: incluirArchivos ? (proyecto.archivos || {}) : undefined,
+    webIde: {
+      syncId: proyecto.webIde?.syncId || null,
+      revision: proyecto.webIde?.revision || 1,
+      estadoConexion: serializarEstadoConexionWebIde(proyecto),
+    },
+  };
+}
+
+function autenticarClienteWebIde(req, res) {
+  const proyecto = buscarProyectoVerboCodePorSyncIdGlobal(req.params.syncId);
+  if (!proyecto) {
+    if (res) res.status(404).json({ ok: false, error: 'Proyecto Web IDE no encontrado.' });
+    return null;
+  }
+  const secreto = limpiarTextoPlanoWebIde(req.headers['x-webide-secret'] || req.body?.secret || req.query?.secret || '', 200);
+  if (!secreto || secreto !== String(proyecto.webIde?.clientSecret || '')) {
+    if (res) res.status(401).json({ ok: false, error: 'Secreto Web IDE inválido.' });
+    return null;
+  }
+  return proyecto;
+}
+
+function actualizarSesionWebIde(proyecto, data = {}) {
+  const sesion = asegurarSesionWebIde(proyecto);
+  if (!sesion) return null;
+  const ahora = Date.now();
+  if (!sesion.connectedAt) sesion.connectedAt = ahora;
+  sesion.lastSeen = ahora;
+  sesion.folderPath = limpiarTextoPlanoWebIde(data.folderPath || sesion.folderPath, 500);
+  sesion.cwd = limpiarTextoPlanoWebIde(data.cwd || data.folderPath || sesion.cwd, 500);
+  sesion.machineName = limpiarTextoPlanoWebIde(data.machineName || sesion.machineName, 120);
+  sesion.clientVersion = limpiarTextoPlanoWebIde(data.clientVersion || sesion.clientVersion, 80);
+  return sesion;
+}
+
+async function encolarComandoWebIde(proyecto, comando, opciones = {}) {
+  const sesion = obtenerSesionWebIdeActiva(proyecto?.webIde?.syncId);
+  if (!sesion) {
+    return { stdout: '', stderr: 'El proyecto no tiene un cliente Web IDE conectado.', exito: false, exitCode: null };
+  }
+
+  const commandId = String(sesion.nextCommandId++);
+  const tarea = {
+    id: commandId,
+    comando: String(comando || '').trim(),
+    creadoEn: new Date().toISOString(),
+    status: 'queued',
+    origen: opciones.origen || 'terminal',
+    resolve: null,
+  };
+
+  const promesa = new Promise((resolve) => { tarea.resolve = resolve; });
+  sesion.commands.push(tarea);
+
+  const timeout = setTimeout(() => {
+    const idx = sesion.commands.findIndex((c) => c.id === commandId);
+    if (idx !== -1) sesion.commands.splice(idx, 1);
+    if (typeof tarea.resolve === 'function') {
+      tarea.resolve({ stdout: '', stderr: 'El cliente Web IDE no respondió a tiempo.', exito: false, exitCode: null });
+      tarea.resolve = null;
+    }
+  }, WEBIDE_COMMAND_TIMEOUT_MS);
+
+  const resultado = await promesa;
+  clearTimeout(timeout);
+  return resultado;
+}
+
 // Limpiar cache de VerboCode periódicamente
 setInterval(() => {
   const now = Date.now();
@@ -4123,6 +4295,15 @@ setInterval(() => {
     }
   }
 }, 2 * 60 * 1000); // Limpiar cada 2 minutos
+
+setInterval(() => {
+  const ahora = Date.now();
+  for (const [syncId, sesion] of webIdeSessions.entries()) {
+    if (ahora - (sesion.lastSeen || 0) > 10 * 60 * 1000 && (!sesion.commands || sesion.commands.length === 0)) {
+      webIdeSessions.delete(syncId);
+    }
+  }
+}, 60 * 1000);
 
 // Cargar proyectos desde MongoDB al arrancar (para que persistan al reiniciar)
 async function cargarProyectosVerboCodeDesdeMongo() {
@@ -4155,6 +4336,89 @@ function requiereAdminVerboCode(req, res, next) {
   if (!usuarioEsAdmin(usuario)) return res.status(403).json({ error: 'Verbo Code es exclusivo para cuentas administrador.' });
   req.usuarioVerboCode = usuario;
   next();
+}
+
+function obtenerBaseUrlPublica(req) {
+  const protoForward = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const proto = protoForward || req.protocol || 'https';
+  return `${proto}://${req.get('host')}`;
+}
+
+function nombreArchivoDescargaWebIde(proyecto) {
+  return `VerboCode-WebIDE-${sanitizarNombreCarpetaWebIde(proyecto?.nombre || 'proyecto').replace(/\s+/g, '_')}.bat`;
+}
+
+function generarContenidoBatWebIde(req, proyecto) {
+  const baseUrl = obtenerBaseUrlPublica(req);
+  const scriptUrl = `${baseUrl}/web-ide-cli.py`;
+  const nombreProyecto = (proyecto?.nombre || 'Proyecto Verbo Code').replace(/"/g, '""');
+  const batName = nombreArchivoDescargaWebIde(proyecto).replace(/"/g, '""');
+  return `@echo off
+chcp 65001 >nul
+setlocal
+title Verbo Code Web IDE
+color 0A
+
+set "VERBOCODE_SERVER=${baseUrl.replace(/"/g, '""')}"
+set "VERBOCODE_SYNC_ID=${String(proyecto?.webIde?.syncId || '').replace(/"/g, '""')}"
+set "VERBOCODE_SECRET=${String(proyecto?.webIde?.clientSecret || '').replace(/"/g, '""')}"
+set "VERBOCODE_PROJECT_NAME=${nombreProyecto}"
+set "VERBOCODE_CLIENT_DIR=%USERPROFILE%\\.verbocode-webide"
+set "VERBOCODE_CLIENT=%VERBOCODE_CLIENT_DIR%\\web-ide-cli.py"
+set "VERBOCODE_SCRIPT_URL=${scriptUrl.replace(/"/g, '""')}"
+set "VERBOCODE_BAT_NAME=${batName}"
+
+if "%~1"=="" (
+  set "VERBOCODE_FOLDER=%~dp0"
+) else (
+  set "VERBOCODE_FOLDER=%~1"
+)
+
+for %%I in ("%VERBOCODE_FOLDER%") do set "VERBOCODE_FOLDER=%%~fI"
+
+if not exist "%VERBOCODE_CLIENT_DIR%" mkdir "%VERBOCODE_CLIENT_DIR%"
+
+echo ================================================================
+echo   Verbo Code Web IDE
+echo ================================================================
+echo.
+echo   Proyecto: %VERBOCODE_PROJECT_NAME%
+echo   Carpeta:  %VERBOCODE_FOLDER%
+echo.
+
+set "PY_CMD="
+py -3 --version >nul 2>&1
+if not errorlevel 1 set "PY_CMD=py -3"
+if not defined PY_CMD (
+  python --version >nul 2>&1
+  if not errorlevel 1 set "PY_CMD=python"
+)
+
+if not defined PY_CMD (
+  echo [ERROR] No encontre Python 3 instalado.
+  echo Instala Python desde https://www.python.org/downloads/
+  echo y despues vuelve a abrir este BAT dentro de la carpeta del proyecto.
+  pause
+  exit /b 1
+)
+
+echo Descargando cliente liviano de Web IDE...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -UseBasicParsing -Uri '%VERBOCODE_SCRIPT_URL%' -OutFile '%VERBOCODE_CLIENT%' } catch { Write-Host $_; exit 1 }"
+if errorlevel 1 (
+  echo [ERROR] No se pudo descargar el cliente de Web IDE.
+  pause
+  exit /b 1
+)
+
+echo.
+echo Iniciando sincronizacion con Verbo Code...
+echo Esta ventana tiene que quedar abierta mientras quieras seguir conectado.
+echo.
+%PY_CMD% "%VERBOCODE_CLIENT%" --server "%VERBOCODE_SERVER%" --sync-id "%VERBOCODE_SYNC_ID%" --secret "%VERBOCODE_SECRET%" --folder "%VERBOCODE_FOLDER%" --project-name "%VERBOCODE_PROJECT_NAME%" --bat-name "%VERBOCODE_BAT_NAME%"
+echo.
+echo Conexion Web IDE finalizada.
+pause
+`;
 }
 
 // ============================================================
@@ -4192,7 +4456,10 @@ app.get('/api/verbocode/models', requiereAdminVerboCode, (req, res) => {
 // ============================================================
 app.get('/api/verbocode/projects', requiereAdminVerboCode, (req, res) => {
   const proyectos = leerProyectosVerboCode(req.usuarioVerboCode);
-  res.json({ ok: true, proyectos });
+  res.json({
+    ok: true,
+    proyectos: proyectos.map((p) => construirProyectoVerboCodePublico(p, { incluirArchivos: false })),
+  });
 });
 
 app.post('/api/verbocode/projects', requiereAdminVerboCode, (req, res) => {
@@ -4209,13 +4476,13 @@ app.post('/api/verbocode/projects', requiereAdminVerboCode, (req, res) => {
     chat: [],
   };
   guardarProyectoVerboCode(proyecto);
-  res.json({ ok: true, proyecto: { id, nombre, creadoEn: proyecto.creadoEn, actualizadoEn: proyecto.actualizadoEn, archivos: {}, webIde: proyecto.webIde } });
+  res.json({ ok: true, proyecto: construirProyectoVerboCodePublico(proyecto) });
 });
 
 app.get('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => {
   const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
   if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
-  res.json({ ok: true, proyecto });
+  res.json({ ok: true, proyecto: construirProyectoVerboCodePublico(proyecto) });
 });
 
 app.put('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => {
@@ -4225,20 +4492,50 @@ app.put('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => {
   if (req.body?.archivos && typeof req.body.archivos === 'object') proyecto.archivos = req.body.archivos;
   if (Array.isArray(req.body?.chat)) proyecto.chat = req.body.chat;
   guardarProyectoVerboCode(proyecto);
-  res.json({ ok: true, webIde: proyecto.webIde });
+  res.json({ ok: true, proyecto: construirProyectoVerboCodePublico(proyecto) });
 });
 
 app.get('/api/verbocode/projects/:id/web-ide', requiereAdminVerboCode, (req, res) => {
+  const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
+  if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
+  const baseUrl = obtenerBaseUrlPublica(req);
+  res.json({
+    ok: true,
+    projectId: proyecto.id,
+    nombre: proyecto.nombre,
+    webIde: {
+      syncId: proyecto.webIde?.syncId || null,
+      revision: proyecto.webIde?.revision || 1,
+      estadoConexion: serializarEstadoConexionWebIde(proyecto),
+    },
+    downloadWindowsUrl: `${baseUrl}/api/verbocode/projects/${proyecto.id}/web-ide/download.bat`,
+    downloadScriptUrl: `${baseUrl}/web-ide-cli.py`,
+    carpetaSugerida: sanitizarNombreCarpetaWebIde(proyecto.nombre),
+  });
+});
+
+app.get('/api/verbocode/projects/:id/web-ide/status', requiereAdminVerboCode, (req, res) => {
   const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
   if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
   res.json({
     ok: true,
     projectId: proyecto.id,
     nombre: proyecto.nombre,
-    webIde: proyecto.webIde,
-    downloadWindowsUrl: '/WebIDE.bat',
-    downloadScriptUrl: '/web-ide-cli.py',
+    webIde: {
+      syncId: proyecto.webIde?.syncId || null,
+      revision: proyecto.webIde?.revision || 1,
+      estadoConexion: serializarEstadoConexionWebIde(proyecto),
+    },
   });
+});
+
+app.get('/api/verbocode/projects/:id/web-ide/download.bat', requiereAdminVerboCode, (req, res) => {
+  const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
+  if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
+  const contenido = generarContenidoBatWebIde(req, proyecto);
+  res.setHeader('Content-Type', 'application/x-bat');
+  res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivoDescargaWebIde(proyecto)}"`);
+  res.send(contenido);
 });
 
 app.delete('/api/verbocode/projects/:id', requiereAdminVerboCode, async (req, res) => {
@@ -4324,6 +4621,101 @@ app.post('/api/v1/verbocode/sync/:syncId/push', express.json({ limit: '20mb' }),
     revision: proyecto.webIde.revision,
     actualizadoEn: proyecto.actualizadoEn,
   });
+});
+
+app.post('/api/v1/verbocode/link/:syncId/poll', express.json({ limit: '2mb' }), (req, res) => {
+  const proyecto = autenticarClienteWebIde(req, res);
+  if (!proyecto) return;
+  const sesion = actualizarSesionWebIde(proyecto, req.body || {});
+  const revisionCliente = Number.isFinite(req.body?.revision) ? req.body.revision : 0;
+  const incluirArchivos = !!req.body?.solicitarArchivos || revisionCliente < (proyecto.webIde?.revision || 1);
+  const commands = (sesion?.commands || [])
+    .filter((cmd) => cmd.status === 'queued')
+    .map((cmd) => {
+      cmd.status = 'dispatched';
+      cmd.entregadoEn = new Date().toISOString();
+      return {
+        id: cmd.id,
+        comando: cmd.comando,
+        origen: cmd.origen || 'terminal',
+        creadoEn: cmd.creadoEn,
+      };
+    });
+
+  res.json({
+    ok: true,
+    projectId: proyecto.id,
+    nombre: proyecto.nombre,
+    desiredFolderName: sanitizarNombreCarpetaWebIde(proyecto.nombre),
+    revision: proyecto.webIde?.revision || 1,
+    pollIntervalMs: WEBIDE_POLL_INTERVAL_MS,
+    estadoConexion: serializarEstadoConexionWebIde(proyecto),
+    project: incluirArchivos ? {
+      nombre: proyecto.nombre,
+      revision: proyecto.webIde?.revision || 1,
+      archivos: proyecto.archivos || {},
+    } : null,
+    commands,
+  });
+});
+
+app.post('/api/v1/verbocode/link/:syncId/push', express.json({ limit: '40mb' }), (req, res) => {
+  const proyecto = autenticarClienteWebIde(req, res);
+  if (!proyecto) return;
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ ok: false, error: 'El body debe ser un objeto JSON.' });
+  }
+  if (!req.body.archivos || typeof req.body.archivos !== 'object' || Array.isArray(req.body.archivos)) {
+    return res.status(400).json({ ok: false, error: 'Falta "archivos" con el mapa completo del proyecto.' });
+  }
+
+  actualizarSesionWebIde(proyecto, req.body);
+
+  const nombreNuevo = typeof req.body.nombre === 'string' && req.body.nombre.trim()
+    ? req.body.nombre.trim().slice(0, 60)
+    : proyecto.nombre;
+  const archivosNuevos = req.body.archivos;
+  const cambioNombre = nombreNuevo !== proyecto.nombre;
+  const cambioArchivos = JSON.stringify(proyecto.archivos || {}) !== JSON.stringify(archivosNuevos || {});
+
+  if (cambioNombre) proyecto.nombre = nombreNuevo;
+  if (cambioArchivos) proyecto.archivos = archivosNuevos;
+  if (cambioNombre || cambioArchivos) guardarProyectoVerboCode(proyecto);
+
+  res.json({
+    ok: true,
+    nombre: proyecto.nombre,
+    revision: proyecto.webIde?.revision || 1,
+    desiredFolderName: sanitizarNombreCarpetaWebIde(proyecto.nombre),
+    estadoConexion: serializarEstadoConexionWebIde(proyecto),
+  });
+});
+
+app.post('/api/v1/verbocode/link/:syncId/command-result/:commandId', express.json({ limit: '20mb' }), (req, res) => {
+  const proyecto = autenticarClienteWebIde(req, res);
+  if (!proyecto) return;
+  const sesion = actualizarSesionWebIde(proyecto, req.body || {});
+  const tarea = (sesion?.commands || []).find((cmd) => cmd.id === String(req.params.commandId));
+  if (!tarea) return res.status(404).json({ ok: false, error: 'Comando Web IDE no encontrado.' });
+
+  const salida = String(req.body?.stdout || '').replace(/\0/g, '').slice(0, 250000);
+  const error = String(req.body?.stderr || '').replace(/\0/g, '').slice(0, 250000);
+  const resultado = {
+    stdout: salida,
+    stderr: error,
+    exito: !!req.body?.exito,
+    exitCode: Number.isFinite(req.body?.exitCode) ? req.body.exitCode : null,
+    cwd: sesion?.cwd || '',
+    folderPath: sesion?.folderPath || '',
+  };
+
+  sesion.commands = (sesion.commands || []).filter((cmd) => cmd.id !== tarea.id);
+  if (typeof tarea.resolve === 'function') {
+    tarea.resolve(resultado);
+    tarea.resolve = null;
+  }
+
+  res.json({ ok: true });
 });
 
 // ============================================================
@@ -5503,6 +5895,11 @@ async function ejecutarRunVerboCode(comandoRun, proyecto) {
     };
   }
 
+  if (obtenerSesionWebIdeActiva(proyecto?.webIde?.syncId)) {
+    const resultadoRemoto = await encolarComandoWebIde(proyecto, comandoRun, { origen: 'run' });
+    return { resultadoRun: resultadoRemoto, modifico: false };
+  }
+
   const subcomandos = String(comandoRun || '').split(/\s*(?:&&|;)\s*/).filter(Boolean);
   const salidas = [];
   let huboError = false;
@@ -5557,11 +5954,28 @@ app.post('/api/verbocode/execute', codeRateLimit, requiereAdminVerboCode, async 
 
   if (!codigo) return res.status(400).json({ error: 'Falta el código a ejecutar.' });
 
+  const proyecto = (lenguaje === 'bash' && proyectoId)
+    ? leerProyectoVerboCode(proyectoId, req.usuarioVerboCode)
+    : null;
+
+  if (lenguaje === 'bash' && proyecto && obtenerSesionWebIdeActiva(proyecto.webIde?.syncId)) {
+    const resultado = await encolarComandoWebIde(proyecto, codigo, { origen: 'terminal' });
+    return res.json({
+      exito: !!resultado.exito,
+      lenguaje: 'powershell',
+      stdout: resultado.stdout || '',
+      stderr: resultado.stderr || '',
+      error: resultado.exito ? null : (resultado.stderr || 'El comando remoto falló.'),
+      exitCode: resultado.exitCode,
+      remotePath: resultado.cwd || resultado.folderPath || '',
+      conectado: true,
+    });
+  }
+
   // Si el comando es bash y hay un proyecto activo, intentar resolverlo contra
   // el proyecto real ANTES de mandarlo a Piston (que es un sandbox descartable
   // sin acceso al proyecto).
   if (lenguaje === 'bash' && proyectoId) {
-    const proyecto = leerProyectoVerboCode(proyectoId, req.usuarioVerboCode);
     if (proyecto) {
       // Soporta varios comandos separados por && o ;
       const subcomandos = codigo.split(/\s*(?:&&|;)\s*/).filter(Boolean);
