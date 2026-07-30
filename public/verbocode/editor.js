@@ -39,6 +39,7 @@ const VC_SIDEBAR_MIN = 160;
 const VC_SIDEBAR_MAX = 560;
 const VC_CHAT_MIN = 260;
 const VC_CHAT_MAX = 680;
+const VC_RESPONSIVE_BREAKPOINT = 900;
 
 function configurarResizeSidebars() {
   const layout = document.querySelector('.vc-editor-layout');
@@ -49,6 +50,10 @@ function configurarResizeSidebars() {
   let anchoChat = clamp(anchoGuardado.chat || 360, VC_CHAT_MIN, VC_CHAT_MAX);
 
   const aplicarAnchos = () => {
+    if (window.innerWidth <= VC_RESPONSIVE_BREAKPOINT) {
+      layout.style.removeProperty('grid-template-columns');
+      return;
+    }
     layout.style.gridTemplateColumns = `${anchoSidebar}px 6px 1fr 6px ${anchoChat}px`;
   };
   aplicarAnchos();
@@ -93,6 +98,11 @@ function configurarResizeSidebars() {
       guardarAnchos();
       if (estado.monaco && estado.monaco.layout) estado.monaco.layout();
     });
+  });
+
+  window.addEventListener('resize', () => {
+    aplicarAnchos();
+    if (estado.monaco && estado.monaco.layout) estado.monaco.layout();
   });
 }
 
@@ -606,7 +616,7 @@ function initTextareaFallback() {
   estado.monaco = {
     setValue: (v) => { textarea.value = v; },
     getValue: () => textarea.value,
-    setModel: () => {},
+    setModel: () => { },
   };
   textarea.addEventListener('input', () => {
     if (estado.archivoActual) {
@@ -670,17 +680,17 @@ function configurarEventos() {
     input.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      
+
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64 = event.target.result;
         const chatInput = document.getElementById('vcChatInput');
         const promptActual = chatInput.value.trim();
-        
+
         // Guardar la imagen en el estado para enviarla con el mensaje
         estado.imagenPendiente = base64;
         estado.nombreImagenPendiente = file.name;
-        
+
         chatInput.value = promptActual ? `${promptActual}\n\n[Imagen adjunta: ${file.name}]` : `[Imagen adjunta: ${file.name}]`;
         chatInput.focus();
         mostrarToast('Imagen cargada. Presioná Enter para enviarla a la IA para análisis.', '');
@@ -1162,12 +1172,12 @@ async function enviarChat() {
   accionesGroupEl = null; // por si un mensaje anterior falló antes de cerrar su propia card
 
   const rehabilitarInput = () => {
-    try { input.disabled = false; } catch(e) {}
-    try { btnEnviar.disabled = false; } catch(e) {}
+    try { input.disabled = false; } catch (e) { }
+    try { btnEnviar.disabled = false; } catch (e) { }
     estado.chatEnProgreso = false;
     estado.imagenPendiente = null;
     estado.nombreImagenPendiente = null;
-    try { input.focus(); } catch(e) {}
+    try { input.focus(); } catch (e) { }
     // Ocultar indicador Generando Code
     if (indicadorGenerando) indicadorGenerando.classList.add('oculto');
     // Re-sincronizar los tags del composer (@canvas / @ultracode / etc) con
@@ -1176,9 +1186,9 @@ async function enviarChat() {
     actualizarTagsComposer();
   };
 
-  const msgUser = { 
-    role: 'user', 
-    content: texto, 
+  const msgUser = {
+    role: 'user',
+    content: texto,
     fecha: new Date().toISOString(),
     imagen: estado.imagenPendiente,
     nombreImagen: estado.nombreImagenPendiente,
@@ -1212,13 +1222,13 @@ async function enviarChat() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-    const bodyData = { 
-      mensaje: texto, 
+    const bodyData = {
+      mensaje: texto,
       modelo: estado.modeloSeleccionado,
       modoDesign: estado.modoDesign,
       profundidad: estado.profundidad,
     };
-    
+
     if (estado.imagenPendiente) {
       bodyData.imagen = estado.imagenPendiente;
       bodyData.nombreImagen = estado.nombreImagenPendiente;
@@ -1235,7 +1245,7 @@ async function enviarChat() {
 
     if (!r.ok) {
       const errText = await r.text().catch(() => 'Error');
-      try { const ej = JSON.parse(errText); throw new Error(ej.error || errText); } catch(_) { throw new Error(errText); }
+      try { const ej = JSON.parse(errText); throw new Error(ej.error || errText); } catch (_) { throw new Error(errText); }
     }
 
     const reader = r.body.getReader();
@@ -1406,7 +1416,7 @@ async function enviarChat() {
           const invViejo = document.getElementById('investigandoIndicator');
           if (invViejo && invViejo.parentNode) invViejo.remove();
           if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
-          
+
           // Crear frame de investigación estilo ventana de navegador
           const invDiv = document.createElement('div');
           invDiv.className = 'vc-msg-investigando';
@@ -1436,18 +1446,18 @@ async function enviarChat() {
           if (invEl) {
             const sitioEl = invEl.querySelector('.vc-investigando-sitio');
             const barraEl = invEl.querySelector('.vc-investigando-bar');
-            
+
             // Actualizar icono según el sitio
             const iconoViejo = barraEl.querySelector('.vc-investigando-icon');
             if (iconoViejo) iconoViejo.remove();
-            
+
             let icono = `<svg class="vc-investigando-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>`;
             if (/wikipedia/i.test(evt.sitio)) {
               icono = `<img class="vc-investigando-favicon" src="https://www.google.com/s2/favicons?domain=es.wikipedia.org&sz=64" alt="" />`;
             } else if (/biblia/i.test(evt.sitio)) {
               icono = `<svg class="vc-investigando-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>`;
             }
-            
+
             barraEl.insertAdjacentHTML('afterbegin', icono);
             sitioEl.textContent = evt.sitio;
           }
@@ -1459,11 +1469,11 @@ async function enviarChat() {
             const headerEl = invEl.querySelector('.vc-investigando-header');
             const sitioEl = invEl.querySelector('.vc-investigando-sitio');
             const loadingEl = invEl.querySelector('.vc-investigando-loading');
-            
+
             if (loadingEl) loadingEl.classList.add('vc-investigando-loading-done');
             headerEl.innerHTML = '<span class="vc-investigando-loading vc-investigando-loading-done"></span> Investigación completa';
             sitioEl.textContent = 'Listo ✓';
-            
+
             setTimeout(() => {
               invEl.classList.add('vc-investigando-colapsado');
               setTimeout(() => invEl.remove(), 350);
@@ -1474,7 +1484,7 @@ async function enviarChat() {
           const codeViejo = document.getElementById('creandoCodigoIndicator');
           if (codeViejo && codeViejo.parentNode) codeViejo.remove();
           if (thinkingEl && thinkingEl.parentNode) thinkingEl.remove();
-          
+
           // Crear frame de creación de código
           const codeDiv = document.createElement('div');
           codeDiv.className = 'vc-msg-creando-codigo';
@@ -1506,11 +1516,11 @@ async function enviarChat() {
             const headerEl = codeEl.querySelector('.vc-creando-header');
             const archivoEl = codeEl.querySelector('.vc-creando-archivo');
             const loadingEl = codeEl.querySelector('.vc-creando-loading');
-            
+
             if (loadingEl) loadingEl.classList.add('vc-creando-loading-done');
             headerEl.innerHTML = '<span class="vc-creando-loading vc-creando-loading-done"></span> Código creado';
             archivoEl.textContent = 'Listo ✓';
-            
+
             setTimeout(() => {
               codeEl.classList.add('vc-creando-colapsado');
               setTimeout(() => codeEl.remove(), 350);
@@ -1640,7 +1650,7 @@ function formatearMarkdownConColapsado(texto) {
   return html;
 }
 
-window.toggleCodeBlock = function(id) {
+window.toggleCodeBlock = function (id) {
   const el = document.getElementById(id);
   if (!el) return;
   if (el.style.display === 'none') {
@@ -1656,7 +1666,7 @@ function renderMensaje(m) {
   const cont = document.getElementById('vcChatMensajes');
   const div = document.createElement('div');
   div.className = 'vc-msg ' + (m.role === 'user' ? 'user' : 'assistant');
-  
+
   // Si tiene imagen adjunta, mostrarla primero
   if (m.imagen) {
     const imgDiv = document.createElement('div');
@@ -1670,7 +1680,7 @@ function renderMensaje(m) {
     }
     div.appendChild(imgDiv);
   }
-  
+
   // Convertir markdown básico (code blocks colapsables, inline code, bold)
   // Usamos la MISMA función que en el streaming en vivo (formatearMarkdownConColapsado)
   // para que un mensaje recargado (ej. al reabrir el proyecto) se vea IGUAL que la
@@ -1955,7 +1965,7 @@ canvas{display:block;width:100%;height:100%;}</style>
   try {
     const pkg = JSON.parse(estado.archivos['package.json'] || '{}');
     deps = pkg.dependencies || {};
-  } catch (e) {}
+  } catch (e) { }
 
   // Reemplazar imports de npm en el JS por URLs de esm.sh
   // Ej: import React from 'react' → import React from 'https://esm.sh/react'
@@ -2097,7 +2107,7 @@ function detectarTipoProyecto() {
     try {
       const manifest = JSON.parse(estado.archivos['manifest.json']);
       if (manifest.format_version) return 'mcaddon';
-    } catch (e) {}
+    } catch (e) { }
   }
   // Minecraft Java mod (fabric.mod.json o META-INF)
   if (nombresBajos.includes('fabric.mod.json') || nombresBajos.some(n => n.startsWith('meta-inf/'))) {

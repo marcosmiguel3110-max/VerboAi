@@ -9,6 +9,8 @@ const path = require('path');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
+let puppeteer = null;
+try { puppeteer = require('puppeteer'); } catch (e) { console.warn('[verbocode] Puppeteer no disponible:', e.message); }
 
 // ============================================================
 // RED DE SEGURIDAD GLOBAL: sin esto, CUALQUIER excepcion no atrapada en
@@ -142,7 +144,7 @@ async function processQueue(queueName) {
   while (queue.running < concurrenciaDeCola(queueName) && queue.queue.length > 0) {
     queue.running++;
     const taskWrapper = queue.queue.shift();
-    
+
     taskWrapper.task()
       .then(taskWrapper.resolve)
       .catch(taskWrapper.reject)
@@ -165,14 +167,14 @@ const globalRateLimit = rateLimit({
   legacyHeaders: false,
   skip: (req) => {
     // Saltar rate limit para rutas públicas y archivos estáticos
-    return req.path.startsWith('/icons/') || 
-           req.path.startsWith('/uploads/') || 
-           req.path.endsWith('.css') || 
-           req.path.endsWith('.js') || 
-           req.path.endsWith('.png') || 
-           req.path.endsWith('.jpg') || 
-           req.path.endsWith('.ico') ||
-           req.path.endsWith('.svg');
+    return req.path.startsWith('/icons/') ||
+      req.path.startsWith('/uploads/') ||
+      req.path.endsWith('.css') ||
+      req.path.endsWith('.js') ||
+      req.path.endsWith('.png') ||
+      req.path.endsWith('.jpg') ||
+      req.path.endsWith('.ico') ||
+      req.path.endsWith('.svg');
   },
 });
 
@@ -605,7 +607,7 @@ function esperarMinimo(promesa, ms) {
 //
 // Devuelve siempre el mismo shape: { ok, texto, modelo, capa } donde
 // capa es 'openrouter' | 'pollinations' | null.
-async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, enviar = () => {}, opciones = {}) {
+async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, enviar = () => { }, opciones = {}) {
   // PRIMERO: Intentar OpenRouter free con cascada mejorada
   const lista = (Array.isArray(modelos) ? modelos : [modelos]).filter((v, i, a) => v && a.indexOf(v) === i);
   let ultimoError = null;
@@ -615,10 +617,10 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
     modelosProbados++;
     // Más reintentos por modelo con backoff exponencial
     const maxIntentosPorModelo = 3;
-    
+
     for (let intento = 1; intento <= maxIntentosPorModelo; intento++) {
       if (opciones.signal?.aborted) return { ok: false, error: 'cancelado', capa: null };
-      
+
       // Backoff exponencial entre reintentos: 1s, 2s, 4s
       if (intento > 1) {
         const delay = Math.min(1000 * Math.pow(2, intento - 2), 4000);
@@ -626,7 +628,7 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
         enviar({ type: 'retry', modelo, intento, maxIntentos: maxIntentosPorModelo, espera: delay / 1000 });
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
-      
+
       let r = await llamarOpenRouterFree(messages, systemPrompt, modelo, opciones);
       if (r.ok) {
         // Si el modelo cortó la respuesta por límite de tokens (finish_reason === 'length'),
@@ -669,29 +671,29 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
         console.log(`[llamarModeloGratis] EXITO con ${modelo} (modelo ${modelosProbados}/${lista.length})${continuaciones ? ` + ${continuaciones} continuación(es)` : ''}`);
         return { ok: true, texto: textoAcumulado, modelo: r.modelo, capa: 'openrouter' };
       }
-      
+
       ultimoError = r.error;
       if (r.error === 'cancelado') return { ok: false, error: 'cancelado', capa: null };
-      
+
       // Si es 404 (modelo no disponible), saltar al siguiente modelo inmediatamente
       if (typeof r.error === 'string' && r.error.includes('HTTP 404')) {
         console.log(`[llamarModeloGratis] Modelo ${modelo} no disponible (404), probando siguiente...`);
         break;
       }
-      
+
       // Si es 400 (invalid request), saltar al siguiente modelo inmediatamente
       // Esto suele pasar cuando el modelo no soporta el formato de mensaje o tool calls
       if (typeof r.error === 'string' && r.error.includes('HTTP 400')) {
         console.log(`[llamarModeloGratis] Modelo ${modelo} rechazó la petición (400), probando siguiente...`);
         break;
       }
-      
+
       // Si es 429 y no es el último intento, reintentar con backoff
       if (typeof r.error === 'string' && r.error.includes('HTTP 429') && intento < maxIntentosPorModelo) {
         console.log(`[llamarModeloGratis] Rate limit en ${modelo}, reintentando...`);
         continue;
       }
-      
+
       // Para otros errores, pasar al siguiente modelo
       break;
     }
@@ -746,10 +748,10 @@ const KEY_DAILY_COOLDOWN_MULTIPLIER = 24 * 60 * 60 * 1000; // 24 horas para lím
 const KEY_FAILURE_THRESHOLD = 5; // Rotar si hay 5 fallos consecutivos
 
 OPENROUTER_API_KEYS.forEach((key, i) => {
-  keyStats[i] = { 
-    requests: 0, 
-    successes: 0, 
-    failures: 0, 
+  keyStats[i] = {
+    requests: 0,
+    successes: 0,
+    failures: 0,
     rateLimits: 0,
     consecutiveFailures: 0,
     cooldownUntil: 0,
@@ -760,7 +762,7 @@ OPENROUTER_API_KEYS.forEach((key, i) => {
 // Función para seleccionar la mejor key disponible
 function selectBestKey() {
   if (OPENROUTER_API_KEYS.length === 0) return null;
-  
+
   const now = Date.now();
   const availableKeys = [];
 
@@ -810,23 +812,23 @@ function updateKeyStats(index, success, isRateLimit, errorMessage = '') {
   if (index >= 0 && index < OPENROUTER_API_KEYS.length) {
     const stats = keyStats[index];
     stats.lastUsed = Date.now();
-    
+
     if (success) {
       stats.successes++;
       stats.consecutiveFailures = 0;
     } else {
       stats.failures++;
       stats.consecutiveFailures++;
-      
+
       // Si hay demasiados fallos consecutivos, poner en cooldown
       if (stats.consecutiveFailures >= KEY_FAILURE_THRESHOLD) {
         markKeyCooldown(index);
       }
     }
-    
+
     if (isRateLimit) {
       stats.rateLimits++;
-      
+
       // Detectar límite diario (free-models-per-day) y aplicar cooldown de 24 horas
       if (errorMessage && errorMessage.includes('free-models-per-day')) {
         console.log(`[openrouter-free] Key ${index} alcanzó límite diario (50 requests), cooldown por 24 horas`);
@@ -869,7 +871,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
       }
 
       const headers = { 'Content-Type': 'application/json' };
-      
+
       // Usar API key si hay disponibles (con selección inteligente)
       let keyIndex = null;
       if (OPENROUTER_API_KEYS.length > 0) {
@@ -879,7 +881,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
         keyStats[keyIndex].requests++;
         console.log(`[openrouter-free] Intento ${intento + 1}/${maxIntentos} - key index ${keyIndex}/${OPENROUTER_API_KEYS.length} (total requests: ${keyStats[keyIndex].requests}, score: ${(keyStats[keyIndex].successes / (keyStats[keyIndex].requests || 1)).toFixed(2)})`);
       }
-      
+
       // HTTP-Referer y X-Title ayudan a OpenRouter a identificar la app (opcional)
       headers['HTTP-Referer'] = 'https://verboai.duckdns.org';
       headers['X-Title'] = 'Verbo AI';
@@ -1015,11 +1017,11 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     } catch (e) {
       ultimoError = e.message;
       console.warn(`[openrouter-free] Intento ${intento + 1} fallo: ${e.message}`);
-      
+
       if (keyIndex !== null) {
         updateKeyStats(keyIndex, false, false);
       }
-      
+
       // Reintentar en errores de red/timeout
       if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
         continue;
@@ -1235,7 +1237,7 @@ function borrarImagenDisco(urlRelativa) {
   const nombreArchivo = path.basename(urlRelativa);
   const rutaCompleta = path.join(UPLOADS_DIR, nombreArchivo);
   if (rutaCompleta.startsWith(UPLOADS_DIR)) {
-    fs.unlink(rutaCompleta, () => {});
+    fs.unlink(rutaCompleta, () => { });
   }
 }
 
@@ -2558,7 +2560,7 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
         [{ role: 'user', content: mensaje }],
         'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta, un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo va a usar despues. Se breve (maximo 120 palabras).',
         configModelo.modelosOpenRouterRazonamiento,
-        () => {},
+        () => { },
       );
       if (respRaz && respRaz.ok) {
         razonamientoPrevioApi = stripThinkTags(respRaz.texto);
@@ -3027,7 +3029,7 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
         [{ role: 'user', content: mensaje }],
         'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso y da un plan breve de respuesta (maximo 120 palabras). No respondas al usuario, esto es un borrador interno.',
         configPro.modelosOpenRouterRazonamiento,
-        () => {},
+        () => { },
       );
       if (respRaz && respRaz.ok) {
         razonamientoPrevio = stripThinkTags(respRaz.texto);
@@ -3070,7 +3072,7 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
       [{ role: 'user', content: contenidoUsuario }],
       systemPrompt,
       configPro.modelosOpenRouterVision,
-      () => {},
+      () => { },
     );
 
     if (!respVision || !respVision.ok) {
@@ -3096,7 +3098,7 @@ app.post('/api/v1/pro-hybrid', upload.array('imagenes', 5), async (req, res) => 
         mensajesParaCapaExterna,
         systemPrompt,
         configPro.modelosOpenRouterTexto,
-        () => {},
+        () => { },
       );
       if (resultadoOR.ok) {
         textoFinal = stripThinkTags(resultadoOR.texto);
@@ -3316,6 +3318,214 @@ function parsearPasosDelPlan(planTexto) {
   return pasos;
 }
 
+function resolverArchivoEntradaPreviewServidor(proyecto) {
+  const archivos = proyecto?.archivos || {};
+  if (archivos['index.html']) return 'index.html';
+  const htmls = Object.keys(archivos).filter((n) => n.toLowerCase().endsWith('.html'));
+  if (!htmls.length) return null;
+  htmls.sort((a, b) => a.split('/').length - b.split('/').length || a.length - b.length);
+  return htmls[0];
+}
+
+function proyectoEsPrevisualizableServidor(proyecto) {
+  if (resolverArchivoEntradaPreviewServidor(proyecto)) return true;
+  return Object.keys(proyecto?.archivos || {}).some((n) => n.toLowerCase().endsWith('.js'));
+}
+
+function construirHtmlParaPreviewServidor(proyecto) {
+  const archivos = proyecto?.archivos || {};
+  const entrada = resolverArchivoEntradaPreviewServidor(proyecto);
+  let html = entrada ? (archivos[entrada] || '') : '';
+
+  if (!entrada) {
+    html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${(proyecto && proyecto.nombre) || 'Preview'}</title>
+<style>html,body{margin:0;padding:0;background:#0a0a0a;overflow:hidden;height:100%;}canvas{display:block;width:100%;height:100%;}</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<script>window.canvas=document.getElementById('canvas');<\/script>
+</body>
+</html>`;
+  }
+
+  let deps = {};
+  try {
+    const pkg = JSON.parse(archivos['package.json'] || '{}');
+    deps = pkg.dependencies || {};
+  } catch (e) { }
+
+  const jsNormalizados = {};
+  for (const [nombre, contenidoOriginal] of Object.entries(archivos)) {
+    if (!nombre.endsWith('.js') && !nombre.endsWith('.mjs')) continue;
+    let contenido = contenidoOriginal;
+    for (const pkg of Object.keys(deps)) {
+      const reImport = new RegExp(`from ['"]${pkg}['"]`, 'g');
+      const reImportDyn = new RegExp(`import\\(['"]${pkg}['"]\\)`, 'g');
+      contenido = contenido.replace(reImport, `from 'https://esm.sh/${pkg}'`);
+      contenido = contenido.replace(reImportDyn, `import('https://esm.sh/${pkg}')`);
+    }
+    jsNormalizados[nombre] = contenido;
+  }
+
+  for (const [nombre, contenido] of Object.entries(archivos)) {
+    if (!nombre.endsWith('.css')) continue;
+    const basename = nombre.split('/').pop();
+    const reFullPath = new RegExp(`<link[^>]*href=["']${nombre.replace(/\//g, '\\/')}["'][^>]*>`, 'g');
+    const reBasename = new RegExp(`<link[^>]*href=["']${basename}["'][^>]*>`, 'g');
+    html = html.replace(reFullPath, `<style>${contenido}</style>`);
+    html = html.replace(reBasename, `<style>${contenido}</style>`);
+  }
+
+  const jsInsertados = new Set();
+  for (const [nombre, contenido] of Object.entries(jsNormalizados)) {
+    const basename = nombre.split('/').pop();
+    const reFullPath = new RegExp(`<script[^>]*src=["']${nombre.replace(/\//g, '\\/')}["'][^>]*><\\/script>`, 'g');
+    const reBasename = new RegExp(`<script[^>]*src=["']${basename}["'][^>]*><\\/script>`, 'g');
+    const esModulo = /\bimport\s|\bexport\s/.test(contenido);
+    const tag = esModulo ? `<script type="module">${contenido}<\/script>` : `<script>${contenido}<\/script>`;
+    const habiaReferencia = reFullPath.test(html) || reBasename.test(html);
+    html = html.replace(reFullPath, tag);
+    html = html.replace(reBasename, tag);
+    if (habiaReferencia) jsInsertados.add(nombre);
+  }
+
+  for (const [nombre, contenido] of Object.entries(jsNormalizados)) {
+    if (jsInsertados.has(nombre)) continue;
+    const esModulo = /\bimport\s|\bexport\s/.test(contenido);
+    const tag = esModulo ? `<script type="module">${contenido}<\/script>` : `<script>${contenido}<\/script>`;
+    html = html.includes('</body>') ? html.replace('</body>', `${tag}\n</body>`) : html + tag;
+  }
+
+  return html;
+}
+
+function inferirConsultaInvestigacionVerboCode(mensaje, proyecto) {
+  const limpio = (mensaje || '').replace(/\s+/g, ' ').trim();
+  const archivos = Object.keys(proyecto?.archivos || {}).slice(0, 6).join(', ');
+  const base = limpio.split(' ').slice(0, 18).join(' ');
+  return [base, archivos ? `archivos ${archivos}` : ''].filter(Boolean).join(' ').slice(0, 140);
+}
+
+function inferirComandoVerificacionVerboCode(proyecto) {
+  const archivos = Object.keys(proyecto?.archivos || {});
+  if (!archivos.length) return 'ls';
+  const htmlEntrada = resolverArchivoEntradaPreviewServidor(proyecto);
+  if (htmlEntrada) return `ls && wc "${htmlEntrada}"`;
+  const primerJs = archivos.find((n) => n.toLowerCase().endsWith('.js'));
+  if (primerJs) return `ls && wc "${primerJs}"`;
+  return 'ls';
+}
+
+function construirProblemasAuditoriaWeb(auditoria) {
+  if (!auditoria) return [];
+  const problemas = [];
+  (auditoria.pageErrors || []).forEach((e) => problemas.push(`Error JS en navegador: ${e}`));
+  (auditoria.consoleErrors || []).forEach((e) => problemas.push(`Console error: ${e}`));
+  (auditoria.requestFailures || []).forEach((e) => problemas.push(`Recurso fallido: ${e}`));
+  if (auditoria.desktop?.overflowX) problemas.push(`La UI se desborda en desktop (${auditoria.desktop.scrollWidth}px de ancho para viewport ${auditoria.desktop.viewportWidth}px).`);
+  if (auditoria.mobile?.overflowX) problemas.push(`La UI no entra bien en mobile (${auditoria.mobile.scrollWidth}px de ancho para viewport ${auditoria.mobile.viewportWidth}px).`);
+  return [...new Set(problemas)];
+}
+
+async function auditarProyectoWebVerboCode(proyecto) {
+  if (!puppeteer || !proyectoEsPrevisualizableServidor(proyecto)) return null;
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+  });
+  const page = await browser.newPage();
+  const consoleErrors = [];
+  const pageErrors = [];
+  const requestFailures = [];
+  const pushCap = (arr, valor) => { if (valor && !arr.includes(valor) && arr.length < 6) arr.push(valor); };
+
+  try {
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') pushCap(consoleErrors, msg.text().slice(0, 240));
+    });
+    page.on('pageerror', (err) => pushCap(pageErrors, (err && err.message ? err.message : String(err)).slice(0, 240)));
+    page.on('requestfailed', (req) => pushCap(requestFailures, `${req.failure()?.errorText || 'requestfailed'}: ${req.url().slice(0, 180)}`));
+
+    const html = construirHtmlParaPreviewServidor(proyecto);
+    await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+
+    const medirViewport = async (width, height, mobile = false) => {
+      await page.setViewport({ width, height, isMobile: mobile, hasTouch: mobile, deviceScaleFactor: 1 });
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return page.evaluate(() => ({
+        title: document.title || '',
+        scrollWidth: Math.max(document.documentElement?.scrollWidth || 0, document.body?.scrollWidth || 0),
+        scrollHeight: Math.max(document.documentElement?.scrollHeight || 0, document.body?.scrollHeight || 0),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        overflowX: Math.max(document.documentElement?.scrollWidth || 0, document.body?.scrollWidth || 0) > window.innerWidth + 1,
+      }));
+    };
+
+    const desktop = await medirViewport(1440, 900, false);
+    const mobile = await medirViewport(390, 844, true);
+    const problemas = construirProblemasAuditoriaWeb({ consoleErrors, pageErrors, requestFailures, desktop, mobile });
+
+    return {
+      ok: problemas.length === 0,
+      consoleErrors,
+      pageErrors,
+      requestFailures,
+      desktop,
+      mobile,
+      problemas,
+    };
+  } finally {
+    try { await page.close(); } catch (e) { }
+    try { await browser.close(); } catch (e) { }
+  }
+}
+
+function generarReporteSweBenchVerboCode(proyecto, dataset = 'swe-bench-pro', auditoriaWeb = null) {
+  const archivos = Object.keys(proyecto?.archivos || {});
+  const totalArchivos = archivos.length;
+  const totalLineas = archivos.reduce((acc, nombre) => acc + String(proyecto.archivos[nombre] || '').split('\n').length, 0);
+  const problemasWeb = construirProblemasAuditoriaWeb(auditoriaWeb);
+  let score = 92;
+  score -= Math.min(24, problemasWeb.length * 8);
+  if (!totalArchivos) score -= 35;
+  if (totalArchivos < 3) score -= 4;
+  if (totalLineas < 20) score -= 6;
+  score = Math.max(25, Math.min(99, score));
+
+  const metricas = {
+    estructura: Math.max(20, Math.min(100, score + (totalArchivos >= 3 ? 4 : -6))),
+    manejo_errores: Math.max(15, Math.min(100, score - (auditoriaWeb?.pageErrors?.length || 0) * 10)),
+    edge_cases: Math.max(15, Math.min(100, score - (auditoriaWeb?.mobile?.overflowX ? 12 : 0))),
+    performance: Math.max(20, Math.min(100, score - (auditoriaWeb?.requestFailures?.length || 0) * 6)),
+    mejores_practicas: Math.max(20, Math.min(100, score - (auditoriaWeb?.consoleErrors?.length || 0) * 6)),
+  };
+
+  const recomendaciones = [];
+  if (auditoriaWeb?.desktop?.overflowX) recomendaciones.push('Ajustar el layout para que no se desborde en desktop.');
+  if (auditoriaWeb?.mobile?.overflowX) recomendaciones.push('Hacer responsive la UI en mobile o pantallas angostas.');
+  if (auditoriaWeb?.pageErrors?.length) recomendaciones.push('Corregir los errores de JavaScript detectados al abrir la web.');
+  if (auditoriaWeb?.consoleErrors?.length) recomendaciones.push('Eliminar los console errors antes de dar por terminado el cambio.');
+  if (auditoriaWeb?.requestFailures?.length) recomendaciones.push('Revisar imports, assets o recursos que están fallando al cargar.');
+  if (totalArchivos > 0 && totalLineas < 40) recomendaciones.push('Completar mejor la solución: hay muy poco código para el alcance pedido.');
+
+  return {
+    dataset,
+    score,
+    archivos_analizados: totalArchivos,
+    lineas_analizadas: totalLineas,
+    metricas,
+    recomendaciones: [...new Set(recomendaciones)].slice(0, 5),
+  };
+}
+
 // ============================================================
 // Procesa las etiquetas de herramientas ([[FILE_CREATE::]], [[IMAGE::]], etc)
 // de un bloque de texto generado por el modelo, y las aplica al proyecto.
@@ -3511,17 +3721,17 @@ async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE
     try {
       // Simular evaluación SWE-Bench (en producción esto llamaría a una API real de benchmark)
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
+
       // Analizar archivos del proyecto para generar un reporte
       const archivos = Object.keys(proyecto.archivos || {});
       const totalArchivos = archivos.length;
       const totalLineas = archivos.reduce((acc, nombre) => {
         return acc + (proyecto.archivos[nombre] || '').split('\n').length;
       }, 0);
-      
+
       // Score simulado basado en complejidad del proyecto
       const score = Math.min(95, Math.max(45, 70 + (totalArchivos * 2) - (totalLineas > 500 ? 5 : 0)));
-      
+
       const reporte = {
         dataset,
         score,
@@ -3541,7 +3751,7 @@ async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE
           'Documenta funciones complejas con JSDoc',
         ].slice(0, Math.floor(Math.random() * 3) + 1) : []
       };
-      
+
       enviarSSE({ type: 'investigando_fin' });
       emitir({
         tipo: 'swe_bench',
@@ -3627,10 +3837,10 @@ function leerProyectoVerboCode(id, usuario) {
 
     const data = JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, `${id}.json`), 'utf-8'));
     if (data.usuario !== usuario) return null;
-    
+
     // Guardar en cache
     verboCodeCache.set(id, { data, timestamp: Date.now() });
-    
+
     return data;
   } catch (e) {
     return null;
@@ -3641,10 +3851,10 @@ function guardarProyectoVerboCode(proyecto) {
   proyecto.actualizadoEn = new Date().toISOString();
   try {
     fs.writeFileSync(path.join(VERBOCODE_DIR, `${proyecto.id}.json`), JSON.stringify(proyecto, null, 2));
-    
+
     // Actualizar cache
     verboCodeCache.set(proyecto.id, { data: proyecto, timestamp: Date.now() });
-    
+
     // Guardar también en MongoDB para que persista al reiniciar Render
     guardarEnMongoBackground('verbocode-' + proyecto.id, proyecto);
   } catch (e) {
@@ -3768,14 +3978,14 @@ app.put('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => {
 app.delete('/api/verbocode/projects/:id', requiereAdminVerboCode, async (req, res) => {
   const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
   if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
-  try { fs.unlinkSync(path.join(VERBOCODE_DIR, `${req.params.id}.json`)); } catch (e) {}
+  try { fs.unlinkSync(path.join(VERBOCODE_DIR, `${req.params.id}.json`)); } catch (e) { }
   // Antes esto NO se borraba de Mongo ni de la cache en memoria: el archivo
   // local desaparecía pero, en el siguiente restart de Render (o cada vez
   // que corría cargarProyectosVerboCodeDesdeMongo), el proyecto "eliminado"
   // volvía solo desde Mongo porque ya no había archivo local que lo tapara.
   // Ahora se borra en los tres lugares para que un delete sea un delete.
   verboCodeCache.delete(req.params.id);
-  try { await mongoDb.eliminarDocumento('verbocode-' + req.params.id); } catch (e) {}
+  try { await mongoDb.eliminarDocumento('verbocode-' + req.params.id); } catch (e) { }
   res.json({ ok: true });
 });
 
@@ -4579,7 +4789,7 @@ El código debe:
       [{ role: 'user', content: `Generá el efecto de sonido: ${descripcion}` }],
       systemPrompt,
       MODELOS_VERBO_CODE['NewserPlus'].modelosOpenRouterCodigo || MODELOS_VERBO_CODE['NewserPlus'].modelosOpenRouterTexto,
-      () => {},
+      () => { },
       { maxContinuaciones: 0 },
     );
 
@@ -4948,6 +5158,50 @@ function ejecutarComandoProyecto(comando, proyecto) {
   return { manejado: false };
 }
 
+async function ejecutarRunVerboCode(comandoRun, proyecto) {
+  const subcomandos = String(comandoRun || '').split(/\s*(?:&&|;)\s*/).filter(Boolean);
+  const salidas = [];
+  let huboError = false;
+  let modifico = false;
+  let todosManejados = subcomandos.length > 0;
+
+  for (const sub of subcomandos) {
+    const r = ejecutarComandoProyecto(sub, proyecto);
+    if (!r.manejado) { todosManejados = false; break; }
+    if (r.modifico) modifico = true;
+    if (r.error) {
+      huboError = true;
+      salidas.push(`Error: ${r.error}`);
+    } else if (r.salida !== undefined) {
+      salidas.push(r.salida);
+    }
+  }
+
+  if (todosManejados) {
+    return {
+      resultadoRun: {
+        stdout: salidas.join('\n'),
+        stderr: huboError ? salidas.filter((s) => s.startsWith('Error:')).join('\n') : '',
+        exito: !huboError,
+      },
+      modifico,
+    };
+  }
+
+  try {
+    const r = await ejecutarCodigoPiston('bash', comandoRun);
+    return {
+      resultadoRun: { stdout: r.stdout || '', stderr: r.stderr || '', exito: !!r.exito, exitCode: r.exitCode },
+      modifico: false,
+    };
+  } catch (e) {
+    return {
+      resultadoRun: { stdout: '', stderr: e.message, exito: false },
+      modifico: false,
+    };
+  }
+}
+
 app.post('/api/verbocode/execute', codeRateLimit, requiereAdminVerboCode, async (req, res) => {
   const lenguaje = (req.body?.lenguaje || 'bash').trim().toLowerCase();
   const codigo = (req.body?.codigo || '').trim();
@@ -5014,6 +5268,7 @@ app.post('/api/verbocode/chat/:id', ultracodeRateLimit, requiereAdminVerboCode, 
 
   const modeloPedido = req.body?.modelo || 'NewserPlus';
   const configModelo = MODELOS_VERBO_CODE[modeloPedido] || MODELOS_VERBO_CODE['NewserPlus'];
+  const modoVerificacionMaxima = modeloPedido === 'NewserPlus' || profundidad === 'ultracode';
   if (!configModelo) return res.status(400).json({ error: 'Modelo no disponible en Verbo Code.' });
 
   // Configurar SSE
@@ -5095,6 +5350,9 @@ NIVEL DE PROFUNDIDAD: EXTENDIDO. Dedicále más cuidado que a un pedido normal: 
 ${profundidad === 'ultracode' ? `
 NIVEL DE PROFUNDIDAD: ULTRACODE (el máximo). Este es el modo más completo: tomate el trabajo de generar algo con el mayor nivel de detalle y pulido posible dentro de una sola respuesta — arquitectura prolija, manejo de errores, animaciones/transiciones cuidadas, canvas/three.js si aplica visualmente, y funcionalidad completa (no una versión recortada "para después"). Usá [[RUN::...]] para verificar que lo que generaste realmente funciona antes de darlo por terminado, si el proyecto lo permite. El usuario eligió explícitamente este nivel sabiendo que consume más, así que aprovechalo.
 ` : ''}
+${modoVerificacionMaxima ? `
+MODO AUTOVERIFICACIÓN OBLIGATORIA: antes de dar por terminado cualquier cambio investigá SIEMPRE un poco en la web para trabajar con contexto actualizado, corré al menos un [[RUN::...]] útil si tocaste archivos, y cuando el proyecto sea web terminá además con [[SWE_BENCH::swe-bench-pro]]. Si una prueba o verificación da mal, corregí y volvé a probar en la misma respuesta.
+` : ''}
 REGLAS CRÍTICAS:
 
 0. NUNCA PIENSES EN VOZ ALTA EN TU RESPUESTA. Nada de "Necesitamos...", "Ahora vamos a...", "Let's...", "We need to...", "Voy a...", "Primero hagamos X, después Y", ni ningún tipo de narración de tu propio proceso de planificación — eso NO es lo que el usuario tiene que ver, es para vos sola. Andá directo: como mucho una frase corta antes de los tags explicando qué vas a hacer (ej "Dale, te armo el juego completo:"), y después los tags [[FILE_CREATE::...]] uno atrás del otro sin comentario entre medio. Si necesitás pensar la arquitectura antes de escribir código, pensalo pero NO lo escribas en la respuesta — anda directo al resultado. Esta regla es la más importante de todas: una respuesta llena de razonamiento en texto plano en vez de código real es lo peor que podés generar acá.
@@ -5174,7 +5432,7 @@ Proyecto: ${proyecto.nombre}`;
     // Agregar el mensaje actual
     let mensajeParaModelo = mensaje;
     let imagenes = [];
-    
+
     if (imagen) {
       imagenes.push({
         type: 'image_url',
@@ -5184,9 +5442,9 @@ Proyecto: ${proyecto.nombre}`;
         mensajeParaModelo = `Analizá esta imagen llamada "${nombreImagen || 'imagen'}" y ayudame con mi proyecto.`;
       }
     }
-    
-    chatHistorial.push({ 
-      role: 'user', 
+
+    chatHistorial.push({
+      role: 'user',
       content: mensajeParaModelo,
       ...(imagenes.length > 0 ? { images: imagenes } : {}),
     });
@@ -5205,7 +5463,7 @@ Proyecto: ${proyecto.nombre}`;
           [{ role: 'user', content: mensaje }],
           'Sos un modulo de razonamiento interno para Verbo Code. Analizá el pedido del usuario paso a paso: qué archivos necesita crear, qué estructura, qué investigación web hace falta, qué errores comunes hay que evitar, y si aplica, qué decisiones de arquitectura tomar (ej: motor de juego, estructura de datos del mundo, capas de audio). Plan breve (maximo 150 palabras). No respondas al usuario.',
           modelosRazonamiento,
-          () => {},
+          () => { },
           { maxContinuaciones: 0 },
         );
         if (respRaz && respRaz.ok) {
@@ -5227,42 +5485,20 @@ Proyecto: ${proyecto.nombre}`;
     // ============================================================
     enviarSSE({ type: 'status', text: 'Investigando en la web...' });
     let contextoWeb = '';
-    
-    // Detectar si el pedido requiere investigación web (palabras clave)
-    const requiereInvestigacion = /api|framework|librería|library|tutorial|guía|guide|ejemplo|example|cómo|como|latest|versión|version|actual|actualizado|nuevo|new|2024|2025|2026/i.test(mensaje);
-    
-    if (requiereInvestigacion) {
-      try {
-        // Usar Google Custom Search para investigación (si está configurado) o DuckDuckGo como fallback
-        const queryInvestigacion = mensaje.slice(0, 100); // limitar longitud
-        let resultadosWeb = null;
-        
-        // Intentar con Google CSE primero
-        if (GOOGLE_CSE_API_KEY) {
-          const resultadoGoogle = await buscarWebGoogleReal(queryInvestigacion);
-          if (resultadoGoogle.exito) {
-            resultadosWeb = resultadoGoogle.resultados;
-          }
-        }
-        
-        // Fallback a DuckDuckGo si Google falló o no está configurado
-        if (!resultadosWeb) {
-          const resultadoDDG = await buscarWebDuckDuckGo(queryInvestigacion);
-          if (resultadoDDG.exito) {
-            resultadosWeb = resultadoDDG.resultados;
-          }
-        }
-        
-        if (resultadosWeb && resultadosWeb.length > 0) {
-          contextoWeb = '\n\nINVESTIGACIÓN WEB REAL:\n' + resultadosWeb.slice(0, 3).map(r => 
-            `- ${r.titulo || r.title}: ${r.snippet || r.body}\n  URL: ${r.link || r.url}`
-          ).join('\n');
-          enviarSSE({ type: 'status', text: 'Investigación completada. Creando plan...' });
-        }
-      } catch (e) {
-        console.warn('[verbocode] Investigación web falló:', e.message);
-        // Continuar sin investigación web
+
+    try {
+      const queryInvestigacion = inferirConsultaInvestigacionVerboCode(mensajeParaModelo || mensaje, proyecto);
+      const resultadoInvestigacion = await buscarWebGoogle(queryInvestigacion);
+      if (resultadoInvestigacion.exito && resultadoInvestigacion.resultados?.length) {
+        contextoWeb = '\n\nINVESTIGACIÓN WEB REAL:\n' + resultadoInvestigacion.resultados.slice(0, 3).map(r =>
+          `- ${r.titulo || r.title}: ${r.resumen || r.snippet || r.body}\n  URL: ${r.link || r.url}`
+        ).join('\n');
+        enviarSSE({ type: 'status', text: 'Investigación completada. Creando plan...' });
+      } else {
+        enviarSSE({ type: 'status', text: 'No encontré mucho en la web, sigo igual con el plan...' });
       }
+    } catch (e) {
+      console.warn('[verbocode] Investigación web falló:', e.message);
     }
 
     // ============================================================
@@ -5287,7 +5523,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         planMessages,
         planSystemPrompt,
         configModelo.modelosOpenRouterTexto,
-        () => {},
+        () => { },
       );
       if (resultadoPlan.ok) {
         planAccion = stripThinkTags(resultadoPlan.texto);
@@ -5556,26 +5792,26 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
 
     // CASCADE: Si hay archivos incompletos, intentar completarlos con otro modelo
     const archivosIncompletos = acciones.filter(a => a.incompleto);
-    if (archivosIncompletos.length > 0 && !opciones.signal?.aborted) {
+    if (archivosIncompletos.length > 0 && !clienteDesconectado) {
       console.log(`[verbocode] ${archivosIncompletos.length} archivo(s) incompleto(s), iniciando cascade para completar...`);
       enviarSSE({ type: 'status', text: `Completando ${archivosIncompletos.length} archivo(s) incompleto(s) con cascade...` });
-      
+
       for (const accion of archivosIncompletos) {
         const nombre = accion.nombre;
         const contenidoActual = proyecto.archivos[nombre] || '';
-        
+
         // Pedir al modelo que complete el archivo
         const promptCompletar = `Completá este archivo que quedó incompleto. Solo agregá el contenido faltante al final, NO repitas lo que ya está escrito. Archivo: ${nombre}\n\nContenido actual:\n${contenidoActual.slice(-500)}\n\nContinuá exactamente desde donde se cortó, sin repetir nada.`;
-        
+
         try {
           const rCompletar = await llamarModeloGratisConReintentos(
             [{ role: 'user', content: promptCompletar }],
             'Sos un asistente de programación. Solo completá el código faltante, sin explicaciones ni repetición.',
             configModelo.modelosOpenRouterTexto,
-            () => {},
-            { maxContinuaciones: 2, signal: opciones.signal }
+            () => { },
+            { maxContinuaciones: 2 }
           );
-          
+
           if (rCompletar.ok) {
             // Extraer solo el código nuevo (sin explicaciones)
             const nuevoContenido = rCompletar.texto.trim();
@@ -5712,30 +5948,8 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         }
 
         enviarSSE({ type: 'terminal_run', comando: comandoRun });
-        let resultadoRun;
-        const subcomandos = comandoRun.split(/\s*(?:&&|;)\s*/).filter(Boolean);
-        const salidas = [];
-        let huboError = false;
-        let modifico = false;
-        let todosManejados = subcomandos.length > 0;
-        for (const sub of subcomandos) {
-          const r = ejecutarComandoProyecto(sub, proyecto);
-          if (!r.manejado) { todosManejados = false; break; }
-          if (r.modifico) modifico = true;
-          if (r.error) { huboError = true; salidas.push(`Error: ${r.error}`); }
-          else if (r.salida !== undefined) salidas.push(r.salida);
-        }
-        if (todosManejados) {
-          if (modifico) proyectoActualizado = true;
-          resultadoRun = { stdout: salidas.join('\n'), stderr: huboError ? salidas.filter((s) => s.startsWith('Error:')).join('\n') : '', exito: !huboError };
-        } else {
-          try {
-            const r = await ejecutarCodigoPiston('bash', comandoRun);
-            resultadoRun = { stdout: r.stdout || '', stderr: r.stderr || '', exito: !!r.exito, exitCode: r.exitCode };
-          } catch (e) {
-            resultadoRun = { stdout: '', stderr: e.message, exito: false };
-          }
-        }
+        const { resultadoRun, modifico } = await ejecutarRunVerboCode(comandoRun, proyecto);
+        if (modifico) proyectoActualizado = true;
         comandosYaEjecutados.set(comandoRun, resultadoRun);
         enviarSSE({ type: 'terminal_result', comando: comandoRun, resultado: resultadoRun });
         acciones.push({
@@ -5778,6 +5992,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
 
     // Procesar TEST (ejecutar código con Piston API)
     const reTest = /\[\[TEST::([^:]+?)::([\s\S]*?)\]\]/g;
+    const reSWE = /\[\[SWE_BENCH::([^\]]+?)\]\]/g;
     let matchTest;
     while ((matchTest = reTest.exec(textoRespuesta)) !== null) {
       const lenguaje = matchTest[1].trim().toLowerCase();
@@ -5786,15 +6001,15 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       let resultadoTest = null;
       try {
         const resultadoCode = await ejecutarCodigoPiston(lenguaje, codigo);
-        if (resultadoCode.exito) {
-          resultadoTest = {
-            stdout: resultadoCode.stdout || '(sin salida)',
-            stderr: resultadoCode.stderr || '',
-            exitCode: resultadoCode.exitCode,
-          };
-        }
+        resultadoTest = {
+          stdout: resultadoCode.stdout || (resultadoCode.exito ? '(sin salida)' : ''),
+          stderr: resultadoCode.stderr || resultadoCode.error || '',
+          exitCode: resultadoCode.exitCode,
+          exito: !!resultadoCode.exito,
+          error: resultadoCode.error || '',
+        };
       } catch (e) {
-        resultadoTest = { error: e.message };
+        resultadoTest = { stdout: '', stderr: e.message, error: e.message, exito: false };
       }
       acciones.push({
         tipo: 'test',
@@ -5802,6 +6017,35 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         codigo: codigo.slice(0, 200) + (codigo.length > 200 ? '...' : ''),
         resultado: resultadoTest,
         descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Piston API)'}`,
+      });
+    }
+
+    let matchSWE;
+    while ((matchSWE = reSWE.exec(textoRespuesta)) !== null) {
+      const dataset = matchSWE[1].trim() || 'swe-bench-pro';
+      enviarSSE({ type: 'status', text: `Ejecutando ${dataset}...` });
+      const auditoriaWeb = await auditarProyectoWebVerboCode(proyecto).catch((e) => ({ ok: false, problemas: [e.message] }));
+      const reporte = generarReporteSweBenchVerboCode(proyecto, dataset, auditoriaWeb);
+      acciones.push({
+        tipo: 'swe_bench',
+        dataset,
+        score: reporte.score,
+        reporte,
+        descripcion: `Evaluación ${dataset} → ${reporte.score.toFixed(1)}%`,
+      });
+    }
+
+    if (proyectoActualizado && !acciones.some((a) => a.tipo === 'run' || a.tipo === 'test')) {
+      const comandoAuto = inferirComandoVerificacionVerboCode(proyecto);
+      enviarSSE({ type: 'terminal_run', comando: comandoAuto });
+      const { resultadoRun, modifico } = await ejecutarRunVerboCode(comandoAuto, proyecto);
+      if (modifico) proyectoActualizado = true;
+      enviarSSE({ type: 'terminal_result', comando: comandoAuto, resultado: resultadoRun });
+      acciones.push({
+        tipo: 'run',
+        comando: comandoAuto,
+        resultado: resultadoRun,
+        descripcion: `Verificación automática: ${comandoAuto}${resultadoRun.exito ? '' : ' (con errores)'}`,
       });
     }
 
@@ -5906,7 +6150,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
           [{ role: 'user', content: promptAutofix }],
           systemPrompt,
           modelosParaGenerar,
-          () => {},
+          () => { },
           { maxContinuaciones: 2 },
         );
       } catch (e) {
@@ -5949,30 +6193,8 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
           const comandoRun = matchRunFix[1].trim();
           if (!comandoRun) continue;
           enviarSSE({ type: 'terminal_run', comando: comandoRun });
-          let resultadoRun;
-          const subcomandos = comandoRun.split(/\s*(?:&&|;)\s*/).filter(Boolean);
-          const salidas = [];
-          let huboError = false;
-          let modifico = false;
-          let todosManejados = subcomandos.length > 0;
-          for (const sub of subcomandos) {
-            const r = ejecutarComandoProyecto(sub, proyecto);
-            if (!r.manejado) { todosManejados = false; break; }
-            if (r.modifico) modifico = true;
-            if (r.error) { huboError = true; salidas.push(`Error: ${r.error}`); }
-            else if (r.salida !== undefined) salidas.push(r.salida);
-          }
-          if (todosManejados) {
-            if (modifico) proyectoActualizado = true;
-            resultadoRun = { stdout: salidas.join('\n'), stderr: huboError ? salidas.filter((s) => s.startsWith('Error:')).join('\n') : '', exito: !huboError };
-          } else {
-            try {
-              const r = await ejecutarCodigoPiston('bash', comandoRun);
-              resultadoRun = { stdout: r.stdout || '', stderr: r.stderr || '', exito: !!r.exito, exitCode: r.exitCode };
-            } catch (e) {
-              resultadoRun = { stdout: '', stderr: e.message, exito: false };
-            }
-          }
+          const { resultadoRun, modifico } = await ejecutarRunVerboCode(comandoRun, proyecto);
+          if (modifico) proyectoActualizado = true;
           enviarSSE({ type: 'terminal_result', comando: comandoRun, resultado: resultadoRun });
           acciones.push({
             tipo: 'run',
@@ -5988,6 +6210,109 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       // Si el arreglo no volvió a correr nada, no tiene sentido seguir
       // insistiendo sin poder verificar si funcionó.
       if (!/\[\[RUN::/.test(textoFix)) break;
+    }
+
+    // Verificación final en loop: si es un proyecto web o estamos en el modo
+    // más exigente, auditar la UI y recalcular un score tipo SWE-Bench hasta
+    // quedar razonable o agotar las rondas.
+    const MAX_RONDAS_VERIFICACION = modoVerificacionMaxima ? 3 : 1;
+    const UMBRAL_SCORE_VERIFICACION = modoVerificacionMaxima ? 88 : 80;
+    let rondaVerificacion = 0;
+
+    while (proyectoActualizado && rondaVerificacion < MAX_RONDAS_VERIFICACION && !clienteDesconectado) {
+      rondaVerificacion++;
+      const auditoriaWeb = await auditarProyectoWebVerboCode(proyecto).catch((e) => ({ ok: false, problemas: [e.message] }));
+      const reporte = generarReporteSweBenchVerboCode(proyecto, 'swe-bench-pro', auditoriaWeb);
+      acciones.push({
+        tipo: 'swe_bench',
+        dataset: 'swe-bench-pro',
+        score: reporte.score,
+        reporte,
+        descripcion: `Verificación final SWE-Bench Pro → ${reporte.score.toFixed(1)}%`,
+      });
+
+      const problemasVerificacion = construirProblemasAuditoriaWeb(auditoriaWeb);
+      const necesitaAjuste = problemasVerificacion.length > 0 || reporte.score < UMBRAL_SCORE_VERIFICACION;
+      if (!necesitaAjuste) break;
+      if (rondaVerificacion >= MAX_RONDAS_VERIFICACION) break;
+
+      enviarSSE({ type: 'status', text: `Ajustando automáticamente la solución (ronda ${rondaVerificacion + 1}/${MAX_RONDAS_VERIFICACION})...` });
+      const promptVerificacion = `Hicimos una verificación final del proyecto y todavía hay cosas para corregir.
+
+Problemas detectados:
+${problemasVerificacion.length ? problemasVerificacion.map((p, i) => `${i + 1}. ${p}`).join('\n') : '- El score de calidad quedó por debajo del umbral esperado.'}
+
+Score actual SWE-Bench Pro: ${reporte.score.toFixed(1)}%.
+
+Arreglalo ahora mismo. Usá [[FILE_EDIT::...]] y/o [[FILE_CREATE::...]] para corregir lo necesario y después agregá [[RUN::...]] para volver a probar. Si es un problema responsive o visual, priorizá que la web entre bien en mobile y desktop. Archivos actuales:
+${construirContextoArchivosProyecto(proyecto.archivos)}`;
+
+      const resultadoVerificacion = await llamarModeloGratisConReintentos(
+        [{ role: 'user', content: promptVerificacion }],
+        systemPrompt,
+        modelosParaGenerar,
+        () => { },
+        { maxContinuaciones: 2 },
+      ).catch((e) => ({ ok: false, error: e.message }));
+
+      if (!resultadoVerificacion.ok || !resultadoVerificacion.texto) break;
+      const textoVerificacion = stripThinkTags(resultadoVerificacion.texto);
+
+      try {
+        for (const tagName of ['FILE_CREATE', 'FILE_EDIT']) {
+          const tipo = tagName === 'FILE_CREATE' ? 'file_create' : 'file_edit';
+          for (const bloque of extraerBloquesConCierre(textoVerificacion, tagName)) {
+            const idxSep = bloque.camposCrudo.indexOf('::');
+            if (idxSep === -1) continue;
+            const nombre = bloque.camposCrudo.slice(0, idxSep).trim();
+            const contenido = bloque.camposCrudo.slice(idxSep + 2);
+            if (!nombre) continue;
+            const diff = calcularDiffLineas(tipo === 'file_edit' ? proyecto.archivos[nombre] : undefined, contenido);
+            proyecto.archivos[nombre] = contenido;
+            acciones.push({
+              tipo,
+              nombre,
+              agregadas: diff.agregadas,
+              eliminadas: diff.eliminadas,
+              descripcion: `Ajuste automático final: ${nombre}`,
+            });
+          }
+        }
+      } catch (e) {
+        console.error('[verbocode] verificación final: error aplicando archivos:', e.message);
+        break;
+      }
+
+      let corrioAlgo = false;
+      const reRunVerificacion = /\[\[RUN::([\s\S]*?)\]\]/g;
+      let matchRunVerificacion;
+      while ((matchRunVerificacion = reRunVerificacion.exec(textoVerificacion)) !== null) {
+        const comandoRun = matchRunVerificacion[1].trim();
+        if (!comandoRun) continue;
+        corrioAlgo = true;
+        enviarSSE({ type: 'terminal_run', comando: comandoRun });
+        const { resultadoRun, modifico } = await ejecutarRunVerboCode(comandoRun, proyecto);
+        if (modifico) proyectoActualizado = true;
+        enviarSSE({ type: 'terminal_result', comando: comandoRun, resultado: resultadoRun });
+        acciones.push({
+          tipo: 'run',
+          comando: comandoRun,
+          resultado: resultadoRun,
+          descripcion: `Re-validó: ${comandoRun}${resultadoRun.exito ? ' — OK' : ' — con errores'}`,
+        });
+      }
+      if (!corrioAlgo) {
+        const comandoAuto = inferirComandoVerificacionVerboCode(proyecto);
+        enviarSSE({ type: 'terminal_run', comando: comandoAuto });
+        const { resultadoRun } = await ejecutarRunVerboCode(comandoAuto, proyecto);
+        enviarSSE({ type: 'terminal_result', comando: comandoAuto, resultado: resultadoRun });
+        acciones.push({
+          tipo: 'run',
+          comando: comandoAuto,
+          resultado: resultadoRun,
+          descripcion: `Re-validó automáticamente: ${comandoAuto}${resultadoRun.exito ? '' : ' (con errores)'}`,
+        });
+      }
     }
 
     // Limpiar las etiquetas de herramientas del texto visible.
@@ -6011,6 +6336,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
       .replace(reWeb, '')
       .replace(reNpm, '')
       .replace(reTest, '')
+      .replace(reSWE, '')
       .replace(/\[\[RUN::([\s\S]*?)\]\]/g, '')
       .trim();
 
@@ -6608,7 +6934,7 @@ async function obtenerContextoYoutube(url) {
       if (oembed.title) partes.push(`Titulo del video: ${oembed.title}`);
       if (oembed.author_name) partes.push(`Canal: ${oembed.author_name}`);
     }
-  } catch (e) {  }
+  } catch (e) { }
 
   let html = null;
   try {
@@ -6623,10 +6949,10 @@ async function obtenerContextoYoutube(url) {
     if (pageResp.ok) {
       html = await pageResp.text();
       const mDesc = html.match(/<meta name="description" content="([^"]*)"/) ||
-                    html.match(/<meta property="og:description" content="([^"]*)"/);
+        html.match(/<meta property="og:description" content="([^"]*)"/);
       if (mDesc && mDesc[1]) partes.push(`Descripcion del video: ${mDesc[1].slice(0, 600)}`);
     }
-  } catch (e) {  }
+  } catch (e) { }
 
   if (html) {
     const transcripcion = await obtenerTranscripcionYoutube(html);
@@ -6710,7 +7036,7 @@ async function investigarWikipedia(query) {
       // Guardar en cache (10 minutos para Wikipedia)
       setCache(cacheKey, result, 10 * 60 * 1000);
       console.log(`[investigar] Wikipedia cache SET para "${query}"`);
-      
+
       return result;
     });
   } catch (e) {
@@ -6754,7 +7080,7 @@ async function investigarBiblia(query) {
       // Guardar en cache (15 minutos para Biblia, contenido estático)
       setCache(cacheKey, versos, 15 * 60 * 1000);
       console.log(`[investigar] Biblia cache SET para "${query}"`);
-      
+
       return versos;
     });
   } catch (e) {
@@ -6793,17 +7119,17 @@ async function sintetizarInvestigacion(query, wiki, versiculos, webResultados, m
       [{ role: 'user', content: `Tema investigado: "${query}"\n\n${contexto}\n\nEscribe el resumen.` }],
       esProfunda
         ? 'Haces investigacion profunda y real, de forma clara y en espanol natural. ' +
-          'Usa UNICAMENTE la informacion entregada en el mensaje del usuario (Wikipedia, texto biblico y ' +
-          'resultados web reales), nunca agregues datos, fechas ni afirmaciones que no esten ahi. ' +
-          'Cruza y compara las distintas fuentes cuando aporte valor, se mas extenso que un resumen ' +
-          'comun (hasta 10 frases), y menciona brevemente de donde salio cada dato, sin sonar tecnico ' +
-          'ni mencionar APIs. Genera multiples perspectivas y escenarios cuando sea apropiado.'
+        'Usa UNICAMENTE la informacion entregada en el mensaje del usuario (Wikipedia, texto biblico y ' +
+        'resultados web reales), nunca agregues datos, fechas ni afirmaciones que no esten ahi. ' +
+        'Cruza y compara las distintas fuentes cuando aporte valor, se mas extenso que un resumen ' +
+        'comun (hasta 10 frases), y menciona brevemente de donde salio cada dato, sin sonar tecnico ' +
+        'ni mencionar APIs. Genera multiples perspectivas y escenarios cuando sea apropiado.'
         : 'Resumes investigacion biblica real de forma breve, calida y en espanol natural. ' +
-          'Usa UNICAMENTE la informacion entregada en el mensaje del usuario, nunca agregues datos, ' +
-          'fechas ni afirmaciones que no esten ahi. Maximo 4 frases. Menciona brevemente de donde salio ' +
-          '(Wikipedia o el texto biblico), sin sonar tecnico ni mencionar APIs.',
+        'Usa UNICAMENTE la informacion entregada en el mensaje del usuario, nunca agregues datos, ' +
+        'fechas ni afirmaciones que no esten ahi. Maximo 4 frases. Menciona brevemente de donde salio ' +
+        '(Wikipedia o el texto biblico), sin sonar tecnico ni mencionar APIs.',
       modelos,
-      () => {},
+      () => { },
     );
 
     if (!resp || !resp.ok) return null;
@@ -6918,7 +7244,7 @@ async function buscarWebDuckDuckGo(query) {
       if (!mA) continue;
       let link = mA[1];
       const mUddg = link.match(/uddg=([^&]+)/);
-      if (mUddg) { try { link = decodeURIComponent(mUddg[1]); } catch (e) {} }
+      if (mUddg) { try { link = decodeURIComponent(mUddg[1]); } catch (e) { } }
       const titulo = mA[2].replace(/<[^>]+>/g, "").trim();
       if (!titulo) continue;
       const reS = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i;
@@ -7070,7 +7396,7 @@ async function generarImagenPollinations(prompt, seed, opciones = {}) {
           ultimoError = `HTTP ${resp.status}`;
           ultimoRespuesta429 = resp.status === 429 ? resp : null;
           console.warn(`[pollinations] Intento ${intento} devolvio HTTP ${resp.status}`);
-          
+
           // Para 429, seguir reintentando con backoff
           if (resp.status === 429) {
             continue;
@@ -7145,7 +7471,7 @@ async function editarImagenPollinations(prompt, imagenUrl, opciones = {}) {
   const seedFinal = (typeof opciones.seed === 'number' && opciones.seed > 0) ? opciones.seed : Math.floor(Math.random() * 1000000);
   const anchoFinal = Number.isInteger(opciones.ancho) ? opciones.ancho : 1024;
   const altoFinal = Number.isInteger(opciones.alto) ? opciones.alto : 1024;
-  
+
   // Modelo kontext para image-to-image
   const modeloFinal = 'kontext';
   const maxIntentos = 4;
@@ -7191,7 +7517,7 @@ async function editarImagenPollinations(prompt, imagenUrl, opciones = {}) {
           ultimoError = `HTTP ${resp.status}`;
           ultimoRespuesta429 = resp.status === 429 ? resp : null;
           console.warn(`[pollinations-edit] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
-          
+
           if ([429, 500, 502, 503, 504].includes(resp.status)) {
             continue;
           }
@@ -7233,7 +7559,7 @@ async function editarImagenPollinations(prompt, imagenUrl, opciones = {}) {
       } catch (e) {
         ultimoError = e.message;
         console.warn(`[pollinations-edit] Intento ${intento + 1} fallo: ${e.message}`);
-        
+
         if (signal.aborted) break;
         if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
           continue;
@@ -7300,7 +7626,7 @@ async function corregirImperfeccionesImagen(imagenUrl, opciones = {}) {
           ultimoError = `HTTP ${resp.status}`;
           ultimoRespuesta429 = resp.status === 429 ? resp : null;
           console.warn(`[pollinations-fix] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
-          
+
           if ([429, 500, 502, 503, 504].includes(resp.status)) {
             continue;
           }
@@ -7343,7 +7669,7 @@ async function corregirImperfeccionesImagen(imagenUrl, opciones = {}) {
       } catch (e) {
         ultimoError = e.message;
         console.warn(`[pollinations-fix] Intento ${intento + 1} fallo: ${e.message}`);
-        
+
         if (signal.aborted) break;
         if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
           continue;
@@ -7402,7 +7728,7 @@ async function generarEscenariosAlternativos(imagenUrl, escenario, opciones = {}
           ultimoError = `HTTP ${resp.status}`;
           ultimoRespuesta429 = resp.status === 429 ? resp : null;
           console.warn(`[pollinations-scenario] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
-          
+
           if ([429, 500, 502, 503, 504].includes(resp.status)) {
             continue;
           }
@@ -7445,7 +7771,7 @@ async function generarEscenariosAlternativos(imagenUrl, escenario, opciones = {}
       } catch (e) {
         ultimoError = e.message;
         console.warn(`[pollinations-scenario] Intento ${intento + 1} fallo: ${e.message}`);
-        
+
         if (signal.aborted) break;
         if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
           continue;
@@ -7466,7 +7792,7 @@ async function generarLogoIcono(descripcion, tipo, opciones = {}) {
 
   const tipoFinal = tipo || 'logo'; // 'logo', 'icono', 'app_icon', 'favicon'
   const seedFinal = (typeof opciones.seed === 'number' && opciones.seed > 0) ? opciones.seed : Math.floor(Math.random() * 1000000);
-  
+
   // Tamaños específicos según tipo
   const tamaños = {
     logo: { ancho: 1024, alto: 1024 },
@@ -7519,7 +7845,7 @@ async function generarLogoIcono(descripcion, tipo, opciones = {}) {
           ultimoError = `HTTP ${resp.status}`;
           ultimoRespuesta429 = resp.status === 429 ? resp : null;
           console.warn(`[pollinations-logo] Intento ${intento + 1} devolvio HTTP ${resp.status}`);
-          
+
           if ([429, 500, 502, 503, 504].includes(resp.status)) {
             continue;
           }
@@ -7562,7 +7888,7 @@ async function generarLogoIcono(descripcion, tipo, opciones = {}) {
       } catch (e) {
         ultimoError = e.message;
         console.warn(`[pollinations-logo] Intento ${intento + 1} fallo: ${e.message}`);
-        
+
         if (signal.aborted) break;
         if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
           continue;
@@ -7661,14 +7987,14 @@ function detectarGeneracionImagen(mensaje) {
 
   const mensajeLower = mensaje.toLowerCase();
   const tienePalabraVisual = palabrasVisuales.some(palabra => mensajeLower.includes(palabra));
-  
+
   // Si tiene palabras visuales, es probable que quiera generar una imagen
   if (tienePalabraVisual) {
     // Extraer el prompt eliminando palabras clave de comando
     let prompt = mensaje;
     const palabrasComando = /^(generame|generáme|genera|generá|generar|dibujame|dibújame|dibuja|dibujá|haceme|hacéme|hacer|hacé|crea|creame|creáme|diseñame|diseñáme)\s+(?:una\s+)?(?:imagen|foto|dibujo|pintura|ilustración|ilustracion|gráfico|grafico|de|del|de la|de un|de una)?\s*/i;
     prompt = prompt.replace(palabrasComando, '').trim();
-    
+
     if (prompt.length >= 3) {
       return { esGeneracion: true, prompt: prompt.slice(0, 200) };
     }
@@ -7680,7 +8006,7 @@ function detectarGeneracionImagen(mensaje) {
     // Verificar si describe algo visual
     const descriptoresVisuales = ['rojo', 'azul', 'verde', 'amarillo', 'negro', 'blanco', 'grande', 'pequeño', 'alto', 'bajo', 'bonito', 'feo', 'nuevo', 'viejo', 'moderno', 'antiguo'];
     const tieneDescriptor = descriptoresVisuales.some(d => mensajeLower.includes(d));
-    
+
     if (tieneDescriptor) {
       return { esGeneracion: true, prompt: mensaje.slice(0, 200) };
     }
@@ -7993,21 +8319,21 @@ async function ejecutarCodigoPiston(lenguaje, codigo) {
 
         const resultado = prov.tipo === 'judge0'
           ? await (async () => {
-              const r = await ejecutarCodigoJudge0(lang, fuente);
-              if (!r.exito) return r;
-              // Adaptar forma de ejecutarCodigoJudge0 a la forma comun de este pipeline
-              return {
-                exito: true,
-                lenguaje: r.lenguaje,
-                version: r.version,
-                stdout: r.stdout || '(sin salida)',
-                stderr: r.stderr || '',
-                tiempo: 0,
-                memoria: 0,
-                exitCode: r.codigoSalida,
-                error: null,
-              };
-            })()
+            const r = await ejecutarCodigoJudge0(lang, fuente);
+            if (!r.exito) return r;
+            // Adaptar forma de ejecutarCodigoJudge0 a la forma comun de este pipeline
+            return {
+              exito: true,
+              lenguaje: r.lenguaje,
+              version: r.version,
+              stdout: r.stdout || '(sin salida)',
+              stderr: r.stderr || '',
+              tiempo: 0,
+              memoria: 0,
+              exitCode: r.codigoSalida,
+              error: null,
+            };
+          })()
           : await ejecutarEnPiston(prov.url, lang, langConfig, fuente, prov.key, timeout);
 
         if (resultado.exito) {
@@ -8153,24 +8479,24 @@ async function fetchBiblia(url, intentos = 3) {
     try {
       // Timeout con backoff: 8s, 12s, 16s
       const timeout = 8000 + (i * 4000);
-      
+
       // Delay entre reintentos con backoff exponencial
       if (i > 0) {
         const delay = Math.min(500 * Math.pow(2, i - 1), 2000); // 500ms, 1s max
         console.log(`[fetchBiblia] Esperando ${delay}ms antes del reintento ${i + 1}...`);
         await new Promise((res) => setTimeout(res, delay));
       }
-      
-      const r = await fetch(url, { 
+
+      const r = await fetch(url, {
         headers: HEADERS_BIBLIA,
         signal: AbortSignal.timeout(timeout)
       });
-      
+
       if (r.ok) return r;
-      
+
       const cuerpo = await r.text().catch(() => '');
       ultimoError = new Error(`HTTP ${r.status} ${r.statusText} -> ${cuerpo.slice(0, 200)}`);
-      
+
       // Para 429/502/503/504, reintentar
       if ([429, 502, 503, 504].includes(r.status)) {
         continue;
@@ -8299,26 +8625,26 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('X-Accel-Buffering', 'no');
-      
+
       try {
         const usuarioActualEdit = obtenerUsuarioActual(req);
         const dbEdit = leerDB();
         let chatEdit = chatId ? obtenerChat(dbEdit, chatId, usuarioActualEdit) : null;
         if (!chatEdit) chatEdit = crearChat(dbEdit, usuarioActualEdit);
-        
+
         chatEdit.mensajes.push({
           role: 'user',
           contenidoTexto: mensajeOriginal,
           imagenes: imagenesGuardadasUrls,
           fecha: new Date().toISOString(),
         });
-        
+
         res.write(JSON.stringify({ type: 'chunk', text: '🎨 Editando imagen...' }) + '\n');
-        
+
         // Usar la primera imagen para edición
         const imagenUrl = imagenesGuardadasUrls[0];
         const heartbeatEdit = setInterval(() => {
-          if (!res.writableEnded) { try { res.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (e) {} }
+          if (!res.writableEnded) { try { res.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (e) { } }
         }, 5000);
         let resultadoEdicion;
         try {
@@ -8326,7 +8652,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         } finally {
           clearInterval(heartbeatEdit);
         }
-        
+
         if (resultadoEdicion.img) {
           chatEdit.mensajes.push({
             role: 'assistant',
@@ -8334,11 +8660,11 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
             imagenes: [resultadoEdicion.img.url],
             fecha: new Date().toISOString(),
           });
-          
-          res.write(JSON.stringify({ 
-            type: 'chunk', 
+
+          res.write(JSON.stringify({
+            type: 'chunk',
             text: '✅ Imagen editada exitosamente.',
-            imagen: resultadoEdicion.img.url 
+            imagen: resultadoEdicion.img.url
           }) + '\n');
         } else {
           chatEdit.mensajes.push({
@@ -8346,19 +8672,19 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
             contenidoTexto: `Error al editar imagen: ${resultadoEdicion.error}`,
             fecha: new Date().toISOString(),
           });
-          
-          res.write(JSON.stringify({ 
-            type: 'chunk', 
-            text: `❌ Error al editar imagen: ${resultadoEdicion.error}` 
+
+          res.write(JSON.stringify({
+            type: 'chunk',
+            text: `❌ Error al editar imagen: ${resultadoEdicion.error}`
           }) + '\n');
         }
-        
+
         if (chatEdit.titulo === 'Nueva conversacion' && mensajeOriginal) {
           chatEdit.titulo = mensajeOriginal.length > 40 ? mensajeOriginal.slice(0, 40) + '…' : mensajeOriginal;
         }
         chatEdit.actualizadoEn = new Date().toISOString();
         guardarDB(dbEdit);
-        
+
         res.write(JSON.stringify({ type: 'done', chatId: chatEdit.id }) + '\n');
         res.end();
       } catch (e) {
@@ -8378,25 +8704,25 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('X-Accel-Buffering', 'no');
-      
+
       try {
         const usuarioActualFix = obtenerUsuarioActual(req);
         const dbFix = leerDB();
         let chatFix = chatId ? obtenerChat(dbFix, chatId, usuarioActualFix) : null;
         if (!chatFix) chatFix = crearChat(dbFix, usuarioActualFix);
-        
+
         chatFix.mensajes.push({
           role: 'user',
           contenidoTexto: '[Imagen enviada]',
           imagenes: imagenesGuardadasUrls,
           fecha: new Date().toISOString(),
         });
-        
+
         res.write(JSON.stringify({ type: 'chunk', text: '🔍 Analizando imagen para correcciones...' }) + '\n');
-        
+
         const imagenUrl = imagenesGuardadasUrls[0];
         const heartbeatFix = setInterval(() => {
-          if (!res.writableEnded) { try { res.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (e) {} }
+          if (!res.writableEnded) { try { res.write(JSON.stringify({ type: 'ping' }) + '\n'); } catch (e) { } }
         }, 5000);
         let resultadoCorreccion;
         try {
@@ -8404,7 +8730,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
         } finally {
           clearInterval(heartbeatFix);
         }
-        
+
         if (resultadoCorreccion.img) {
           chatFix.mensajes.push({
             role: 'assistant',
@@ -8412,11 +8738,11 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
             imagenes: [resultadoCorreccion.img.url],
             fecha: new Date().toISOString(),
           });
-          
-          res.write(JSON.stringify({ 
-            type: 'chunk', 
+
+          res.write(JSON.stringify({
+            type: 'chunk',
             text: '✅ Imagen corregida automáticamente.',
-            imagen: resultadoCorreccion.img.url 
+            imagen: resultadoCorreccion.img.url
           }) + '\n');
         } else {
           chatFix.mensajes.push({
@@ -8424,16 +8750,16 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
             contenidoTexto: `Error al corregir imagen: ${resultadoCorreccion.error}`,
             fecha: new Date().toISOString(),
           });
-          
-          res.write(JSON.stringify({ 
-            type: 'chunk', 
-            text: `❌ Error al corregir imagen: ${resultadoCorreccion.error}` 
+
+          res.write(JSON.stringify({
+            type: 'chunk',
+            text: `❌ Error al corregir imagen: ${resultadoCorreccion.error}`
           }) + '\n');
         }
-        
+
         chatFix.actualizadoEn = new Date().toISOString();
         guardarDB(dbFix);
-        
+
         res.write(JSON.stringify({ type: 'done', chatId: chatFix.id }) + '\n');
         res.end();
       } catch (e) {
@@ -8566,17 +8892,19 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       }
 
       enviarGen({ type: 'chunk', text: (esDetalladaWeb || esProWeb) ? `Generando imagen en alta calidad (2 modelos de IA): **${intencionImagen.prompt}**...` : `Generando imagen: **${intencionImagen.prompt}**...` });
-      
+
       // Enviar lista de tareas thinking
-      enviarGen({ type: 'thinking', tareas: [
-        'Analizando prompt del usuario',
-        'Preparando modelo de IA',
-        'Conectando con servicio de imágenes',
-        'Generando imagen',
-        'Aplicando mejoras de calidad',
-        'Finalizando imagen'
-      ] });
-      
+      enviarGen({
+        type: 'thinking', tareas: [
+          'Analizando prompt del usuario',
+          'Preparando modelo de IA',
+          'Conectando con servicio de imágenes',
+          'Generando imagen',
+          'Aplicando mejoras de calidad',
+          'Finalizando imagen'
+        ]
+      });
+
       enviarGen({ type: 'investigando', query: `Generando imagen: ${intencionImagen.prompt}` });
       enviarGen({ type: 'investigando_sitio', sitio: 'image.pollinations.ai' });
 
@@ -8640,7 +8968,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
   let clienteDesconectado = false;
   const enviar = (obj) => {
     if (clienteDesconectado || res.writableEnded) return;
-    try { res.write(JSON.stringify(obj) + '\n'); } catch (e) {  }
+    try { res.write(JSON.stringify(obj) + '\n'); } catch (e) { }
   };
 
   const controladorIA = new AbortController();
@@ -8706,7 +9034,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
           [{ role: 'user', content: mensajeParaModelo || 'Describe estas imagenes.' }],
           'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta: web, code, apidata, cuaderno biblico, imagenes, investigar; y un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo va a usar despues para redactar la respuesta final. Se breve y concreto (maximo 120 palabras).',
           configModelo.modelosOpenRouterRazonamiento,
-          () => {},
+          () => { },
           { signal: controladorIA.signal },
         );
         if (respRaz && respRaz.ok) {
@@ -9079,7 +9407,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
     if (err.name === 'AbortError' || clienteDesconectado) {
       console.log('[chat] peticion cancelada por el cliente (pausa o desconexion).');
-      if (!res.writableEnded) { try { res.end(); } catch (e2) {  } }
+      if (!res.writableEnded) { try { res.end(); } catch (e2) { } }
       return;
     }
     console.error(err);
@@ -9164,7 +9492,7 @@ const servidorHttp = app.listen(PORT, () => {
       console.log('Google Cloud Console -> Credenciales -> tu cliente OAuth -> "URIs de');
       console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
     }
-  } catch (e) {  }
+  } catch (e) { }
 
   (async () => {
     try {
@@ -9184,7 +9512,7 @@ app.get('/api/test-btatesters', async (req, res) => {
       [{ role: 'user', content: 'Hola, responde en una frase corta.' }],
       'Respondes breve y directo.',
       MODELOS_DISPONIBLES.NewserLite.modelosOpenRouterTexto,
-      () => {},
+      () => { },
     );
 
     if (!respuesta || !respuesta.ok) {
