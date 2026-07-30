@@ -1657,6 +1657,60 @@ body.vc-resizing-activo iframe { pointer-events: none; }
   overflow-y: auto;
 }
 
+/* SWE-Bench Pro Report Styles */
+.vc-actions-swe-bench {
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  background: var(--vc-bg);
+  border: 1px solid var(--vc-border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.vc-swe-bench-score {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--vc-accent);
+  margin-bottom: 8px;
+}
+
+.vc-swe-bench-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--vc-text-secondary);
+}
+
+.vc-swe-bench-metrics span {
+  background: var(--vc-bg-tertiary);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.vc-swe-bench-recomendaciones {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--vc-border);
+}
+
+.vc-swe-bench-recomendaciones strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--vc-text);
+}
+
+.vc-swe-bench-recomendaciones ul {
+  margin: 0;
+  padding-left: 16px;
+  color: var(--vc-text-secondary);
+}
+
+.vc-swe-bench-recomendaciones li {
+  margin-bottom: 4px;
+}
+
 /* Banner de éxito al terminar de implementar código de verdad (creó/editó
    archivos y no quedó ningún error sin resolver). */
 .vc-success-banner {

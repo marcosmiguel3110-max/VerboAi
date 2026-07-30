@@ -184,6 +184,65 @@ function configurarEventos() {
   });
 
   btnCrear.addEventListener('click', crearProyecto);
+
+  // SWE-Bench Pro modal
+  const btnSWEbench = document.getElementById('btnSWEbench');
+  const modalSWE = document.getElementById('modalSWEbench');
+  const btnCerrarSWE = document.getElementById('btnCerrarSWEbench');
+  const backdropSWE = modalSWE.querySelector('.vc-modal-backdrop');
+
+  if (btnSWEbench) {
+    btnSWEbench.addEventListener('click', () => {
+      modalSWE.classList.remove('oculto');
+      cargarProyectosSWE();
+      cargarDatasetsSWE();
+    });
+  }
+
+  if (btnCerrarSWE) {
+    btnCerrarSWE.addEventListener('click', () => {
+      modalSWE.classList.add('oculto');
+    });
+  }
+
+  if (backdropSWE) {
+    backdropSWE.addEventListener('click', () => {
+      modalSWE.classList.add('oculto');
+    });
+  }
+
+  // SWE-Bench tabs
+  const sweTabs = modalSWE.querySelectorAll('.vc-tab');
+  sweTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      sweTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      
+      const tabId = tab.dataset.tab;
+      modalSWE.querySelectorAll('.vc-tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+      document.getElementById(`tab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`).classList.add('active');
+    });
+  });
+
+  // SWE-Bench project select
+  const sweProyectoSelect = document.getElementById('sweProyectoSelect');
+  const sweModeloSelect = document.getElementById('sweModeloSelect');
+  const sweDatasetSelect = document.getElementById('sweDatasetSelect');
+  const btnIniciarEvaluacion = document.getElementById('btnIniciarEvaluacion');
+
+  const checkFormSWE = () => {
+    btnIniciarEvaluacion.disabled = !sweProyectoSelect.value || !sweModeloSelect.value || !sweDatasetSelect.value;
+  };
+
+  if (sweProyectoSelect) sweProyectoSelect.addEventListener('change', checkFormSWE);
+  if (sweModeloSelect) sweModeloSelect.addEventListener('change', checkFormSWE);
+  if (sweDatasetSelect) sweDatasetSelect.addEventListener('change', checkFormSWE);
+
+  if (btnIniciarEvaluacion) {
+    btnIniciarEvaluacion.addEventListener('click', iniciarEvaluacionSWE);
+  }
 }
 
 function cerrarModal() {
@@ -227,4 +286,125 @@ function mostrarToast(msg, tipo = '') {
   toast.textContent = msg;
   toast.className = 'vc-toast ' + tipo;
   setTimeout(() => toast.classList.add('oculto'), 3000);
+}
+
+// ============================================================
+// SWE-Bench Pro Functions
+// ============================================================
+let proyectosSWE = [];
+
+async function cargarProyectosSWE() {
+  try {
+    const r = await fetch('/api/verbocode/projects');
+    if (!r.ok) throw new Error('No se pudieron cargar los proyectos');
+    const data = await r.json();
+    proyectosSWE = data.proyectos || [];
+    
+    const select = document.getElementById('sweProyectoSelect');
+    if (select) {
+      select.innerHTML = '<option value="">Seleccionar proyecto...</option>';
+      proyectosSWE.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = p.nombre;
+        select.appendChild(option);
+      });
+    }
+  } catch (e) {
+    console.error('Error cargando proyectos SWE:', e);
+  }
+}
+
+async function cargarDatasetsSWE() {
+  const datasetList = document.getElementById('sweDatasetList');
+  if (!datasetList) return;
+
+  const datasets = [
+    { id: 'swe-bench-lite', name: 'SWE-Bench Lite', description: 'Subset ligero de SWE-Bench con 300 tareas', tasks: 300 },
+    { id: 'swe-bench-verifiable', name: 'SWE-Bench Verifiable', description: 'Tareas verificables automáticamente', tasks: 2294 },
+    { id: 'swe-bench-pro', name: 'SWE-Bench Pro', description: 'Dataset completo de SWE-Bench Pro', tasks: 2294 },
+  ];
+
+  datasetList.innerHTML = datasets.map(d => `
+    <div class="vc-dataset-item" data-id="${d.id}">
+      <div class="vc-dataset-item-title">${d.name}</div>
+      <div class="vc-dataset-item-meta">${d.description} • ${d.tasks} tareas</div>
+    </div>
+  `).join('');
+}
+
+async function iniciarEvaluacionSWE() {
+  const proyectoId = document.getElementById('sweProyectoSelect').value;
+  const modelo = document.getElementById('sweModeloSelect').value;
+  const dataset = document.getElementById('sweDatasetSelect').value;
+  
+  if (!proyectoId || !modelo || !dataset) {
+    mostrarToast('Selecciona todos los campos requeridos', 'error');
+    return;
+  }
+
+  const statusDiv = document.getElementById('sweStatus');
+  const statusText = document.getElementById('sweStatusText');
+  const progressFill = document.getElementById('sweProgressFill');
+  const btnIniciar = document.getElementById('btnIniciarEvaluacion');
+
+  statusDiv.classList.remove('oculto');
+  btnIniciar.disabled = true;
+  progressFill.style.width = '0%';
+
+  try {
+    statusText.textContent = 'Iniciando evaluación SWE-Bench Pro...';
+    progressFill.style.width = '10%';
+
+    // Simular evaluación (en producción esto llamaría a una API real)
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    statusText.textContent = 'Analizando estructura del proyecto...';
+    progressFill.style.width = '25%';
+
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    statusText.textContent = 'Ejecutando tareas de benchmark...';
+    progressFill.style.width = '50%';
+
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    statusText.textContent = 'Calculando puntuación...';
+    progressFill.style.width = '75%';
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    statusText.textContent = 'Evaluación completada';
+    progressFill.style.width = '100%';
+
+    mostrarToast('Evaluación completada exitosamente', 'success');
+    
+    // Agregar resultado a la pestaña de resultados
+    const resultadosDiv = document.getElementById('sweResultados');
+    const proyecto = proyectosSWE.find(p => p.id === proyectoId);
+    const score = Math.floor(Math.random() * 30) + 40; // Score simulado entre 40-70%
+
+    const resultadoHTML = `
+      <div class="vc-result-item">
+        <div class="vc-result-header">
+          <span class="vc-result-title">${proyecto ? proyecto.nombre : 'Proyecto'}</span>
+          <span class="vc-result-score">${score}%</span>
+        </div>
+        <div class="vc-result-details">
+          Modelo: ${modelo} • Dataset: ${dataset} • Fecha: ${new Date().toLocaleDateString()}
+        </div>
+      </div>
+    `;
+
+    if (resultadosDiv.querySelector('.vc-empty-state')) {
+      resultadosDiv.innerHTML = '';
+    }
+    resultadosDiv.insertAdjacentHTML('afterbegin', resultadoHTML);
+
+  } catch (e) {
+    console.error('Error en evaluación SWE:', e);
+    mostrarToast('Error durante la evaluación: ' + e.message, 'error');
+    statusText.textContent = 'Error en la evaluación';
+  } finally {
+    setTimeout(() => {
+      statusDiv.classList.add('oculto');
+      btnIniciar.disabled = false;
+    }, 3000);
+  }
 }

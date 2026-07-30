@@ -7,6 +7,8 @@
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 16px;
   min-width: 0;
+  /* Prevent layout shift during loading/creation */
+  min-height: 200px;
 }
 
 .vc-proyecto-card {

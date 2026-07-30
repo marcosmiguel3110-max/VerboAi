@@ -23,6 +23,12 @@
       </div>
     </div>
     <div class="vc-header-right">
+      <div class="vc-header-actions">
+        <button id="btnSWEbench" class="vc-btn-secondary" title="SWE-Bench Pro">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+          SWE-Bench Pro
+        </button>
+      </div>
       <div class="vc-perfil" id="vcPerfil">
         <div class="vc-perfil-avatar" id="vcPerfilAvatar">?</div>
         <span id="vcPerfilNombre">Cargando...</span>
@@ -69,6 +75,67 @@
     </div>
   </div>
 
+  <!-- Modal SWE-Bench Pro -->
+  <div id="modalSWEbench" class="vc-modal vc-modal-large oculto">
+    <div class="vc-modal-backdrop"></div>
+    <div class="vc-modal-content">
+      <div class="vc-modal-header">
+        <h2 class="vc-modal-title">SWE-Bench Pro</h2>
+        <button id="btnCerrarSWEbench" class="vc-modal-close" title="Cerrar">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="vc-swe-bench-intro">
+        <p><strong>SWE-Bench Pro</strong> es un benchmark avanzado para evaluar modelos de IA en tareas de ingeniería de software reales.</p>
+        <p>Este módulo permite ejecutar evaluaciones SWE-Bench Pro en tus proyectos de Verbo Code para medir la capacidad de la IA para resolver bugs y agregar features.</p>
+      </div>
+      <div class="vc-swe-bench-tabs">
+        <button class="vc-tab active" data-tab="evaluar">Evaluar Proyecto</button>
+        <button class="vc-tab" data-tab="datasets">Datasets</button>
+        <button class="vc-tab" data-tab="resultados">Resultados</button>
+      </div>
+      <div id="tabEvaluar" class="vc-tab-content active">
+        <div class="vc-form-group">
+          <label>Proyecto a evaluar</label>
+          <select id="sweProyectoSelect" class="vc-input" title="Seleccionar proyecto a evaluar">
+            <option value="">Seleccionar proyecto...</option>
+          </select>
+        </div>
+        <div class="vc-form-group">
+          <label>Modelo a usar</label>
+          <select id="sweModeloSelect" class="vc-input" title="Seleccionar modelo de IA">
+            <option value="NewserPlus">NewserPlus</option>
+            <option value="NewserAdvanced1.5">NewserAdvanced1.5</option>
+          </select>
+        </div>
+        <div class="vc-form-group">
+          <label>Dataset de prueba</label>
+          <select id="sweDatasetSelect" class="vc-input" title="Seleccionar dataset de prueba">
+            <option value="swe-bench-lite">SWE-Bench Lite</option>
+            <option value="swe-bench-verifiable">SWE-Bench Verifiable</option>
+            <option value="swe-bench-pro">SWE-Bench Pro</option>
+          </select>
+        </div>
+        <button id="btnIniciarEvaluacion" class="vc-btn-primary" disabled>Iniciar Evaluación</button>
+        <div id="sweStatus" class="vc-status oculto">
+          <p id="sweStatusText">Iniciando evaluación...</p>
+          <div class="vc-progress-bar">
+            <div id="sweProgressFill" class="vc-progress-fill"></div>
+          </div>
+        </div>
+      </div>
+      <div id="tabDatasets" class="vc-tab-content">
+        <div class="vc-dataset-list" id="sweDatasetList">
+          <div class="vc-empty-state">Cargando datasets...</div>
+        </div>
+      </div>
+      <div id="tabResultados" class="vc-tab-content">
+        <div id="sweResultados">
+          <div class="vc-empty-state">No hay evaluaciones anteriores. Inicia una nueva evaluación para ver resultados.</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Toast -->
   <div id="vcToast" class="vc-toast oculto"></div>

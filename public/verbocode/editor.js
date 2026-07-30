@@ -23,6 +23,9 @@ const estado = {
 // ============================================================
 // JUDGE0 — Ejecución de código
 // ============================================================
+// API local para desarrollo (Docker en tu PC)
+const JUDGE0_URL_LOCAL = "http://localhost:2358";
+// API pública para acceso externo (desde otras PCs)
 const JUDGE0_URL = "https://verboai.duckdns.org/api/ejecutar";
 
 // ============================================================
@@ -1712,6 +1715,7 @@ const ICONOS_ACCION = {
   run: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
   npm_install: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   test: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  swe_bench: '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>',
 };
 const ICONO_ACCION_DEFAULT = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
 
@@ -1776,6 +1780,31 @@ function agregarAccionAlGrupo(accion) {
     pre.className = 'vc-actions-output';
     pre.textContent = (output + stderr).trim();
     body.appendChild(pre);
+  }
+
+  // Output de SWE-Bench Pro
+  if (accion.tipo === 'swe_bench' && accion.reporte) {
+    const reporte = accion.reporte;
+    const score = accion.score?.toFixed(1) || '0';
+    const div = document.createElement('div');
+    div.className = 'vc-actions-swe-bench';
+    div.innerHTML = `
+      <div class="vc-swe-bench-score">Score: ${score}%</div>
+      <div class="vc-swe-bench-metrics">
+        <span>Estructura: ${reporte.metricas?.estructura?.toFixed(0) || 0}%</span>
+        <span>Errores: ${reporte.metricas?.manejo_errores?.toFixed(0) || 0}%</span>
+        <span>Edge Cases: ${reporte.metricas?.edge_cases?.toFixed(0) || 0}%</span>
+        <span>Performance: ${reporte.metricas?.performance?.toFixed(0) || 0}%</span>
+        <span>Mejores Prácticas: ${reporte.metricas?.mejores_practicas?.toFixed(0) || 0}%</span>
+      </div>
+      ${reporte.recomendaciones && reporte.recomendaciones.length > 0 ? `
+        <div class="vc-swe-bench-recomendaciones">
+          <strong>Recomendaciones:</strong>
+          <ul>${reporte.recomendaciones.map(r => `<li>${r}</li>`).join('')}</ul>
+        </div>
+      ` : ''}
+    `;
+    body.appendChild(div);
   }
 
   accionesGroupEl.querySelector('.vc-actions-titulo').textContent = `${body.children.length} cambio${body.children.length === 1 ? '' : 's'}`;
