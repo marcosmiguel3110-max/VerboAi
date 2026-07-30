@@ -1246,6 +1246,8 @@ function limpiarResumenVisibleVerboCode(texto, acciones = []) {
     if (/^(?:ahora|a continuaci[oó]n|luego|despu[eé]s|siguiente),?\s+[\w./-]+\.(?:html|css|js|mjs|cjs|ts|tsx|jsx|json|md|py|sh|bat)\.?$/i.test(linea)) continue;
     if (/^(?:ahora|a continuaci[oó]n|luego|despu[eé]s),?\s+necesitamos\b/i.test(linea)) continue;
     if (/^(?:probemos|usemos|vamos a|voy a|necesitamos|ejecutemos|procedamos a)\b/i.test(linea)) continue;
+    if (/^(?:the user wants|first, look at|now, check|open [\w./-]+|we need to|let'?s |let us |specifically,|thus |however, there|the code seems|we should |now we should |we also need to ensure|but we should also run)\b/i.test(linea)) continue;
+    if (/^\d+\.\s+document\.|^\d+\.\s+const |^\d+\.\s+if \(|^\d+\.\s+return |^\d+\.\s+\}\s*(?:else|–|--|$)/i.test(linea)) continue;
     if (/^comando ejecutado:/i.test(linea)) continue;
     if (/^c[oó]digo ejecutado\b/i.test(linea)) continue;
     if (/^verificaci[oó]n final swe-bench\b/i.test(linea)) continue;
@@ -1604,7 +1606,7 @@ function obtenerUsuarioActual(req) {
   return verificarValorFirmado(leerCookie(req, 'verbo_auth'));
 }
 
-const RUTAS_PUBLICAS = new Set(['/login', '/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/api/v1/chats', '/api/v1/creditos', '/api/v1/pro-hybrid', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/ads.txt', '/api/config']);
+const RUTAS_PUBLICAS = new Set(['/login', '/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/api/v1/chats', '/api/v1/creditos', '/api/v1/pro-hybrid', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/WebIDE.bat', '/web-ide-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/ads.txt', '/api/config']);
 app.use((req, res, next) => {
 
   if (req.path === '/info') return res.redirect(301, '/info.html');
@@ -2630,6 +2632,24 @@ function leerBearerToken(req) {
   const h = req.headers['authorization'] || '';
   const m = h.match(/^Bearer\s+(.+)$/i);
   return m ? m[1].trim() : null;
+}
+
+function autenticarTokenApiRequest(req, res, opciones = {}) {
+  const valorToken = leerBearerToken(req);
+  if (!valorToken) {
+    if (res) res.status(401).json({ ok: false, error: 'Falta Authorization: Bearer verboai-XXXX' });
+    return null;
+  }
+  const token = buscarTokenPorValor(valorToken);
+  if (!token) {
+    if (res) res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
+    return null;
+  }
+  if (opciones.requireAdmin && !usuarioEsAdmin(token.propietario)) {
+    if (res) res.status(403).json({ ok: false, error: 'Este endpoint es exclusivo para cuentas administrador.' });
+    return null;
+  }
+  return token;
 }
 
 app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
@@ -3923,6 +3943,83 @@ async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE
 const VERBOCODE_DIR = path.join(MEMORY_DIR, 'verbocode');
 if (!fs.existsSync(VERBOCODE_DIR)) fs.mkdirSync(VERBOCODE_DIR, { recursive: true });
 
+function normalizarSyncIdWebIde(texto) {
+  const base = String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .slice(0, 32);
+  return base || 'proyecto';
+}
+
+function generarSyncIdWebIde(nombre, proyectoIdActual = null) {
+  const base = normalizarSyncIdWebIde(nombre);
+  const archivos = fs.existsSync(VERBOCODE_DIR)
+    ? fs.readdirSync(VERBOCODE_DIR).filter((f) => f.endsWith('.json') && f !== '.gitkeep')
+    : [];
+
+  const usados = new Set();
+  for (const arch of archivos) {
+    try {
+      const proyecto = JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, arch), 'utf-8'));
+      if (proyectoIdActual && proyecto.id === proyectoIdActual) continue;
+      if (proyecto.webIde?.syncId) usados.add(String(proyecto.webIde.syncId).toLowerCase());
+    } catch (_) { }
+  }
+
+  if (!usados.has(base)) return base;
+  for (let i = 0; i < 40; i++) {
+    const candidato = `${base}${crypto.randomBytes(2).toString('hex')}`;
+    if (!usados.has(candidato)) return candidato;
+  }
+  return `${base}${Date.now().toString(36).slice(-4)}`;
+}
+
+function hashProyectoVerboCode(proyecto) {
+  return crypto.createHash('sha1').update(JSON.stringify({
+    nombre: proyecto?.nombre || '',
+    archivos: proyecto?.archivos || {},
+    chat: proyecto?.chat || [],
+  })).digest('hex');
+}
+
+function asegurarMetadatosWebIdeProyecto(proyecto, opciones = {}) {
+  if (!proyecto || typeof proyecto !== 'object') return proyecto;
+  if (!proyecto.archivos || typeof proyecto.archivos !== 'object') proyecto.archivos = {};
+  if (!Array.isArray(proyecto.chat)) proyecto.chat = [];
+  if (!proyecto.webIde || typeof proyecto.webIde !== 'object') proyecto.webIde = {};
+
+  if (!proyecto.webIde.syncId) {
+    proyecto.webIde.syncId = generarSyncIdWebIde(proyecto.nombre || proyecto.id || 'proyecto', opciones.proyectoIdActual || proyecto.id || null);
+  } else {
+    proyecto.webIde.syncId = normalizarSyncIdWebIde(proyecto.webIde.syncId);
+  }
+
+  if (!Number.isFinite(proyecto.webIde.revision) || proyecto.webIde.revision < 1) {
+    proyecto.webIde.revision = 1;
+  }
+  if (!proyecto.webIde.ultimoHash) {
+    proyecto.webIde.ultimoHash = hashProyectoVerboCode(proyecto);
+  }
+  return proyecto;
+}
+
+function buscarProyectoVerboCodePorSyncId(syncId, usuario) {
+  const objetivo = normalizarSyncIdWebIde(syncId);
+  if (!objetivo) return null;
+  try {
+    const archivos = fs.readdirSync(VERBOCODE_DIR).filter((f) => f.endsWith('.json') && f !== '.gitkeep');
+    for (const arch of archivos) {
+      try {
+        const data = asegurarMetadatosWebIdeProyecto(JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, arch), 'utf-8')), {});
+        if (data.usuario === usuario && data.webIde?.syncId === objetivo) return data;
+      } catch (_) { }
+    }
+  } catch (_) { }
+  return null;
+}
+
 // Modelos disponibles en Verbo Code (públicos dentro de Verbo Code,
 // aunque NewserPlus sea solo-admin en el chat normal).
 const MODELOS_VERBO_CODE = {
@@ -3938,13 +4035,14 @@ function leerProyectosVerboCode(usuario) {
     const proyectos = [];
     for (const arch of archivos) {
       try {
-        const data = JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, arch), 'utf-8'));
+        const data = asegurarMetadatosWebIdeProyecto(JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, arch), 'utf-8')), {});
         if (data.usuario === usuario) {
           proyectos.push({
             id: data.id,
             nombre: data.nombre,
             creadoEn: data.creadoEn,
             actualizadoEn: data.actualizadoEn,
+            webIde: data.webIde,
             archivos: data.archivos || {},
             // No devolver el chat en el listado (puede ser grande)
             numArchivos: Object.keys(data.archivos || {}).length,
@@ -3969,10 +4067,10 @@ function leerProyectoVerboCode(id, usuario) {
     const cached = verboCodeCache.get(id);
     if (cached && Date.now() - cached.timestamp < VERBOCODE_CACHE_TTL) {
       if (cached.data.usuario !== usuario) return null;
-      return cached.data;
+      return asegurarMetadatosWebIdeProyecto(cached.data, {});
     }
 
-    const data = JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, `${id}.json`), 'utf-8'));
+    const data = asegurarMetadatosWebIdeProyecto(JSON.parse(fs.readFileSync(path.join(VERBOCODE_DIR, `${id}.json`), 'utf-8')), {});
     if (data.usuario !== usuario) return null;
 
     // Guardar en cache
@@ -3985,9 +4083,26 @@ function leerProyectoVerboCode(id, usuario) {
 }
 
 function guardarProyectoVerboCode(proyecto) {
+  asegurarMetadatosWebIdeProyecto(proyecto, {});
+  const archivoProyecto = path.join(VERBOCODE_DIR, `${proyecto.id}.json`);
+  let previo = null;
+  try {
+    if (fs.existsSync(archivoProyecto)) {
+      previo = asegurarMetadatosWebIdeProyecto(JSON.parse(fs.readFileSync(archivoProyecto, 'utf-8')), {});
+    }
+  } catch (_) { }
+
+  const hashActual = hashProyectoVerboCode(proyecto);
+  if (previo) {
+    proyecto.webIde.syncId = proyecto.webIde.syncId || previo.webIde?.syncId || generarSyncIdWebIde(proyecto.nombre || proyecto.id, proyecto.id);
+    proyecto.webIde.revision = hashActual !== previo.webIde?.ultimoHash
+      ? Math.max(1, (previo.webIde?.revision || 1) + 1)
+      : Math.max(1, previo.webIde?.revision || proyecto.webIde.revision || 1);
+  }
+  proyecto.webIde.ultimoHash = hashActual;
   proyecto.actualizadoEn = new Date().toISOString();
   try {
-    fs.writeFileSync(path.join(VERBOCODE_DIR, `${proyecto.id}.json`), JSON.stringify(proyecto, null, 2));
+    fs.writeFileSync(archivoProyecto, JSON.stringify(proyecto, null, 2));
 
     // Actualizar cache
     verboCodeCache.set(proyecto.id, { data: proyecto, timestamp: Date.now() });
@@ -4020,6 +4135,7 @@ async function cargarProyectosVerboCodeDesdeMongo() {
       if (proyecto && proyecto.id) {
         const archivoLocal = path.join(VERBOCODE_DIR, `${proyecto.id}.json`);
         if (!fs.existsSync(archivoLocal)) {
+          asegurarMetadatosWebIdeProyecto(proyecto, {});
           fs.writeFileSync(archivoLocal, JSON.stringify(proyecto, null, 2));
           console.log(`[verbocode] Proyecto restaurado desde MongoDB: ${proyecto.id}`);
         }
@@ -4093,7 +4209,7 @@ app.post('/api/verbocode/projects', requiereAdminVerboCode, (req, res) => {
     chat: [],
   };
   guardarProyectoVerboCode(proyecto);
-  res.json({ ok: true, proyecto: { id, nombre, creadoEn: proyecto.creadoEn, actualizadoEn: proyecto.actualizadoEn, archivos: {} } });
+  res.json({ ok: true, proyecto: { id, nombre, creadoEn: proyecto.creadoEn, actualizadoEn: proyecto.actualizadoEn, archivos: {}, webIde: proyecto.webIde } });
 });
 
 app.get('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => {
@@ -4109,7 +4225,20 @@ app.put('/api/verbocode/projects/:id', requiereAdminVerboCode, (req, res) => {
   if (req.body?.archivos && typeof req.body.archivos === 'object') proyecto.archivos = req.body.archivos;
   if (Array.isArray(req.body?.chat)) proyecto.chat = req.body.chat;
   guardarProyectoVerboCode(proyecto);
-  res.json({ ok: true });
+  res.json({ ok: true, webIde: proyecto.webIde });
+});
+
+app.get('/api/verbocode/projects/:id/web-ide', requiereAdminVerboCode, (req, res) => {
+  const proyecto = leerProyectoVerboCode(req.params.id, req.usuarioVerboCode);
+  if (!proyecto) return res.status(404).json({ error: 'Proyecto no encontrado.' });
+  res.json({
+    ok: true,
+    projectId: proyecto.id,
+    nombre: proyecto.nombre,
+    webIde: proyecto.webIde,
+    downloadWindowsUrl: '/WebIDE.bat',
+    downloadScriptUrl: '/web-ide-cli.py',
+  });
 });
 
 app.delete('/api/verbocode/projects/:id', requiereAdminVerboCode, async (req, res) => {
@@ -4124,6 +4253,77 @@ app.delete('/api/verbocode/projects/:id', requiereAdminVerboCode, async (req, re
   verboCodeCache.delete(req.params.id);
   try { await mongoDb.eliminarDocumento('verbocode-' + req.params.id); } catch (e) { }
   res.json({ ok: true });
+});
+
+app.get('/api/v1/verbocode/projects', (req, res) => {
+  const token = autenticarTokenApiRequest(req, res, { requireAdmin: true });
+  if (!token) return;
+  const proyectos = leerProyectosVerboCode(token.propietario).map((p) => ({
+    id: p.id,
+    nombre: p.nombre,
+    actualizadoEn: p.actualizadoEn,
+    numArchivos: p.numArchivos,
+    webIde: p.webIde,
+  }));
+  res.json({ ok: true, proyectos });
+});
+
+app.get('/api/v1/verbocode/projects/:id', (req, res) => {
+  const token = autenticarTokenApiRequest(req, res, { requireAdmin: true });
+  if (!token) return;
+  const proyecto = leerProyectoVerboCode(req.params.id, token.propietario);
+  if (!proyecto) return res.status(404).json({ ok: false, error: 'Proyecto no encontrado.' });
+  res.json({
+    ok: true,
+    proyecto: {
+      id: proyecto.id,
+      nombre: proyecto.nombre,
+      actualizadoEn: proyecto.actualizadoEn,
+      webIde: proyecto.webIde,
+      archivos: proyecto.archivos || {},
+    },
+  });
+});
+
+app.get('/api/v1/verbocode/sync/:syncId', (req, res) => {
+  const token = autenticarTokenApiRequest(req, res, { requireAdmin: true });
+  if (!token) return;
+  const proyecto = buscarProyectoVerboCodePorSyncId(req.params.syncId, token.propietario);
+  if (!proyecto) return res.status(404).json({ ok: false, error: 'Proyecto Web IDE no encontrado.' });
+  res.json({
+    ok: true,
+    syncId: proyecto.webIde.syncId,
+    revision: proyecto.webIde.revision,
+    projectId: proyecto.id,
+    nombre: proyecto.nombre,
+    actualizadoEn: proyecto.actualizadoEn,
+    archivos: proyecto.archivos || {},
+  });
+});
+
+app.post('/api/v1/verbocode/sync/:syncId/push', express.json({ limit: '20mb' }), (req, res) => {
+  const token = autenticarTokenApiRequest(req, res, { requireAdmin: true });
+  if (!token) return;
+  const proyecto = buscarProyectoVerboCodePorSyncId(req.params.syncId, token.propietario);
+  if (!proyecto) return res.status(404).json({ ok: false, error: 'Proyecto Web IDE no encontrado.' });
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ ok: false, error: 'El body debe ser un objeto JSON.' });
+  }
+  if (!req.body.archivos || typeof req.body.archivos !== 'object' || Array.isArray(req.body.archivos)) {
+    return res.status(400).json({ ok: false, error: 'Falta "archivos" con el mapa completo del proyecto.' });
+  }
+
+  if (typeof req.body.nombre === 'string' && req.body.nombre.trim()) {
+    proyecto.nombre = req.body.nombre.trim().slice(0, 60);
+  }
+  proyecto.archivos = req.body.archivos;
+  guardarProyectoVerboCode(proyecto);
+  res.json({
+    ok: true,
+    syncId: proyecto.webIde.syncId,
+    revision: proyecto.webIde.revision,
+    actualizadoEn: proyecto.actualizadoEn,
+  });
 });
 
 // ============================================================
