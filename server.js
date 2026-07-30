@@ -5064,6 +5064,8 @@ Instala un paquete npm. Crea/actualiza package.json. Se carga desde esm.sh CDN.
 [[RUN::comando]]
 Ejecutá un comando de terminal REAL vos misma — literalmente corre, no hace falta que el usuario lo tipee ni que vos le digas "corré esto en la terminal". Comandos de archivos (ls, cat, touch, rm, mv, echo >, mkdir) se aplican directo sobre los archivos reales del proyecto; cualquier otro comando (node script.js, python script.py, npm run algo, etc) corre en el sandbox de ejecución. El usuario lo ve en vivo en su terminal mientras corre. USÁ ESTO PROACTIVAMENTE, no lo menciones solamente: si el usuario pide instalar algo, verificar que un script funcione, correr tests, hacer un build, listar archivos, o cualquier tarea de terminal — ejecutala vos con [[RUN::...]] en la misma respuesta, en vez de explicarle qué comando debería correr él.
 
+IMPORTANTE: Para CREAR archivos del proyecto, usá SIEMPRE [[FILE_CREATE::nombre.ext::contenido]] en lugar de comandos de terminal como node -e "fs.writeFileSync(...)". Los comandos RUN solo se ejecutan en el sandbox temporal y NO se guardan en el proyecto. Solo usa RUN para verificar código, correr tests, o comandos que no necesiten persistir.
+
 [[TEST::lenguaje::codigo a ejecutar]]
 Ejecuta código y muestra el resultado. Lenguajes: python, javascript, java, c, cpp, go, rust, ruby, php, bash, sql.
 
