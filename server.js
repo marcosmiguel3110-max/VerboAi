@@ -79,7 +79,7 @@ setInterval(() => {
 // ============================================================
 // Sistema simple de colas para limitar concurrencia en endpoints críticos
 const queues = new Map();
-const QUEUE_CONCURRENCY = 5; // Default para colas sin override especifico (wikipedia, biblia, judge0, etc).
+const QUEUE_CONCURRENCY = 5; // Default para colas sin override especifico (wikipedia, biblia, piston, etc).
 // Pollinations (imagen.pollinations.ai) tiene su propio limite de rate. Con las optimizaciones de
 // reintentos, jitter y timeouts aumentados, podemos manejar un poco más de concurrencia.
 // Default aumentado a 3 (antes 2) para mejor throughput sin saturar el rate limit de Pollinations.
@@ -308,11 +308,6 @@ const POLLINATIONS_TEXT_MODEL = process.env.POLLINATIONS_TEXT_MODEL || 'openai-f
 const POLLINATIONS_TEXT_URL = process.env.POLLINATIONS_TEXT_URL || 'https://text.pollinations.ai/openai';
 const POLLINATIONS_TEXT_TIMEOUT = parseInt(process.env.POLLINATIONS_TEXT_TIMEOUT || '60000', 10);
 const POLLINATIONS_TEXT_REFERER = process.env.POLLINATIONS_TEXT_REFERER || 'https://verboai.duckdns.org';
-
-// ============================================================
-// JUDGE0 — Ejecución de código
-// ============================================================
-const JUDGE0_URL = "http://localhost:2358";
 // Token OPCIONAL de Pollinations (registrarse gratis en https://enter.pollinations.ai).
 // Si esta seteado, se envia como Authorization: Bearer <token> y desbloquea los
 // modelos "nectar" (glm-5.2, etc). Sin token, solo openai-fast (anonimo).
@@ -3454,7 +3449,7 @@ async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE
       lenguaje,
       codigo: codigo.slice(0, 200) + (codigo.length > 200 ? '...' : ''),
       resultado: resultadoTest,
-      descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Judge0 API)'}`,
+      descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Piston API)'}`,
     });
   }
 
@@ -4569,12 +4564,12 @@ El código debe:
 });
 
 // ============================================================
-// API: ejecutar código con Judge0 (para terminal de Verbo Code)
+// API: ejecutar código con Piston API (para terminal de Verbo Code)
 // ============================================================
 // ============================================================
 // Terminal de Verbo Code: comandos que tocan el proyecto de verdad
 // ============================================================
-// Antes, TODO lo que se tipeaba en la terminal se mandaba a Judge0 (un sandbox
+// Antes, TODO lo que se tipeaba en la terminal se mandaba a Piston (un sandbox
 // aislado y descartable). Eso significa que comandos como "mkdir", "touch",
 // "echo x > archivo" o "rm archivo" se ejecutaban en un contenedor que se tira
 // apenas termina, sin ningun contacto con proyecto.archivos: el usuario veia
@@ -4583,7 +4578,7 @@ El código debe:
 // proyecto real (persistido con guardarProyectoVerboCode), devolviendo tambien
 // `archivosActualizados` para que el cliente pueda refrescar el arbol sin
 // esperar a que la IA responda. Todo lo que NO es una operacion de archivo
-// (scripts, algoritmos, "python calc.py", etc) sigue yendo a Judge0.
+// (scripts, algoritmos, "python calc.py", etc) sigue yendo a Piston como antes.
 function normalizarRutaProyecto(ruta) {
   return (ruta || '').trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
 }
@@ -4734,96 +4729,6 @@ function ejecutarComandoProyecto(comando, proyecto) {
     return { manejado: true, salida: '__CLEAR__' };
   }
 
-  if (cmd === 'date') {
-    return { manejado: true, salida: new Date().toString() };
-  }
-
-  if (cmd === 'whoami') {
-    return { manejado: true, salida: proyecto.nombre || 'usuario' };
-  }
-
-  if (cmd === 'history') {
-    return { manejado: true, salida: '(historial de comandos no disponible en modo sandbox)' };
-  }
-
-  if (cmd === 'help') {
-    return { manejado: true, salida: `Comandos disponibles:
-  ls/dir - listar archivos
-  pwd - mostrar directorio actual
-  cat/type <archivo> - ver contenido
-  rm/del <archivo> - eliminar archivo
-  touch <archivo> - crear archivo vacío
-  mkdir <carpeta> - crear carpeta (virtual)
-  mv/rename <origen> <destino> - renombrar/mover
-  cp/copy <origen> <destino> - copiar archivo
-  grep [-i] [-n] "patrón" [archivo] - buscar texto
-  find [patrón] - buscar archivos por nombre
-  wc <archivo> - contar líneas/palabras/caracteres
-  head/tail [-n] <archivo> - ver primeras/últimas líneas
-  tree - mostrar estructura de archivos
-  du/size - mostrar tamaño de archivos
-  clear/cls - limpiar terminal
-  date - mostrar fecha y hora
-  whoami - mostrar usuario actual
-  history - ver historial (no disponible)
-  help - mostrar esta ayuda` };
-  }
-
-  if (cmd === 'chmod') {
-    return { manejado: true, salida: '(chmod no soportado en modo sandbox - permisos no aplicables)' };
-  }
-
-  if (cmd === 'chown') {
-    return { manejado: true, salida: '(chown no soportado en modo sandbox - propietario no aplicable)' };
-  }
-
-  if (cmd === 'sudo') {
-    return { manejado: true, salida: '(sudo no requerido - ya tienes permisos de administrador en este entorno)' };
-  }
-
-  if (cmd === 'man') {
-    const tema = args[0];
-    if (!tema) return { manejado: true, salida: 'Uso: man <comando> - mostrar ayuda del comando (o usa "help" para ver todos)' };
-    return { manejado: true, salida: `(Manual para "${tema}": usa "help" para ver la lista de comandos disponibles)` };
-  }
-
-  if (cmd === 'sort') {
-    const nombre = normalizarRutaProyecto(args[0]);
-    if (!nombre) return { manejado: true, error: 'Uso: sort <archivo>' };
-    if (!(nombre in (proyecto.archivos || {}))) return { manejado: true, error: `No existe: ${nombre}` };
-    const contenido = proyecto.archivos[nombre] || '';
-    const lineas = contenido.split('\n').sort();
-    return { manejado: true, salida: lineas.join('\n') };
-  }
-
-  if (cmd === 'uniq') {
-    const nombre = normalizarRutaProyecto(args[0]);
-    if (!nombre) return { manejado: true, error: 'Uso: uniq <archivo>' };
-    if (!(nombre in (proyecto.archivos || {}))) return { manejado: true, error: `No existe: ${nombre}` };
-    const contenido = proyecto.archivos[nombre] || '';
-    const lineas = contenido.split('\n');
-    const unicos = [...new Set(lineas)];
-    return { manejado: true, salida: unicos.join('\n') };
-  }
-
-  if (cmd === 'diff') {
-    const origen = normalizarRutaProyecto(args[0]);
-    const destino = normalizarRutaProyecto(args[1]);
-    if (!origen || !destino) return { manejado: true, error: 'Uso: diff <archivo1> <archivo2>' };
-    if (!(origen in (proyecto.archivos || {}))) return { manejado: true, error: `No existe: ${origen}` };
-    if (!(destino in (proyecto.archivos || {}))) return { manejado: true, error: `No existe: ${destino}` };
-    const lineas1 = (proyecto.archivos[origen] || '').split('\n');
-    const lineas2 = (proyecto.archivos[destino] || '').split('\n');
-    const maxLen = Math.max(lineas1.length, lineas2.length);
-    const diferencias = [];
-    for (let i = 0; i < maxLen; i++) {
-      if (lineas1[i] !== lineas2[i]) {
-        diferencias.push(`Línea ${i + 1}: "${lineas1[i] || '(vacío)'}" → "${lineas2[i] || '(vacío)'}"`);
-      }
-    }
-    return { manejado: true, salida: diferencias.length ? diferencias.join('\n') : '(sin diferencias)' };
-  }
-
   return { manejado: false };
 }
 
@@ -4835,7 +4740,7 @@ app.post('/api/verbocode/execute', codeRateLimit, requiereAdminVerboCode, async 
   if (!codigo) return res.status(400).json({ error: 'Falta el código a ejecutar.' });
 
   // Si el comando es bash y hay un proyecto activo, intentar resolverlo contra
-  // el proyecto real ANTES de mandarlo a Judge0 (que es un sandbox descartable
+  // el proyecto real ANTES de mandarlo a Piston (que es un sandbox descartable
   // sin acceso al proyecto).
   if (lenguaje === 'bash' && proyectoId) {
     const proyecto = leerProyectoVerboCode(proyectoId, req.usuarioVerboCode);
@@ -4873,108 +4778,6 @@ app.post('/api/verbocode/execute', codeRateLimit, requiereAdminVerboCode, async 
   } catch (e) {
     res.status(500).json({ exito: false, error: e.message });
   }
-});
-
-// ============================================================
-// API: SWE-Bench Pro - Evaluación de Código IA
-// ============================================================
-// Almacenamiento en memoria para resultados (en producción usar MongoDB)
-const SWE_BENCH_RESULTADOS = new Map();
-const SWE_BENCH_DATASET = [];
-
-// Dataset simulado de SWE-Bench Pro (en producción cargar desde GitHub/HuggingFace)
-function cargarDatasetSWEBench() {
-  if (SWE_BENCH_DATASET.length > 0) return;
-  
-  // Dataset simulado con problemas típicos de SWE-Bench
-  const problemas = [
-    { id: 'django__django-11000', titulo: 'Fix URL pattern bug', repositorio: 'django/django', dificultad: 'medium', descripcion: 'Fix URL pattern matching bug' },
-    { id: 'django__django-11001', titulo: 'Add migration support', repositorio: 'django/django', dificultad: 'hard', descripcion: 'Add migration support for new field type' },
-    { id: 'flask__flask-5000', titulo: 'Fix template rendering', repositorio: 'pallets/flask', dificultad: 'easy', descripcion: 'Fix template rendering issue with nested loops' },
-    { id: 'numpy__numpy-20000', titulo: 'Optimize array operations', repositorio: 'numpy/numpy', dificultad: 'hard', descripcion: 'Optimize array operations for large datasets' },
-    { id: 'pandas__pandas-30000', titulo: 'Fix DataFrame merge', repositorio: 'pandas-dev/pandas', dificultad: 'medium', descripcion: 'Fix DataFrame merge with duplicate columns' },
-    { id: 'requests__requests-1000', titulo: 'Add timeout support', repositorio: 'psf/requests', dificultad: 'easy', descripcion: 'Add timeout support for HTTP requests' },
-    { id: 'scikit-learn__scikit-learn-4000', titulo: 'Fix classifier prediction', repositorio: 'scikit-learn/scikit-learn', dificultad: 'hard', descripcion: 'Fix classifier prediction with sparse matrices' },
-    { id: 'tensorflow__tensorflow-5000', titulo: 'Optimize model loading', repositorio: 'tensorflow/tensorflow', dificultad: 'hard', descripcion: 'Optimize model loading time' },
-    { id: 'pytest__pytest-6000', titulo: 'Add fixture support', repositorio: 'pytest-dev/pytest', dificultad: 'medium', descripcion: 'Add fixture support for async tests' },
-    { id: 'matplotlib__matplotlib-7000', titulo: 'Fix plot rendering', repositorio: 'matplotlib/matplotlib', dificultad: 'medium', descripcion: 'Fix plot rendering issue with custom scales' },
-  ];
-  
-  // Expandir a 50 problemas para demostración
-  for (let i = 0; i < 50; i++) {
-    const base = problemas[i % problemas.length];
-    SWE_BENCH_DATASET.push({
-      ...base,
-      id: `${base.id}-${i}`,
-    });
-  }
-}
-
-cargarDatasetSWEBench();
-
-// Endpoint: Ejecutar benchmark SWE-Bench
-app.post('/api/swe-bench/ejecutar', requiereAdminVerboCode, async (req, res) => {
-  const { benchmark, modelo, limite } = req.body || {};
-  
-  if (!benchmark) return res.status(400).json({ error: 'Falta especificar el benchmark' });
-  
-  try {
-    // Simular ejecución del benchmark (en producción esto ejecutaría realmente)
-    const problemasTotales = benchmark === 'swe-bench-lite' ? 50 : 
-                           benchmark === 'swe-bench-pro' ? 2294 : 100;
-    const problemasAEjecutar = limite ? Math.min(limite, problemasTotales) : problemasTotales;
-    
-    // Simular resultados (en producción esto ejecutaría los problemas reales)
-    const problemasResueltos = Math.floor(problemasAEjecutar * (0.3 + Math.random() * 0.4)); // 30-70% éxito
-    
-    const resultado = {
-      id: 'swe_' + crypto.randomUUID(),
-      benchmark,
-      modelo: modelo || 'newserplus',
-      problemasTotales: problemasAEjecutar,
-      problemasResueltos,
-      puntuacion: ((problemasResueltos / problemasAEjecutar) * 100).toFixed(1),
-      fecha: new Date().toISOString(),
-      detalles: {
-        tiempoEjecucion: Math.floor(problemasAEjecutar * (2 + Math.random() * 3)) + 's',
-        memoriaUsada: Math.floor(problemasAEjecutar * (50 + Math.random() * 100)) + 'MB',
-      },
-    };
-    
-    // Guardar resultado
-    SWE_BENCH_RESULTADOS.set(resultado.id, resultado);
-    
-    res.json({ ok: true, resultado });
-  } catch (e) {
-    console.error('[SWE-Bench] Error ejecutando benchmark:', e);
-    res.status(500).json({ error: 'Error al ejecutar benchmark' });
-  }
-});
-
-// Endpoint: Obtener resultados de benchmarks
-app.get('/api/swe-bench/resultados', requiereAdminVerboCode, (req, res) => {
-  const resultados = Array.from(SWE_BENCH_RESULTADOS.values())
-    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
-    .slice(0, 20); // Últimos 20 resultados
-  
-  res.json({ ok: true, resultados });
-});
-
-// Endpoint: Obtener dataset de problemas
-app.get('/api/swe-bench/dataset', requiereAdminVerboCode, (req, res) => {
-  const buscar = (req.query.buscar || '').toLowerCase().trim();
-  
-  let problemas = SWE_BENCH_DATASET;
-  
-  if (buscar) {
-    problemas = problemas.filter(p => 
-      p.titulo.toLowerCase().includes(buscar) ||
-      p.repositorio.toLowerCase().includes(buscar) ||
-      p.dificultad.toLowerCase().includes(buscar)
-    );
-  }
-  
-  res.json({ ok: true, problemas: problemas.slice(0, 100), total: problemas.length });
 });
 
 // ============================================================
@@ -5022,32 +4825,6 @@ app.post('/api/verbocode/chat/:id', ultracodeRateLimit, requiereAdminVerboCode, 
     let systemPrompt = `Sos ${modeloPedido} de Verbo AI, creado por VerboAITeams. NUNCA digas ser otro modelo (ChatGPT, Qwen, OpenAI, Llama, etc.). ${rolModelo}
 
 Regla general de calidad: no le devuelvas al usuario un problema que vos mismo podrías haber detectado. Si algo que escribiste tiene una falla obvia (variable sin declarar, import que falta, caso que rompe con input vacío), arreglalo ANTES de entregar, no después de que el usuario se queje.
-
-REGLA OBLIGATORIA DE INVESTIGACIÓN WEB: ANTES de escribir código o sugerir soluciones, DEBES investigar en la web para obtener información actualizada sobre:
-- Frameworks, librerías y tecnologías mencionadas
-- Mejores prácticas y patrones actuales
-- Documentación oficial de APIs y herramientas
-- Issues conocidos y soluciones probadas
-- Versiones recientes y cambios importantes
-
-Usá [[WEB::consulta específica]] para investigar. NUNCA escribas código basándote solo en tu conocimiento si el tema requiere información actualizada.
-
-REGLA OBLIGATORIA DE ANÁLISIS DE PROYECTOS: Cuando el usuario mencione proyectos existentes, frameworks o tecnologías específicas, DEBES analizar:
-- Documentación oficial y guías de uso
-- Ejemplos de código y patrones recomendados
-- Issues y pull requests relevantes
-- Mejores prácticas y convenciones de la comunidad
-
-Usá [[WEB::nombre del proyecto documentation best practices]] para analizar proyectos antes de escribir código.
-
-REGLA OBLIGATORIA DE SWE-BENCH PRO: Como agente de Verbo Code, DEBES probar automáticamente todo el código que generes usando SWE-Bench Pro:
-1. Después de generar código, usá [[TEST::lenguaje::codigo]] para ejecutar tests
-2. Verificá que el código funcione correctamente antes de entregarlo
-3. Si hay errores, corregalos automáticamente y volvé a probar
-4. Usá [[RUN::comando]] para ejecutar comandos de prueba (npm test, pytest, etc.)
-5. Documentá los resultados de las pruebas en el código si es necesario
-
-SWE-Bench Pro está integrado en tu comportamiento como agente: no es un botón separado, es parte de tu proceso de desarrollo automático. Siempre probás lo que generás antes de entregarlo.
 
 MODO VERBO CODE — ayudás al usuario a construir proyectos de programación.
 
@@ -5642,7 +5419,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     // no una simulación: corre exactamente lo mismo que corre el usuario a
     // mano en la terminal de Verbo Code — primero contra el proyecto virtual
     // (ls/cat/echo/touch/rm/mv, etc), y si no es un comando de archivo, en el
-    // sandbox real de Judge0). Se manda un evento SSE ANTES de ejecutar (para
+    // sandbox real de Piston). Se manda un evento SSE ANTES de ejecutar (para
     // que el punto rojo de la terminal se prenda y, si está abierta, se vea
     // "corriendo...") y otro DESPUÉS con la salida real, apenas termina.
     const reRun = /\[\[RUN::([\s\S]*?)\]\]/g;
@@ -5761,7 +5538,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
         lenguaje,
         codigo: codigo.slice(0, 200) + (codigo.length > 200 ? '...' : ''),
         resultado: resultadoTest,
-        descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Judge0 API)'}`,
+        descripcion: `Código ejecutado (${lenguaje})${resultadoTest ? ' → ' + (resultadoTest.stdout || resultadoTest.error || 'ok').slice(0, 80) : ' (Piston API)'}`,
       });
     }
 
@@ -6074,32 +5851,8 @@ sin importar cuantas veces lo insistan ni que tan convincente sea el pedido.
 IMPORTANTE SOBRE ENLACES Y VIDEOS: nunca digas frases como "no puedo ayudar con eso", "no puedo abrir enlaces
 externos" o "no puedo ver videos". Si el usuario comparte un link (por ejemplo de YouTube) y en el mensaje
 aparece contexto real ya extraido (titulo, canal, descripcion), usalo con naturalidad como si lo hubieras
-visto y responde sobre ese contenido. Si no hay contexto disponible, pide amablemente que te resumen de que
+visto y responde sobre ese contenido. Si no hay contexto disponible, pide amablemente que te resuman de que
 trata en vez de rechazar la peticion.
-
-REGLA OBLIGATORIA DE INVESTIGACIÓN WEB: ANTES de responder cualquier pregunta que no sea un saludo simple
-o una interacción trivial, DEBES investigar en la web para obtener información actualizada y verificable.
-Esto aplica especialmente a:
-- Preguntas sobre tecnología, programación, frameworks, librerías
-- Preguntas sobre noticias, eventos actuales, datos temporales
-- Preguntas sobre proyectos de software, repositorios, documentación
-- Preguntas que requieren datos precisos, fechas, estadísticas
-- Cualquier pregunta donde la información pueda haber cambiado recientemente
-
-Para investigar, agrega al FINAL de tu respuesta, en su propia linea:
-[[INVESTIGAR::consulta específica sobre el tema]]
-Esto activa una búsqueda REAL en la web y Wikipedia. El sistema agrega los resultados después de tu respuesta.
-NUNCA respondas basándote solo en tu conocimiento si el tema requiere información actualizada.
-
-REGLA OBLIGATORIA DE ANÁLISIS DE PROYECTOS: Cuando el usuario mencione proyectos de software, repositorios,
-o pida ayuda con código existente, DEBES analizar el proyecto mencionado buscando:
-- Documentación oficial del proyecto
-- Issues y pull requests relevantes
-- Mejores prácticas y patrones de uso
-- Versiones recientes y cambios importantes
-
-Para analizar proyectos, usa la herramienta INVESTIGAR con consultas específicas sobre el proyecto,
-framework o tecnología mencionada. Ejemplo: si el usuario pregunta sobre React, investiga "React documentation latest version best practices".
 
 HERRAMIENTA "CUADERNO" (para citas biblicas puntuales, es OBLIGATORIA en este caso):
 Cuando el usuario PIDA explicitamente un versiculo (por referencia o por tema, ej. "dame un versiculo sobre
@@ -6243,7 +5996,7 @@ Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real d
 Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
 rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r.
 Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
-Esto ejecuta el codigo REAL en un sandbox (Judge0 API) y el resultado real (stdout/stderr) se agrega
+Esto ejecuta el codigo REAL en un sandbox (Piston API) y el resultado real (stdout/stderr) se agrega
 despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
 esta herramienta en vez de imaginarte el resultado.
 
@@ -6356,7 +6109,7 @@ Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real d
 Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
 rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r.
 Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
-Esto ejecuta el codigo REAL en un sandbox (Judge0 API) y el resultado real (stdout/stderr) se agrega
+Esto ejecuta el codigo REAL en un sandbox (Piston API) y el resultado real (stdout/stderr) se agrega
 despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
 esta herramienta en vez de imaginarte el resultado.
 
@@ -6445,7 +6198,7 @@ Si el codigo tiene varias lineas, escribi \\n en vez de un salto de linea real d
 Lenguajes soportados (nombre en minusculas): python, javascript, typescript, java, c, cpp, csharp, go,
 rust, ruby, php, bash, sql, kotlin, swift, perl, lua, r.
 Ejemplo: "ejecuta un hola mundo en python" -> tu respuesta breve + [[CODE::python::print("Hola mundo")]]
-Esto ejecuta el codigo REAL en un sandbox (Judge0 API) y el resultado real (stdout/stderr) se agrega
+Esto ejecuta el codigo REAL en un sandbox (Piston API) y el resultado real (stdout/stderr) se agrega
 despues de tu respuesta. Nunca inventes vos la salida de un programa — si te piden ejecutar algo, usa
 esta herramienta en vez de imaginarte el resultado.
 
@@ -6889,39 +6642,28 @@ async function buscarWebDuckDuckGo(query) {
     const url = "https://duckduckgo.com/html/?q=" + encodeURIComponent(q);
     const resp = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36", "Accept": "text/html", "Accept-Language": "es-AR,es;q=0.9" },
-      signal: AbortSignal.timeout(10000), redirect: "follow",
+      signal: AbortSignal.timeout(8000), redirect: "follow",
     });
     if (!resp.ok) return { exito: false, error: "DuckDuckGo HTTP " + resp.status };
     const html = await resp.text();
     const resultados = [];
-    
-    // Intentar múltiples patrones de parsing para DuckDuckGo
-    const patrones = [
-      // Patrón actual
-      /<div[^>]*class="[^"]*result[^"]*"[^>]*>[\s\S]*?<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
-      // Patrón alternativo
-      /<a[^>]*class="[^"]*result__url[^"]*"[^>]*href="([^"]+)"[^>]*>[\s\S]*?<a[^>]*class="[^"]*result__title[^"]*"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi,
-      // Patrón más simple
-      /<a[^>]*href="([^"]+)"[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<div[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
-    ];
-
-    for (const patron of patrones) {
-      let match;
-      const regex = new RegExp(patron);
-      while ((match = regex.exec(html)) !== null && resultados.length < 5) {
-        let link = match[1];
-        const mUddg = link.match(/uddg=([^&]+)/);
-        if (mUddg) { try { link = decodeURIComponent(mUddg[1]); } catch (e) {} }
-        const titulo = match[2].replace(/<[^>]+>/g, "").trim();
-        const snippet = match[3] ? match[3].replace(/<[^>]+>/g, "").trim() : "";
-        if (titulo && link) {
-          resultados.push({ titulo, link, resumen: snippet });
-        }
-      }
-      if (resultados.length > 0) break;
+    const bloques = html.split(/<div[^>]*class="[^"]*result[^"]*"/).slice(1);
+    for (const bloque of bloques) {
+      if (resultados.length >= 5) break;
+      const reA = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i;
+      const mA = bloque.match(reA);
+      if (!mA) continue;
+      let link = mA[1];
+      const mUddg = link.match(/uddg=([^&]+)/);
+      if (mUddg) { try { link = decodeURIComponent(mUddg[1]); } catch (e) {} }
+      const titulo = mA[2].replace(/<[^>]+>/g, "").trim();
+      if (!titulo) continue;
+      const reS = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i;
+      const mS = bloque.match(reS);
+      const snippet = mS ? mS[1].replace(/<[^>]+>/g, "").trim() : "";
+      resultados.push({ titulo, link, resumen: snippet });
     }
-    
-    if (!resultados.length) return { exito: false, error: "DuckDuckGo no devolvio resultados (posible cambio en HTML)." };
+    if (!resultados.length) return { exito: false, error: "DuckDuckGo no devolvio resultados." };
     return { exito: true, cseUsado: "duckduckgo", resultados };
   } catch (e) { return { exito: false, error: "DuckDuckGo fallo: " + e.message }; }
 }
@@ -7858,25 +7600,167 @@ async function ejecutarCodigoJudge0(lenguaje, codigo) {
   }
 }
 
-// Piston API eliminado - ahora usa solo Judge0
+// Piston API: API de ejecución de código open-source
+// NOTA (jul 2026): Desde el 15 feb 2026 la API pública de emkc.org exige
+// autorización (401 sin key). Los fallbacks viejos (piston-api.vercel.app,
+// piston.fly.dev) están muertos (404 / timeout permanente) — probablemente
+// mirrors comunitarios abandonados. Se reemplazan por Judge0 CE
+// (https://ce.judge0.com), que es publica, gratuita, y NO requiere API key
+// (confirmado: "Authentication is not required to access the Judge0 CE API").
+// Si en el futuro conseguís una API key de emkc.org (pedila por Discord a
+// EngineerMan) o levantás tu propio Piston con Docker, esta va a seguir
+// siendo la opción mas robusta a largo plazo porque no depende de terceros.
+const PISTON_API_URL = process.env.PISTON_API_URL || 'https://emkc.org/api/v2/piston';
+const PISTON_API_KEY = process.env.PISTON_API_KEY || '';
+// URL de una instancia propia de Piston (self-hosted), si la configurás via env.
+// Si existe, se prueba ANTES que Judge0 porque tiene prioridad (es tuya, sin límites).
+const PISTON_SELF_HOSTED_URL = process.env.PISTON_SELF_HOSTED_URL || '';
+
+// Mapeo de lenguajes para Piston API
+const PISTON_LANGUAGE_MAP = {
+  python: { language: 'python', version: '3.10.0' },
+  javascript: { language: 'javascript', version: '18.15.0' },
+  typescript: { language: 'typescript', version: '5.0.3' },
+  java: { language: 'java', version: '15.0.2' },
+  c: { language: 'c', version: '10.2.1' },
+  cpp: { language: 'c++', version: '10.2.1' },
+  csharp: { language: 'csharp', version: '6.12.0' },
+  go: { language: 'go', version: '1.19.1' },
+  rust: { language: 'rust', version: '1.68.2' },
+  ruby: { language: 'ruby', version: '3.2.1' },
+  php: { language: 'php', version: '8.2.8' },
+  bash: { language: 'bash', version: '5.2.0' },
+  sql: { language: 'sql', version: 'sqlite3.3.0' },
+  kotlin: { language: 'kotlin', version: '1.8.20' },
+  swift: { language: 'swift', version: '5.8.0' },
+  perl: { language: 'perl', version: '5.38.0' },
+  lua: { language: 'lua', version: '5.4.6' },
+  r: { language: 'r', version: '4.3.1' },
+};
+
+// Ejecuta contra una instancia de Piston (self-hosted o emkc.org)
+async function ejecutarEnPiston(apiUrl, lang, langConfig, fuente, apiKey, timeout) {
+  const resp = await axios.post(`${apiUrl}/execute`, {
+    language: langConfig.language,
+    version: langConfig.version,
+    files: [{ name: 'main', content: fuente }],
+  }, {
+    timeout,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}),
+    },
+    validateStatus: () => true,
+  });
+
+  if (resp.status !== 200) {
+    return { exito: false, error: `HTTP ${resp.status}` };
+  }
+
+  const data = resp.data;
+  const run = data.run || {};
+  const compile = data.compile || {};
+  const stdout = run.stdout || '';
+  const stderr = run.stderr || '';
+  const compileStderr = compile.stderr || '';
+  const compileStdout = compile.stdout || '';
+  const salidaCompleta = [compileStdout, compileStderr, stdout, stderr].filter(Boolean).join('\n');
+  const error = (run.code !== null && run.code !== 0) ? `Exit code: ${run.code}` : null;
+
+  return {
+    exito: true,
+    lenguaje: lang,
+    version: `${langConfig.language} ${langConfig.version}`,
+    stdout: salidaCompleta || '(sin salida)',
+    stderr: stderr || compileStderr || '',
+    tiempo: run.cpu_time || 0,
+    memoria: run.memory || 0,
+    exitCode: run.code,
+    error,
+  };
+}
 
 async function ejecutarCodigoPiston(lenguaje, codigo) {
-  // Simplificado: usa solo Judge0 (sin Piston)
-  return await enqueue('judge0', async () => {
-    const resultado = await ejecutarCodigoJudge0(lenguaje, codigo);
-    if (!resultado.exito) return resultado;
-    // Adaptar formato para compatibilidad con código existente
-    return {
-      exito: true,
-      lenguaje: resultado.lenguaje,
-      version: resultado.version,
-      stdout: resultado.stdout || '(sin salida)',
-      stderr: resultado.stderr || '',
-      tiempo: 0,
-      memoria: 0,
-      exitCode: resultado.codigoSalida,
-      error: null,
-    };
+  const lang = (lenguaje || '').trim().toLowerCase();
+  const fuente = (codigo || '').replace(/\\n/g, '\n');
+  if (!lang || !fuente.trim()) return { exito: false, error: 'Falta lenguaje o codigo.' };
+  if (fuente.length > 10000) return { exito: false, error: 'El codigo es demasiado largo (max 10000 caracteres).' };
+
+  const langConfig = PISTON_LANGUAGE_MAP[lang];
+  const judge0LangId = JUDGE0_LANGUAGE_IDS[lang];
+  if (!langConfig) {
+    return { exito: false, error: `Lenguaje "${lang}" no soportado por Piston. Usa: ${Object.keys(PISTON_LANGUAGE_MAP).join(', ')}.` };
+  }
+
+  // Cadena de proveedores a probar, en orden de prioridad. Se arma dinámicamente:
+  // solo se intenta emkc.org si hay API key configurada (si no, un 401 es 100% seguro
+  // y no vale la pena gastar tiempo/timeout en eso).
+  const proveedores = [];
+  if (PISTON_SELF_HOSTED_URL) {
+    proveedores.push({ nombre: 'self-hosted', tipo: 'piston', url: PISTON_SELF_HOSTED_URL, key: '' });
+  }
+  if (PISTON_API_KEY) {
+    proveedores.push({ nombre: 'emkc.org', tipo: 'piston', url: PISTON_API_URL, key: PISTON_API_KEY });
+  }
+  if (judge0LangId) {
+    proveedores.push({ nombre: 'judge0', tipo: 'judge0' });
+  }
+
+  if (proveedores.length === 0) {
+    return { exito: false, error: `Lenguaje "${lang}" no tiene ningún proveedor de ejecución disponible.` };
+  }
+
+  // Usar queue para limitar concurrencia de ejecución de código
+  return await enqueue('piston', async () => {
+    let ultimoError = null;
+
+    for (let i = 0; i < proveedores.length; i++) {
+      const prov = proveedores[i];
+      // Timeout corto y fijo por proveedor: si un servicio no responde en 8s
+      // no vale la pena esperar mas, mejor pasar rápido al siguiente.
+      const timeout = 8000;
+
+      if (i > 0) {
+        await new Promise((r) => setTimeout(r, 300));
+      }
+
+      try {
+        console.log(`[piston] Intento ${i + 1}/${proveedores.length} - lenguaje: ${lang}, timeout: ${timeout}ms, proveedor: ${prov.nombre}`);
+
+        const resultado = prov.tipo === 'judge0'
+          ? await (async () => {
+              const r = await ejecutarCodigoJudge0(lang, fuente);
+              if (!r.exito) return r;
+              // Adaptar forma de ejecutarCodigoJudge0 a la forma comun de este pipeline
+              return {
+                exito: true,
+                lenguaje: r.lenguaje,
+                version: r.version,
+                stdout: r.stdout || '(sin salida)',
+                stderr: r.stderr || '',
+                tiempo: 0,
+                memoria: 0,
+                exitCode: r.codigoSalida,
+                error: null,
+              };
+            })()
+          : await ejecutarEnPiston(prov.url, lang, langConfig, fuente, prov.key, timeout);
+
+        if (resultado.exito) {
+          console.log(`[piston] OK - lenguaje: ${lang}, proveedor: ${prov.nombre}, tiempo: ${resultado.tiempo}ms`);
+          return resultado;
+        }
+
+        ultimoError = resultado.error;
+        console.warn(`[piston] Intento ${i + 1} (${prov.nombre}) devolvio ${resultado.error}`);
+      } catch (e) {
+        ultimoError = e.message;
+        console.warn(`[piston] Intento ${i + 1} (${prov.nombre}) fallo: ${e.message}`);
+      }
+    }
+
+    console.error(`[piston] Todos los proveedores fallaron. Ultimo error: ${ultimoError}`);
+    return { exito: false, error: ultimoError || 'Todos los proveedores de ejecución de código fallaron.' };
   });
 }
 
@@ -9000,27 +8884,23 @@ app.get('/api/mongo-status', (req, res) => {
 
 const servidorHttp = app.listen(PORT, () => {
   console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
-  
-  // En Render, no mostrar IPs locales (solo funciona en desarrollo)
-  if (process.env.NODE_ENV !== 'production') {
-    try {
-      const os = require('os');
-      const interfaces = os.networkInterfaces();
-      const ips = [];
-      Object.values(interfaces).forEach((lista) => {
-        (lista || []).forEach((info) => {
-          if (info.family === 'IPv4' && !info.internal) ips.push(info.address);
-        });
+  try {
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    const ips = [];
+    Object.values(interfaces).forEach((lista) => {
+      (lista || []).forEach((info) => {
+        if (info.family === 'IPv4' && !info.internal) ips.push(info.address);
       });
-      if (ips.length) {
-        console.log('Para entrar desde tu celular (misma red WiFi):');
-        ips.forEach((ip) => console.log(`  http://${ip}:${PORT}`));
-        console.log('Importante: esa(s) URL tambien tienen que estar agregadas en');
-        console.log('Google Cloud Console -> Credenciales -> tu cliente OAuth -> "URIs de');
-        console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
-      }
-    } catch (e) {  }
-  }
+    });
+    if (ips.length) {
+      console.log('Para entrar desde tu celular (misma red WiFi):');
+      ips.forEach((ip) => console.log(`  http://${ip}:${PORT}`));
+      console.log('Importante: esa(s) URL tambien tienen que estar agregadas en');
+      console.log('Google Cloud Console -> Credenciales -> tu cliente OAuth -> "URIs de');
+      console.log(`redireccionamiento autorizados", como http://${ips[0]}:${PORT}/auth/google/callback`);
+    }
+  } catch (e) {  }
 
   (async () => {
     try {
@@ -9030,18 +8910,8 @@ const servidorHttp = app.listen(PORT, () => {
       console.log('[startup] Mongo listo. Estado:', mongoDb.estaConectado() ? 'CONECTADO' : 'NO conectado (usando archivos locales)');
     } catch (e) {
       console.error('[startup] Error en inicializacion Mongo:', e.message);
-      console.log('[startup] La app sigue funcionando con archivos locales.');
     }
   })();
-});
-
-// Manejar errores del servidor para que no cierre el proceso
-servidorHttp.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`[error] El puerto ${PORT} ya está en uso`);
-  } else {
-    console.error('[error] Error del servidor HTTP:', error);
-  }
 });
 
 app.get('/api/test-btatesters', async (req, res) => {

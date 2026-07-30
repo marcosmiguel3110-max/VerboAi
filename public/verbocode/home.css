@@ -21,6 +21,7 @@
   flex-direction: column;
   gap: 8px;
   min-height: 140px;
+  min-width: 0;
 }
 
 .vc-proyecto-card:hover {
