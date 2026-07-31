@@ -1142,77 +1142,74 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
   // Reintentos con backoff exponencial para manejar alta concurrencia
   const maxIntentos = 3;
   let ultimoError = null;
-
+  let keyIndex = null; // Declarar fuera del loop para que esté disponible en todo el scope
+  
   for (let intento = 0; intento < maxIntentos; intento++) {
-    if (opciones.signal?.aborted) return { ok: false, error: 'cancelado' };
+    // Delay entre reintentos con backoff exponencial
+    if (intento > 0) {
+      const delay = Math.min(1000 * Math.pow(2, intento - 1), 5000); // 1s, 2s, 4s max
+      console.log(`[openrouter-free] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
 
-    try {
-      // Delay entre reintentos con backoff exponencial
-      if (intento > 0) {
-        const delay = Math.min(1000 * Math.pow(2, intento - 1), 5000); // 1s, 2s, 4s max
-        console.log(`[openrouter-free] Esperando ${delay}ms antes del reintento ${intento + 1}...`);
-        await new Promise((r) => setTimeout(r, delay));
+    const headers = { 'Content-Type': 'application/json' };
+
+    // Usar API key si hay disponibles (con selección inteligente)
+    if (OPENROUTER_API_KEYS.length > 0) {
+      keyIndex = selectBestKey();
+      const key = OPENROUTER_API_KEYS[keyIndex];
+      headers['Authorization'] = `Bearer ${key}`;
+      keyStats[keyIndex].requests++;
+      console.log(`[openrouter-free] Intento ${intento + 1}/${maxIntentos} - key index ${keyIndex}/${OPENROUTER_API_KEYS.length} (total requests: ${keyStats[keyIndex].requests}, score: ${(keyStats[keyIndex].successes / (keyStats[keyIndex].requests || 1)).toFixed(2)})`);
+    }  
+
+    // HTTP-Referer y X-Title ayudan a OpenRouter a identificar la app (opcional)
+    headers['HTTP-Referer'] = 'https://verboai.duckdns.org';
+    headers['X-Title'] = 'Verbo AI';
+
+    // Si nos pasan onDelta, pedimos streaming real (stream:true) y vamos
+    // devolviendo cada pedacito de texto A MEDIDA que el modelo lo genera
+    // de verdad — antes esto SIEMPRE pedía stream:false, esperaba la
+    // respuesta completa, y recién ahí el endpoint de chat la cortaba en
+    // pedacitos de 15 caracteres con un delay artificial de 15ms para
+    // "simular" que iba llegando en vivo. Ahora, cuando hay onDelta, es
+    // real: el texto llega exactamente al ritmo en que OpenRouter lo va
+    // generando.
+    const usarStreamingReal = typeof opciones.onDelta === 'function';
+    const body = {
+      model: model,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages],
+      temperature: 0.7,
+      max_tokens: opciones.maxTokens || 32769,
+      stream: usarStreamingReal,
+    };
+
+    // Capacidades avanzadas para modelos premium (NewserPlus)
+    const configModelo = opciones.configModelo;
+    if (configModelo) {
+      // Reasoning avanzado para modelos que lo soportan
+      if (configModelo.soportaReasoning && opciones.usarReasoning) {
+        body.reasoning = { effort: opciones.reasoningEffort || 'high' };
       }
 
-      const headers = { 'Content-Type': 'application/json' };
-
-      // Usar API key si hay disponibles (con selección inteligente)
-      let keyIndex = null;
-      if (OPENROUTER_API_KEYS.length > 0) {
-        keyIndex = selectBestKey();
-        const key = OPENROUTER_API_KEYS[keyIndex];
-        headers['Authorization'] = `Bearer ${key}`;
-        keyStats[keyIndex].requests++;
-        console.log(`[openrouter-free] Intento ${intento + 1}/${maxIntentos} - key index ${keyIndex}/${OPENROUTER_API_KEYS.length} (total requests: ${keyStats[keyIndex].requests}, score: ${(keyStats[keyIndex].successes / (keyStats[keyIndex].requests || 1)).toFixed(2)})`);
-      }
-
-      // HTTP-Referer y X-Title ayudan a OpenRouter a identificar la app (opcional)
-      headers['HTTP-Referer'] = 'https://verboai.duckdns.org';
-      headers['X-Title'] = 'Verbo AI';
-
-      // Si nos pasan onDelta, pedimos streaming real (stream:true) y vamos
-      // devolviendo cada pedacito de texto A MEDIDA que el modelo lo genera
-      // de verdad — antes esto SIEMPRE pedía stream:false, esperaba la
-      // respuesta completa, y recién ahí el endpoint de chat la cortaba en
-      // pedacitos de 15 caracteres con un delay artificial de 15ms para
-      // "simular" que iba llegando en vivo. Ahora, cuando hay onDelta, es
-      // real: el texto llega exactamente al ritmo en que OpenRouter lo va
-      // generando.
-      const usarStreamingReal = typeof opciones.onDelta === 'function';
-      const body = {
-        model: model,
-        messages: [{ role: 'system', content: systemPrompt }, ...messages],
-        temperature: 0.7,
-        max_tokens: opciones.maxTokens || 32769,
-        stream: usarStreamingReal,
-      };
-
-      // Capacidades avanzadas para modelos premium (NewserPlus)
-      const configModelo = opciones.configModelo;
-      if (configModelo) {
-        // Reasoning avanzado para modelos que lo soportan
-        if (configModelo.soportaReasoning && opciones.usarReasoning) {
-          body.reasoning = { effort: opciones.reasoningEffort || 'high' };
-        }
-
-        // Tools / function calling
-        if (configModelo.soportaTools && opciones.tools) {
-          body.tools = opciones.tools;
-          if (opciones.tool_choice) {
-            body.tool_choice = opciones.tool_choice;
-          }
-        }
-
-        // Structured outputs (JSON schema)
-        if (configModelo.soportaStructuredOutputs && opciones.responseFormat) {
-          body.response_format = opciones.responseFormat;
-        }
-
-        // Prompt caching para modelos que lo soportan
-        if (configModelo.soportaPromptCaching) {
-          body.include_reasoning = opciones.includeReasoning || false;
+      // Tools / function calling
+      if (configModelo.soportaTools && opciones.tools) {
+        body.tools = opciones.tools;
+        if (opciones.tool_choice) {
+          body.tool_choice = opciones.tool_choice;
         }
       }
+
+      // Structured outputs (JSON schema)
+      if (configModelo.soportaStructuredOutputs && opciones.responseFormat) {
+        body.response_format = opciones.responseFormat;
+      }
+
+      // Prompt caching para modelos que lo soportan
+      if (configModelo.soportaPromptCaching) {
+        body.include_reasoning = opciones.includeReasoning || false;
+      }
+    }
 
       if (!usarStreamingReal) {
         const resp = await axios.post(OPENROUTER_FREE_URL, body, {
@@ -1262,6 +1259,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
         return { ok: true, texto: texto.trim(), modelo: model, finishReason };
       }
 
+      try {
       // ---- Camino con streaming real ----
       const resultadoStream = await new Promise((resolve) => {
         let textoAcumulado = '';
