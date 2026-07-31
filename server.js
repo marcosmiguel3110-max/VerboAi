@@ -287,6 +287,16 @@ const GPT4FREE_TIMEOUT = parseInt(process.env.GPT4FREE_TIMEOUT || '60000', 10);
 const GPT4FREE_API_KEY = process.env.GPT4FREE_API_KEY || ''; // opcional segun el puente
 
 // ============================================================
+// CAPA ANTHROPIC DIRECTA — modelos premium con API key
+// ============================================================
+// Para usar Claude Opus, Sonnet, Haiku directamente desde Anthropic.
+// Requiere API key válida de Anthropic (formato sk-ant-...).
+const ANTHROPIC_ENABLED = (process.env.ANTHROPIC_ENABLED || 'false').toLowerCase() === 'true';
+const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
+const ANTHROPIC_TIMEOUT = parseInt(process.env.ANTHROPIC_TIMEOUT || '120000', 10);
+
+// ============================================================
 // CAPA POLLINATIONS TEXTO — directo, sin puente Python (PRINCIPAL)
 // ============================================================
 // Alternativa mas estable y rapida que el puente GPT4Free. Usa la misma API
@@ -372,7 +382,7 @@ const MODELOS_DISPONIBLES = {
     rateLimitMaxWeb: 36,
     // Techo de tokens un poco mas bajo (antes 1024): respuestas mas cortas y directas, coherente
     // con el rework "mas rapido y economico". Para respuestas largas esta NewserAdvanced.
-    maxTokens: 900,
+    maxTokens: 1200,
     badge: null,
     disponible: true,
   },
@@ -397,7 +407,7 @@ const MODELOS_DISPONIBLES = {
     rateLimitMaxWeb: 45,
     // 17% menos que el maxTokens original de NewserLite (1024 * 0.83 ≈ 850): mismo modelo, respuestas
     // mas compactas, menos tokens generados por consulta = mas eficiente y mas barato.
-    maxTokens: 850,
+    maxTokens: 1100,
     badge: 'eco',
     disponible: true,
   },
@@ -412,7 +422,6 @@ const MODELOS_DISPONIBLES = {
       'nvidia/nemotron-3-ultra-550b-a55b:free',
       'nvidia/nemotron-3-super-120b-a12b:free',
       'cohere/north-mini-code:free',
-      'qwen/qwen3-coder:free',
       'nousresearch/hermes-3-llama-3.1-405b:free',
     ],
     modeloOpenRouterVision: 'google/gemma-4-26b-a4b-it:free',
@@ -424,7 +433,7 @@ const MODELOS_DISPONIBLES = {
     costoCreditos: 6,
     rateLimitMax: 5,
     rateLimitMaxWeb: 8,
-    maxTokens: 2048,
+    maxTokens: 2500,
     badge: 'beta',
     disponible: true,
   },
@@ -438,7 +447,6 @@ const MODELOS_DISPONIBLES = {
       'nvidia/nemotron-3-nano-30b-a3b:free',
       'meta-llama/llama-3.3-70b-instruct:free',
       'cohere/north-mini-code:free',
-      'qwen/qwen3-coder:free',
       'nousresearch/hermes-3-llama-3.1-405b:free',
       'poolside/laguna-m.1:free',
       'poolside/laguna-xs-2.1:free',
@@ -447,7 +455,6 @@ const MODELOS_DISPONIBLES = {
     modelosOpenRouterRazonamiento: [
       'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
       'cohere/north-mini-code:free',
-      'qwen/qwen3-coder:free',
       'nvidia/nemotron-3-super-120b-a12b:free',
     ],
     modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
@@ -460,59 +467,67 @@ const MODELOS_DISPONIBLES = {
     costoCreditos: 15,
     rateLimitMax: 3,
     rateLimitMaxWeb: 4,
-    maxTokens: 3072,
+    maxTokens: 4000,
     badge: 'pro',
     disponible: true,
   },
   NewserPlus: {
     nombre: 'NewserPlus',
-    descripcion: 'Exclusivo admin. Modelo mas potente para codigo. Usa Cohere North-Mini-Code (modelo especializado en codigo con mejor estabilidad). Especializado en programacion, agentic coding y desarrollo.',
-    modeloOpenRouter: 'cohere/north-mini-code:free',
+    descripcion: 'ULTRA - Claude 3.5 Sonnet + Anthropic Direct + OpenRouter Free. Supera a GPT-4 con Anthropic Claude cuando está habilitado, fallback a mejores modelos free. Optimizado para coding complejo, reasoning avanzado y agentic workflows.',
+    // Usar Anthropic si está habilitado, sino el mejor modelo free
+    modeloOpenRouter: ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-ultra-550b-a55b:free',
     modelosOpenRouterTexto: [
-      'cohere/north-mini-code:free',
-      'nvidia/nemotron-3-ultra-550b-a55b:free',
-      'nvidia/nemotron-3-super-120b-a12b:free',
-      'nvidia/nemotron-3-nano-30b-a3b:free',
-      'meta-llama/llama-3.3-70b-instruct:free',
-      'poolside/laguna-m.1:free',
-      'poolside/laguna-xs-2.1:free',
-      'qwen/qwen3-coder:free',
-      'nousresearch/hermes-3-llama-3.1-405b:free',
-      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-      'z-ai/glm-4.5-air:free',
-    ],
-    modeloOpenRouterRazonamiento: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      // Anthropic Direct (PRIMERO si está habilitado)
+      ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
+      // Mejores modelos free (prioridad)
+      'nvidia/nemotron-3-ultra-550b-a55b:free',  // 550B params, mejor free disponible
+      'nvidia/nemotron-3-super-120b-a12b:free',  // 120B params, strong reasoning
+      'cohere/north-mini-code:free',             // Especializado en código
+      'nvidia/nemotron-3-nano-30b-a3b:free',     // 30B params, rápido
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', // Reasoning specialist
+      'meta-llama/llama-3.3-70b-instruct:free',  // 70B params, generalista fuerte
+      'nousresearch/hermes-3-llama-3.1-405b:free', // 405B params, largo contexto
+      'poolside/laguna-m.1:free',                 // Coding specialist
+      'z-ai/glm-4.5-air:free',                    // GLM-4.5 free tier
+    ].filter(Boolean),
+    modeloOpenRouterRazonamiento: ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
     modelosOpenRouterRazonamiento: [
-      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-      'cohere/north-mini-code:free',
-      'qwen/qwen3-coder:free',
-      'nvidia/nemotron-3-super-120b-a12b:free',
-      'nvidia/nemotron-3-ultra-550b-a55b:free',
-      'poolside/laguna-m.1:free',
-    ],
-    // Cascada especifica de Verbo Code: Admin ya arranca con un modelo de codigo,
-    // pero reforzamos el orden para que ante fallo/rate-limit siga cayendo en
-    // modelos especializados en programacion antes que en generalistas.
+      // Anthropic Direct (PRIMERO si está habilitado)
+      ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
+      // Mejores modelos free de reasoning
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', // Reasoning specialist
+      'nvidia/nemotron-3-super-120b-a12b:free',              // Strong reasoning
+      'nvidia/nemotron-3-ultra-550b-a55b:free',              // 550B params
+      'cohere/north-mini-code:free',                          // Code reasoning
+      'nousresearch/hermes-3-llama-3.1-405b:free',           // Long context reasoning
+    ].filter(Boolean),
+    // Cascada optimizada para coding
     modelosOpenRouterCodigo: [
-      'cohere/north-mini-code:free',
-      'qwen/qwen3-coder:free',
-      'nvidia/nemotron-3-ultra-550b-a55b:free',
-      'nvidia/nemotron-3-super-120b-a12b:free',
-      'nvidia/nemotron-3-nano-30b-a3b:free',
-      'meta-llama/llama-3.3-70b-instruct:free',
-      'poolside/laguna-m.1:free',
-    ],
-    modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
+      // Anthropic Direct (PRIMERO si está habilitado)
+      ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
+      // Mejores modelos free para código
+      'cohere/north-mini-code:free',                    // #1 free coding model
+      'nvidia/nemotron-3-ultra-550b-a55b:free',         // 550B params, strong coding
+      'nvidia/nemotron-3-super-120b-a12b:free',         // 120B params
+      'poolside/laguna-m.1:free',                       // Coding specialist
+      'nvidia/nemotron-3-nano-30b-a3b:free',           // Fast coding
+      'meta-llama/llama-3.3-70b-instruct:free',         // General coding
+      'nousresearch/hermes-3-llama-3.1-405b:free',      // Complex coding
+    ].filter(Boolean),
+    modeloOpenRouterVision: ANTHROPIC_ENABLED ? 'anthropic-direct' : 'google/gemma-4-31b-it:free',
     modelosOpenRouterVision: [
+      // Anthropic Direct (PRIMERO si está habilitado)
+      ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
+      // Mejores modelos free multimodales
       'google/gemma-4-31b-it:free',
       'google/gemma-4-26b-a4b-it:free',
       'nvidia/nemotron-nano-12b-v2-vl:free',
       'nvidia/nemotron-3.5-content-safety:free',
-    ],
-    costoCreditos: 250,
-    rateLimitMax: 10,
-    rateLimitMaxWeb: 15,
-    maxTokens: 32769,
+    ].filter(Boolean),
+    costoCreditos: ANTHROPIC_ENABLED ? 500 : 250,  // Más alto con Anthropic (costo real)
+    rateLimitMax: ANTHROPIC_ENABLED ? 5 : 10,     // Más restrictivo con Anthropic
+    rateLimitMaxWeb: ANTHROPIC_ENABLED ? 8 : 15,
+    maxTokens: ANTHROPIC_ENABLED ? 16000 : 8000,   // 16K con Anthropic, 8K free
     badge: 'admin',
     disponible: true,
     soloAdmin: true,
@@ -520,6 +535,12 @@ const MODELOS_DISPONIBLES = {
     imagenAncho: POLLINATIONS_PRO_WIDTH,
     imagenAlto: POLLINATIONS_PRO_HEIGHT,
     imagenEnhance: true,
+    // Capacidades avanzadas
+    soportaReasoning: true,
+    soportaTools: true,
+    soportaStructuredOutputs: ANTHROPIC_ENABLED,    // Disponible con Anthropic
+    soportaPromptCaching: ANTHROPIC_ENABLED,        // Disponible con Anthropic
+    contextWindow: ANTHROPIC_ENABLED ? 200000 : 128000, // 200K con Anthropic, 128K free
   },
 };
 const MODELO_DEFAULT = 'NewserLite';
@@ -645,7 +666,20 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
 
-      let r = await llamarOpenRouterFree(messages, systemPrompt, modelo, opciones);
+      // Pasar configuración del modelo para activar capacidades avanzadas
+      const opcionesConConfig = {
+        ...opciones,
+        configModelo: opciones.configModelo,
+        maxTokens: opciones.configModelo?.maxTokens || opciones.maxTokens,
+      };
+
+      let r;
+      // Si el modelo es 'anthropic-direct', usar la función de Anthropic
+      if (modelo === 'anthropic-direct') {
+        r = await llamarAnthropic(messages, systemPrompt, ANTHROPIC_MODEL, opcionesConConfig);
+      } else {
+        r = await llamarOpenRouterFree(messages, systemPrompt, modelo, opcionesConConfig);
+      }
       if (r.ok) {
         // Si el modelo cortó la respuesta por límite de tokens (finish_reason === 'length'),
         // el bloque de código que estaba escribiendo puede haber quedado sin cerrar
@@ -872,6 +906,13 @@ if (OPENROUTER_API_KEYS.length > 0) {
   console.log('[CONFIG] WARNING: No se detectaron API keys de OpenRouter. Usando modo sin key (límite 50/day)');
 }
 
+// Log de configuración de Anthropic
+console.log(`[CONFIG] Anthropic API: ${ANTHROPIC_ENABLED ? 'HABILITADA' : 'DESHABILITADA'}`);
+if (ANTHROPIC_ENABLED && ANTHROPIC_API_KEY) {
+  console.log(`[CONFIG] Anthropic Key: ${ANTHROPIC_API_KEY.substring(0, 20)}...${ANTHROPIC_API_KEY.substring(ANTHROPIC_API_KEY.length - 10)}`);
+  console.log(`[CONFIG] Anthropic Model: ${ANTHROPIC_MODEL}`);
+}
+
 // Llama a OpenRouter con un modelo free (con rotación de API keys)
 async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}) {
   if (!OPENROUTER_FREE_ENABLED) return { ok: false, error: 'OpenRouter free deshabilitado' };
@@ -920,9 +961,36 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
         model: model,
         messages: [{ role: 'system', content: systemPrompt }, ...messages],
         temperature: 0.7,
-        max_tokens: 32769,
+        max_tokens: opciones.maxTokens || 32769,
         stream: usarStreamingReal,
       };
+
+      // Capacidades avanzadas para modelos premium (NewserPlus)
+      const configModelo = opciones.configModelo;
+      if (configModelo) {
+        // Reasoning avanzado para modelos que lo soportan
+        if (configModelo.soportaReasoning && opciones.usarReasoning) {
+          body.reasoning = { effort: opciones.reasoningEffort || 'high' };
+        }
+
+        // Tools / function calling
+        if (configModelo.soportaTools && opciones.tools) {
+          body.tools = opciones.tools;
+          if (opciones.tool_choice) {
+            body.tool_choice = opciones.tool_choice;
+          }
+        }
+
+        // Structured outputs (JSON schema)
+        if (configModelo.soportaStructuredOutputs && opciones.responseFormat) {
+          body.response_format = opciones.responseFormat;
+        }
+
+        // Prompt caching para modelos que lo soportan
+        if (configModelo.soportaPromptCaching) {
+          body.include_reasoning = opciones.includeReasoning || false;
+        }
+      }
 
       if (!usarStreamingReal) {
         const resp = await axios.post(OPENROUTER_FREE_URL, body, {
@@ -1082,13 +1150,74 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
       if (e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNABORTED' || e.name === 'AbortError') {
         continue;
       }
-      // Para otros errores, no reintentar
-      break;
     }
+    continue;
   }
 
-  console.error(`[openrouter-free] Todos los intentos fallaron. Ultimo error: ${ultimoError}`);
-  return { ok: false, error: ultimoError || 'Todos los intentos fallaron' };
+  if (keyIndex !== null) updateKeyStats(keyIndex, true, false);
+  console.log(`[openrouter-free] OK - ${texto.length} chars por ${model} (finish_reason: ${finishReason})`);
+  return { ok: true, texto: texto.trim(), modelo: model, finishReason };
+}
+
+// Llama a Anthropic directamente (Claude Opus, Sonnet, Haiku)
+async function llamarAnthropic(messages, systemPrompt, model = ANTHROPIC_MODEL, opciones = {}) {
+  if (!ANTHROPIC_ENABLED || !ANTHROPIC_API_KEY) {
+    return { ok: false, error: 'Anthropic deshabilitado o sin API key' };
+  }
+
+  try {
+    // Convertir mensajes al formato de Anthropic
+    const anthropicMessages = messages.map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    }));
+
+    const body = {
+      model: model,
+      max_tokens: opciones.maxTokens || 4096,
+      system: systemPrompt,
+      messages: anthropicMessages,
+      temperature: 0.7,
+    };
+
+    // Capacidades avanzadas
+    if (opciones.usarReasoning) {
+      // Anthropic tiene reasoning integrado en sus modelos
+    }
+
+    const resp = await axios.post('https://api.anthropic.com/v1/messages', body, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'false',
+      },
+      timeout: ANTHROPIC_TIMEOUT,
+      signal: opciones.signal,
+      validateStatus: () => true,
+    });
+
+    if (resp.status < 200 || resp.status >= 300) {
+      const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
+      console.error(`[anthropic] HTTP ${resp.status}: ${detalle}`);
+      return { ok: false, error: `HTTP ${resp.status}` };
+    }
+
+    const texto = resp.data?.content?.[0]?.text || '';
+    const finishReason = resp.data?.stop_reason || null;
+
+    if (!texto || !texto.trim()) {
+      console.error('[anthropic] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+      return { ok: false, error: 'Respuesta vacia de Anthropic' };
+    }
+
+    console.log(`[anthropic] OK - ${texto.length} chars por ${model} (stop_reason: ${finishReason})`);
+    return { ok: true, texto: texto.trim(), modelo: model, finishReason };
+
+  } catch (error) {
+    console.error('[anthropic] Error:', error.message);
+    return { ok: false, error: error.message };
+  }
 }
 
 // ============================================================
@@ -2770,6 +2899,7 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
         'Sos un modulo de razonamiento interno. Analiza el pedido del usuario paso a paso (que necesita, que herramientas podrian hacer falta, un plan breve de respuesta). No respondas directamente al usuario, esto es un borrador interno que otro modelo va a usar despues. Se breve (maximo 120 palabras).',
         configModelo.modelosOpenRouterRazonamiento,
         () => { },
+        { configModelo, usarReasoning: configModelo.soportaReasoning, reasoningEffort: 'high' },
       );
       if (respRaz && respRaz.ok) {
         razonamientoPrevioApi = stripThinkTags(respRaz.texto);

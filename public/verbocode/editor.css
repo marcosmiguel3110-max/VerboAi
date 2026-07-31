@@ -700,6 +700,134 @@ body.vc-resizing-activo iframe {
   }
 }
 
+/* ============================================================
+   Responsive Design para móviles
+   ============================================================ */
+@media (max-width: 768px) {
+  .vc-editor-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .vc-sidebar {
+    display: none; /* Ocultar sidebar en móviles por defecto */
+  }
+
+  .vc-chat {
+    border-left: none;
+    border-top: 1px solid var(--vc-border);
+  }
+
+  .vc-editor-header {
+    padding: 6px 10px;
+    min-height: 40px;
+  }
+
+  .vc-editor-titulo-input {
+    font-size: 12px;
+    min-width: 100px;
+    max-width: 180px;
+  }
+
+  .vc-btn-icon-header {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .vc-webide-estado {
+    font-size: 10px;
+    padding: 2px 6px;
+    max-width: 35vw;
+  }
+
+  .vc-webide-corner {
+    display: none; /* Ocultar corner en móviles */
+  }
+
+  .vc-chat-mensajes {
+    padding: 12px 10px;
+  }
+
+  .vc-msg {
+    font-size: 12px;
+    max-width: 98%;
+  }
+
+  .vc-chat-input-wrap {
+    padding: 8px 10px;
+  }
+
+  .vc-chat-input {
+    font-size: 12px;
+    max-height: 100px;
+  }
+
+  .vc-chat-btn-imagen,
+  .vc-chat-btn-terminal,
+  #btnEnviarChat {
+    width: 28px;
+    height: 28px;
+  }
+
+  .vc-modal-terminal {
+    max-width: 95%;
+    max-height: 90vh;
+  }
+
+  .vc-terminal-body {
+    height: 400px;
+  }
+
+  .vc-terminal-output {
+    font-size: 12px;
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .vc-editor-header {
+    flex-wrap: wrap;
+  }
+
+  .vc-header-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .vc-header-right {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: 6px;
+  }
+
+  .vc-chat-bienvenida {
+    padding: 32px 10px 10px;
+  }
+
+  .vc-bienvenida-icono {
+    width: 48px;
+    height: 48px;
+  }
+
+  .vc-chat-bienvenida h1 {
+    font-size: 16px;
+  }
+
+  .vc-bienvenida-sub {
+    font-size: 11px;
+  }
+
+  .vc-sugerencias-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .vc-sugerencia-card {
+    padding: 10px;
+    font-size: 11px;
+  }
+}
+
 /* Mensajes — estilo Claude (sin burbujas pesadas, solo texto claro) */
 .vc-msg {
   max-width: 95%;

@@ -321,3 +321,108 @@
   color: var(--vc-text-muted);
   line-height: 1.5;
 }
+
+/* ============================================================
+   Responsive Design para móviles
+   ============================================================ */
+@media (max-width: 768px) {
+  .vc-proyectos-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  .vc-proyecto-card {
+    padding: 16px;
+    min-height: 120px;
+  }
+
+  .vc-proyecto-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .vc-proyecto-nombre {
+    font-size: 13px;
+  }
+
+  .vc-proyecto-meta {
+    font-size: 11px;
+  }
+
+  .vc-header-actions {
+    flex-wrap: wrap;
+  }
+
+  .vc-btn-secondary {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .vc-modal-large {
+    max-width: 95%;
+    max-height: 95vh;
+  }
+
+  .vc-swe-bench-intro {
+    padding: 12px;
+  }
+
+  .vc-swe-bench-intro p {
+    font-size: 13px;
+  }
+
+  .vc-swe-bench-tabs {
+    flex-wrap: wrap;
+  }
+
+  .vc-tab {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .vc-dataset-list {
+    max-height: 300px;
+  }
+
+  .vc-terminal-body {
+    height: 350px;
+  }
+}
+
+@media (max-width: 480px) {
+  .vc-proyectos-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .vc-proyecto-card {
+    padding: 14px;
+  }
+
+  .vc-header-actions {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .vc-btn-secondary {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .vc-swe-bench-tabs {
+    gap: 4px;
+  }
+
+  .vc-tab {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .vc-form-group label {
+    font-size: 12px;
+  }
+
+  .vc-status p {
+    font-size: 13px;
+  }
+}

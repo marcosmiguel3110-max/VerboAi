@@ -184,7 +184,7 @@ def run_command(command, cwd):
             [exe, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
             cwd=str(cwd),
             capture_output=True,
-            timeout=110,
+            timeout=300,  # Aumentado de 110 a 300 segundos para comandos largos como servidores
         )
         stdout = completed.stdout.decode("utf-8", errors="replace")
         stderr = completed.stderr.decode("utf-8", errors="replace")
@@ -199,7 +199,7 @@ def run_command(command, cwd):
         stderr = (exc.stderr or b"").decode("utf-8", errors="replace")
         return {
             "stdout": stdout,
-            "stderr": (stderr + "\nTiempo agotado ejecutando el comando.").strip(),
+            "stderr": (stderr + "\nTiempo agotado ejecutando el comando (5 min max).").strip(),
             "exito": False,
             "exitCode": None,
         }
@@ -324,7 +324,7 @@ def main():
                     "localServerRunning": True,
                 },
                 args.secret,
-                timeout=70,
+                timeout=120,  # Aumentado de 70 a 120 segundos para mejor tolerancia a red lenta
             )
             if last_error:
                 out("[web-ide] Reconectado.")
@@ -359,7 +359,7 @@ def main():
                         "localServerRunning": True,
                     },
                     args.secret,
-                    timeout=90,
+                    timeout=150,  # Aumentado de 90 a 150 segundos para mejor tolerancia
                 )
                 current_name = push.get("nombre") or current_name
                 folder = rename_folder_if_needed(folder, push.get("desiredFolderName") or current_name)
@@ -388,7 +388,7 @@ def main():
                         "localServerRunning": True,
                     },
                     args.secret,
-                    timeout=90,
+                    timeout=150,  # Aumentado de 90 a 150 segundos para mejor tolerancia
                 )
                 current_files = read_project_files(folder, bat_name)
                 local_hash = file_map_hash(current_files)
