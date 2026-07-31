@@ -728,7 +728,7 @@
         <span class="chip ok">Token: verboai-XXXX</span>
         <span class="chip">ID oficial: verboaistudio/NewserLite</span>
         <span class="chip">Chat, imágenes, web, clima y código</span>
-        <span class="chip admin">NewserPlus y SWE-Bench Pro incluidos en la guía</span>
+        <span class="chip">NewserPlus y SWE-Bench Pro incluidos en la guía</span>
       </div>
       <div class="hero-actions">
         <a class="btn btn-primary" href="#tester">Probar la API</a>
@@ -802,7 +802,7 @@
           <option value="verboaistudio/NewserLite">verboaistudio/NewserLite</option>
           <option value="verboaistudio/NewserAdvanced">verboaistudio/NewserAdvanced</option>
           <option value="verboaistudio/NewserAdvanced1.5">verboaistudio/NewserAdvanced1.5</option>
-          <option value="verboaistudio/NewserPlus">verboaistudio/NewserPlus (admin)</option>
+          <option value="verboaistudio/NewserPlus">verboaistudio/NewserPlus (ULTRA)</option>
         </select>
       </div>
       <textarea id="mensaje"
@@ -860,8 +860,7 @@
       </div>
 
       <div class="warning">
-        <strong>Ojo con NewserPlus:</strong> está documentado acá porque forma parte del catálogo completo de Verbo AI
-        Studio, pero su uso sigue siendo exclusivo para cuentas/admin con permiso.
+        <strong>Ojo con NewserPlus:</strong> modelo ULTRA con rate limits estrictos y degradación automática después de 10 mensajes/hora.
       </div>
     </section>
 
@@ -897,7 +896,7 @@
             <tr>
               <td><code>NewserPlus</code></td>
               <td><code>verboaistudio/NewserPlus</code></td>
-              <td>Verbo Code, agentic coding y flujos avanzados de admin</td>
+              <td>Ultra potente. Coding complejo y razonamiento avanzado.</td>
             </tr>
           </tbody>
         </table>
@@ -1236,7 +1235,7 @@
 
       <div class="table-wrap">
         <h3>NewserPlus: Ventajas y desventajas</h3>
-        <p>Comparativa directa de NewserPlus contra otros modelos de la familia Verbo AI.</p>
+        <p>Comparativa de NewserPlus contra otros modelos de Verbo AI.</p>
         <table>
           <thead>
             <tr>
@@ -1253,7 +1252,7 @@
             </tr>
             <tr>
               <td><strong>Contexto</strong></td>
-              <td>Todos los modelos Verbo AI (200K con G4F/Anthropic)</td>
+              <td>Todos los modelos Verbo AI</td>
               <td>Claude Opus 4.8 (200K), Gemini 2.5 Pro (1M+)</td>
             </tr>
             <tr>
@@ -1526,8 +1525,8 @@ def preguntar(mensaje, modelo="verboaistudio/NewserLite"):
             </tr>
             <tr>
               <td><code>403</code></td>
-              <td>Intentaste usar un modelo restringido, como <code>NewserPlus</code>.</td>
-              <td>Necesitás permisos de admin/cuenta habilitada.</td>
+              <td>Intentaste usar un modelo restringido.</td>
+              <td>Necesitás permisos de cuenta habilitada.</td>
             </tr>
             <tr>
               <td><code>429</code></td>

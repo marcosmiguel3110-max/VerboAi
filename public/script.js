@@ -1261,14 +1261,17 @@ function renderOpcionesModeloEn(contenedor) {
     if (disponible && m.costoCreditos && m.costoCreditos > 1) {
       badges += '<span class="opcion-modelo-badge">' + m.costoCreditos + ' creditos</span>';
     }
-    if (m.badge === 'beta' || m.nombre === 'NewserAdvanced') {
+    if (m.badge === 'beta') {
       badges += '<span class="opcion-modelo-badge opcion-modelo-badge-beta">Beta</span>';
     }
     if (m.badge === 'pro' || m.nombre === 'NewserAdvanced1.5') {
       badges += '<span class="opcion-modelo-badge opcion-modelo-badge-pro">Pro</span>';
     }
-    if (m.badge === 'admin' || m.nombre === 'NewserPlus') {
+    if (m.badge === 'admin') {
       badges += '<span class="opcion-modelo-badge opcion-modelo-badge-admin">Admin</span>';
+    }
+    if (m.badge === 'ULTRA/PRO/CODING' || m.nombre === 'NewserPlus') {
+      badges += '<span class="opcion-modelo-badge opcion-modelo-badge-pro">ULTRA</span>';
     }
     if (m.badge === 'eco' || m.nombre === 'NewserLiteCompact') {
       badges += '<span class="opcion-modelo-badge opcion-modelo-badge-eco">Eco</span>';
