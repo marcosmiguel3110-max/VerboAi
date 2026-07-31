@@ -959,10 +959,10 @@
             <tr>
               <td><strong>NewserPlus</strong></td>
               <td><code>verboaistudio/NewserPlus</code></td>
-              <td><span class="badge admin">admin</span></td>
-              <td>250</td>
-              <td>10 req/min API · 15 req/min web</td>
-              <td>Verbo Code, agentic coding, desarrollo largo y benchmarking fuerte.</td>
+              <td><span class="badge pro">ULTRA</span></td>
+              <td>200</td>
+              <td>4 req/min API · 6 req/min web</td>
+              <td>Ultra potente. Coding complejo y razonamiento avanzado.</td>
             </tr>
           </tbody>
         </table>
@@ -1016,9 +1016,9 @@
             <div class="chart-row">
               <div class="chart-label">NewserPlus</div>
               <div class="bar-track">
-                <div class="bar-fill verbo" style="width:0.4%"></div>
+                <div class="bar-fill verbo" style="width:0.5%"></div>
               </div>
-              <div class="chart-score">0.4</div>
+              <div class="chart-score">0.5</div>
             </div>
           </div>
         </div>
@@ -1058,9 +1058,9 @@
             <div class="chart-row">
               <div class="chart-label">NewserPlus</div>
               <div class="bar-track">
-                <div class="bar-fill verbo" style="width:33.3%"></div>
+                <div class="bar-fill verbo" style="width:13.3%"></div>
               </div>
-              <div class="chart-score">10</div>
+              <div class="chart-score">4</div>
             </div>
           </div>
         </div>
@@ -1100,24 +1100,23 @@
             <div class="chart-row">
               <div class="chart-label">NewserPlus</div>
               <div class="bar-track">
-                <div class="bar-fill verbo" style="width:100%"></div>
+                <div class="bar-fill verbo" style="width:49.2%"></div>
               </div>
-              <div class="chart-score">32 769</div>
+              <div class="chart-score">16 000</div>
             </div>
           </div>
         </div>
 
         <div class="chart-card">
           <h3>Ventana máxima de salida: Verbo AI vs. otras familias</h3>
-          <p>NewserPlus es el modelo con mayor <code>maxTokens</code> dentro de Verbo AI, y ahora también el que
-            más tiene de esta comparación puntual: le gana a GPT-4.1 y a GPT-4o mini.</p>
+          <p>NewserPlus tiene una ventana de salida de 16,000 tokens (con G4F/Anthropic) o 8,000 tokens (free), lo que le permite generar respuestas muy largas y detalladas.</p>
           <div class="chart-list">
             <div class="chart-row">
               <div class="chart-label">NewserPlus (Verbo AI)</div>
               <div class="bar-track">
-                <div class="bar-fill verbo" style="width:33%"></div>
+                <div class="bar-fill verbo" style="width:12.5%"></div>
               </div>
-              <div class="chart-score">32 769</div>
+              <div class="chart-score">16 000</div>
             </div>
             <div class="chart-row">
               <div class="chart-label">GPT-4o mini</div>
@@ -1188,9 +1187,9 @@
               <div class="scatter-dot"></div>
               <div class="scatter-dot-label">NewserAdvanced1.5<span class="scatter-dot-sub">15 créditos · 3/min</span></div>
             </div>
-            <div class="scatter-dot-wrap" style="left:90%; top:28.7%; --dot-color:#d56f3c;">
+            <div class="scatter-dot-wrap" style="left:72%; top:8%; --dot-color:#d56f3c;">
               <div class="scatter-dot"></div>
-              <div class="scatter-dot-label">NewserPlus<span class="scatter-dot-sub">250 créditos · 10/min</span></div>
+              <div class="scatter-dot-label">NewserPlus<span class="scatter-dot-sub">200 créditos · 4/min</span></div>
             </div>
           </div>
         </div>
@@ -1209,7 +1208,7 @@
             <tr>
               <td>Mayor ventana de salida del mercado (todas las familias)</td>
               <td><strong>Claude Opus 4.8 / Fable 5</strong></td>
-              <td>128 000 tokens de salida, frente a 32 769 de NewserPlus.</td>
+              <td>128 000 tokens de salida, frente a 16 000 de NewserPlus.</td>
             </tr>
             <tr>
               <td>Mejor rendimiento por crédito</td>
@@ -1222,17 +1221,76 @@
               <td>30 req/min en API y 45 req/min en web.</td>
             </tr>
             <tr>
-              <td>Mayor ventana de salida</td>
+              <td>Mayor ventana de salida (Verbo AI)</td>
               <td><strong>NewserPlus</strong></td>
-              <td><code>maxTokens: 32769</code>.</td>
+              <td><code>maxTokens: 16 000</code> (con G4F/Anthropic) o <code>8 000</code> (free).</td>
             </tr>
             <tr>
               <td>Mejor punto medio entre costo y capacidad</td>
               <td><strong>NewserAdvanced</strong></td>
-              <td>6 créditos, 2048 tokens y soporte de herramientas.</td>
+              <td>6 créditos, 2 800 tokens y soporte de herramientas.</td>
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <div class="table-wrap">
+        <h3>NewserPlus: Ventajas y desventajas</h3>
+        <p>Comparativa directa de NewserPlus contra otros modelos de la familia Verbo AI.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Aspecto</th>
+              <th>Supera a</th>
+              <th>No supera a</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Ventana de salida</strong></td>
+              <td>NewserLite (900), NewserAdvanced (2 800), NewserAdvanced1.5 (3 072)</td>
+              <td>Claude Opus 4.8 (128 000), Gemini 2.5 Pro (65 536)</td>
+            </tr>
+            <tr>
+              <td><strong>Contexto</strong></td>
+              <td>Todos los modelos Verbo AI (200K con G4F/Anthropic)</td>
+              <td>Claude Opus 4.8 (200K), Gemini 2.5 Pro (1M+)</td>
+            </tr>
+            <tr>
+              <td><strong>Coding complejo</strong></td>
+              <td>NewserLite, NewserAdvanced, NewserAdvanced1.5</td>
+              <td>Modelos especializados en coding (Claude 3.5 Sonnet, GPT-4 Turbo)</td>
+            </tr>
+            <tr>
+              <td><strong>Razonamiento</strong></td>
+              <td>NewserLite, NewserAdvanced, NewserAdvanced1.5</td>
+              <td>Modelos reasoning especializados (o1, Claude Opus)</td>
+            </tr>
+            <tr>
+              <td><strong>Costo por uso</strong></td>
+              <td>-</td>
+              <td>NewserLiteCompact (1), NewserLite (2), NewserAdvanced (6), NewserAdvanced1.5 (15)</td>
+            </tr>
+            <tr>
+              <td><strong>Rate limit</strong></td>
+              <td>-</td>
+              <td>NewserLiteCompact (30), NewserLite (24), NewserAdvanced (5), NewserAdvanced1.5 (3)</td>
+            </tr>
+            <tr>
+              <td><strong>Herramientas</strong></td>
+              <td>NewserLite, NewserAdvanced</td>
+              <td>NewserAdvanced1.5 (igual), modelos con más herramientas</td>
+            </tr>
+            <tr>
+              <td><strong>Imágenes</strong></td>
+              <td>NewserLite, NewserAdvanced</td>
+              <td>NewserAdvanced1.5 (igual), Midjourney, DALL-E 3</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="subtle" style="margin-top:12px;">
+          <strong>Nota:</strong> NewserPlus se degrada automáticamente a NewserAdvanced1.5 después de 10 mensajes/hora por cuenta para evitar sobrecarga.
+        </p>
       </div>
     </section>
 

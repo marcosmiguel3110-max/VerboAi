@@ -159,11 +159,11 @@ let modoActual = localStorage.getItem('verboAiModo') || 'general';
 let modeloActual = localStorage.getItem('verboAiModelo') || 'NewserLite';
 let modelosDisponibles = [
 
-  { nombre: 'NewserLite', descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.', costoCreditos: 2, rateLimitMax: 24, rateLimitMaxWeb: 36 },
-  { nombre: 'NewserLiteCompact', descripcion: 'Igual que NewserLite pero mas economico: ~17% mas eficiente en el uso de tokens por respuesta.', costoCreditos: 1, rateLimitMax: 30, rateLimitMaxWeb: 45, badge: 'eco', disponible: true },
-  { nombre: 'NewserAdvanced', descripcion: 'Mas potente. Genera imagenes, busca en la web y consulta el clima.', costoCreditos: 6, rateLimitMax: 5, rateLimitMaxWeb: 8, badge: 'beta', disponible: true },
-  { nombre: 'NewserAdvanced1.5', descripcion: 'El mas potente. Razonamiento aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Tambien genera imagenes con mas detalle (2 modelos de IA), maximo 2 por hora.', costoCreditos: 15, rateLimitMax: 3, rateLimitMaxWeb: 4, badge: 'pro', disponible: true },
-  { nombre: 'NewserPlus', descripcion: 'Exclusivo admin. Modelo mas potente para codigo: especializado en programacion, agentic coding y desarrollo, con razonamiento profundo, ejecucion de codigo real, busqueda web y generacion de imagenes en alta calidad.', costoCreditos: 50, rateLimitMax: 5, rateLimitMaxWeb: 6, badge: 'admin', disponible: true, soloAdmin: true },
+  { nombre: 'NewserLite', descripcion: 'Rapido y ligero. Perfecto para consultas cotidianas.', costoCreditos: 2, rateLimitMax: 24, rateLimitMaxWeb: 36 },
+  { nombre: 'NewserLiteCompact', descripcion: 'Ultra ligero. Ideal para consultas rapidas y frecuentes.', costoCreditos: 1, rateLimitMax: 30, rateLimitMaxWeb: 45, badge: 'eco', disponible: true },
+  { nombre: 'NewserAdvanced', descripcion: 'Potente. Genera imagenes, busca en la web y razona mejor.', costoCreditos: 6, rateLimitMax: 5, rateLimitMaxWeb: 8, badge: 'PRO', disponible: true },
+  { nombre: 'NewserAdvanced1.5', descripcion: 'El mas potente. Ejecuta codigo real y genera imagenes de alta calidad.', costoCreditos: 15, rateLimitMax: 3, rateLimitMaxWeb: 4, badge: 'pro', disponible: true },
+  { nombre: 'NewserPlus', descripcion: 'Ultra potente. Coding complejo y razonamiento avanzado.', costoCreditos: 200, rateLimitMax: 4, rateLimitMaxWeb: 6, badge: 'ULTRA/PRO/CODING', disponible: true },
 ];
 let hayCuaderno = false;
 let chatIdActual = localStorage.getItem('verboAiChatId') || null;
@@ -735,52 +735,6 @@ btnCerrarSettings.addEventListener('click', () => { overlaySettings.classList.ad
 overlaySettings.addEventListener('click', (ev) => { if (ev.target === overlaySettings) { overlaySettings.classList.add('oculto'); detenerPollingCreditos(); } });
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape' && !overlaySettings.classList.contains('oculto')) overlaySettings.classList.add('oculto');
-});
-
-// ---------- Actualizaciones (novedades) ----------
-// Agrega o edita entradas acá. Las mas nuevas van primero.
-const listaDeActualizaciones = [
-  { fecha: '17 jul 2026', titulo: 'Creditos Y fixes y adds', texto: 'Agregadas funcionalidades para gestionar creditos y correcciones de bugs ademas agregamos nuevas caracteristicas.' },
-];
-
-const btnAbrirActualizaciones = document.getElementById('btnAbrirActualizaciones');
-const btnCerrarActualizaciones = document.getElementById('btnCerrarActualizaciones');
-const overlayActualizaciones = document.getElementById('overlayActualizaciones');
-const listaActualizacionesEl = document.getElementById('listaActualizaciones');
-
-function renderActualizaciones() {
-  if (!listaActualizacionesEl) return;
-  if (!listaDeActualizaciones.length) {
-    listaActualizacionesEl.innerHTML = '<p class="lista-actualizaciones-vacio">Todavia no hay novedades publicadas.</p>';
-    return;
-  }
-  listaActualizacionesEl.innerHTML = listaDeActualizaciones.map((a) => (
-    '<div class="actualizacion-item">' +
-      '<div class="actualizacion-item-fecha">' + escapeHtml(a.fecha || '') + '</div>' +
-      '<div class="actualizacion-item-titulo">' + escapeHtml(a.titulo || '') + '</div>' +
-      '<div class="actualizacion-item-texto">' + escapeHtml(a.texto || '') + '</div>' +
-    '</div>'
-  )).join('');
-}
-
-if (btnAbrirActualizaciones && overlayActualizaciones) {
-  btnAbrirActualizaciones.addEventListener('click', () => {
-    renderActualizaciones();
-    overlayActualizaciones.classList.remove('oculto');
-  });
-}
-if (btnCerrarActualizaciones && overlayActualizaciones) {
-  btnCerrarActualizaciones.addEventListener('click', () => overlayActualizaciones.classList.add('oculto'));
-}
-if (overlayActualizaciones) {
-  overlayActualizaciones.addEventListener('click', (ev) => {
-    if (ev.target === overlayActualizaciones) overlayActualizaciones.classList.add('oculto');
-  });
-}
-document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape' && overlayActualizaciones && !overlayActualizaciones.classList.contains('oculto')) {
-    overlayActualizaciones.classList.add('oculto');
-  }
 });
 
 // ---------- Codes (canjear codigos por creditos) ----------
