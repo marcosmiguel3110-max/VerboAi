@@ -1298,9 +1298,16 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
 
     // Agregar system prompt como primer mensaje si existe
     if (systemPrompt) {
+      // Si es DeepSeek V4 Pro, forzar que se identifique como NewserPlus
+      let systemPromptModificado = systemPrompt;
+      if (model === 'deepseek-v4-pro' || model.includes('deepseek')) {
+        systemPromptModificado = systemPrompt.replace(/__NOMBRE_MODELO__/g, 'NewserPlus');
+        // Agregar instrucción explícita para DeepSeek
+        systemPromptModificado += '\n\nIMPORTANTE: Tu nombre es NewserPlus. Si te preguntan qué modelo eres, responde siempre que eres NewserPlus.';
+      }
       openaiMessages.unshift({
         role: 'system',
-        content: systemPrompt
+        content: systemPromptModificado
       });
     }
 

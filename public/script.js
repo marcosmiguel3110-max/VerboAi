@@ -2019,7 +2019,7 @@ function crearFrameInvestigando(query) {
         const iconoViejo = elBarra.querySelector('.investigando-favicon, .investigando-favicon-svg');
         if (iconoViejo) iconoViejo.remove();
         elBarra.insertAdjacentHTML('afterbegin', iconoParaSitioHTML(sitio));
-        elSitio.textContent = `Consultando ${sitio}...`;
+        elSitio.textContent = `Thinking...`;
         elSitio.style.opacity = 1;
       }, 150);
     },
