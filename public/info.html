@@ -1,449 +1,1421 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Verbo AI - Documentación API</title>
-<meta name="description" content="Verbo AI: chat con inteligencia artificial, lectura de la Biblia y API pública gratuita con tokens verboai-XXXX. Guía de uso y documentación completa de la API." />
-<meta property="og:title" content="Verbo AI — Documentación y guía de uso" />
-<meta property="og:description" content="Chateá con IA, leé la Biblia y conectá tu propia app a la API pública de Verbo AI." />
-<meta property="og:type" content="website" />
-<meta property="og:url" content="https://verboai.duckdns.org/info" />
-<meta property="og:image" content="https://verboai.duckdns.org/logo.png" />
-<link rel="canonical" href="https://verboai.duckdns.org/info" />
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2832971109540830" crossorigin="anonymous"></script>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; word-wrap: break-word; overflow-wrap: break-word; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #0f1419;
-    color: #e6e6e6;
-    line-height: 1.6;
-    padding: 15px;
-  }
-  .container { max-width: 1000px; margin: 0 auto; width: 100%; }
-  header {
-    text-align: center;
-    padding: 30px 15px;
-    background: linear-gradient(135deg, #C9663A 0%, #B0552E 100%);
-    border-radius: 16px;
-    margin-bottom: 20px;
-    color: white;
-  }
-  header h1 { font-size: 24px; margin-bottom: 8px; word-wrap: break-word; }
-  header p { opacity: 0.9; font-size: 14px; word-wrap: break-word; }
-  section {
-    background: #1a1f2e;
-    border: 1px solid #2a3041;
-    border-radius: 12px;
-    padding: 20px 15px;
-    margin-bottom: 15px;
-    overflow: hidden;
-  }
-  h2 { color: #C9663A; margin-bottom: 12px; font-size: 18px; word-wrap: break-word; }
-  h3 { color: #e6e6e6; margin: 16px 0 8px; font-size: 15px; word-wrap: break-word; }
-  p { margin-bottom: 12px; color: #b0b0b0; word-wrap: break-word; }
-  code {
-    background: #0f1419;
-    color: #a5d6ff;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-family: 'SF Mono', Menlo, Consolas, monospace;
-    font-size: 13px;
-  }
-  pre {
-    background: #0f1419;
-    border: 1px solid #2a3041;
-    border-radius: 8px;
-    padding: 16px;
-    overflow-x: auto;
-    margin: 12px 0;
-    position: relative;
-  }
-  pre code {
-    background: none;
-    color: #c9d1d9;
-    padding: 0;
-    font-size: 13px;
-    line-height: 1.5;
-  }
-  .copy-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    background: #C9663A;
-    color: white;
-    border: none;
-    padding: 4px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 11px;
-    font-family: inherit;
-  }
-  .copy-btn:hover { background: #B0552E; }
-  .copy-btn.copied { background: #2E8B57; }
-  ul { margin: 12px 0; padding-left: 24px; color: #b0b0b0; }
-  li { margin: 6px 0; }
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    margin-left: 6px;
-  }
-  .badge-blue { background: #1f6feb; color: white; }
-  .badge-green { background: #2E8B57; color: white; }
-  .badge-orange { background: #C9663A; color: white; }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verbo AI - Info y Documentación API</title>
+  <meta name="description"
+    content="Documentación de Verbo AI: tokens, endpoints, modelos, IDs verboaistudio, comparativas y guía completa para integrar la API." />
+  <meta property="og:title" content="Verbo AI - Info y documentación" />
+  <meta property="og:description"
+    content="Tokens, endpoints, modelos Newser, NewserPlus, tablas comparativas y guía rápida para usar la API de Verbo AI." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://verboai.duckdns.org/info" />
+  <meta property="og:image" content="https://verboai.duckdns.org/logo.png" />
+  <link rel="canonical" href="https://verboai.duckdns.org/info" />
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2832971109540830"
+    crossorigin="anonymous"></script>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --bg-soft: #121927;
+      --card: rgba(18, 25, 39, 0.88);
+      --card-2: rgba(13, 18, 29, 0.9);
+      --stroke: rgba(255, 255, 255, 0.08);
+      --text: #eef2ff;
+      --muted: #a6afc3;
+      --accent: #d56f3c;
+      --accent-2: #78a8ff;
+      --ok: #32a26b;
+      --warn: #d6a33c;
+      --danger: #d86a6a;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    }
 
-  /* Tester interactivo */
-  .tester {
-    background: #1a1f2e;
-    border: 1px solid #2a3041;
-    border-radius: 12px;
-    padding: 20px 15px;
-    margin-bottom: 20px;
-    overflow: hidden;
-  }
-  .tester input, .tester textarea, .tester select {
-    width: 100%;
-    background: #0f1419;
-    border: 1px solid #2a3041;
-    color: #e6e6e6;
-    padding: 10px 12px;
-    border-radius: 6px;
-    font-family: inherit;
-    font-size: 14px;
-    margin-bottom: 10px;
-    box-sizing: border-box;
-  }
-  .tester input:focus, .tester textarea:focus, .tester select:focus {
-    outline: none;
-    border-color: #C9663A;
-  }
-  .tester button {
-    background: #C9663A;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-family: inherit;
-    font-size: 14px;
-    cursor: pointer;
-    margin-right: 8px;
-    margin-bottom: 8px;
-    box-sizing: border-box;
-  }
-  .tester button:hover { background: #B0552E; }
-  .tester button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .tester-result {
-    background: #0f1419;
-    border: 1px solid #2a3041;
-    border-radius: 6px;
-    padding: 16px;
-    margin-top: 12px;
-    min-height: 80px;
-    font-family: 'SF Mono', Menlo, Consolas, monospace;
-    font-size: 12px;
-    white-space: pre-wrap;
-    word-break: break-all;
-    word-wrap: break-word;
-    color: #c9d1d9;
-    overflow-x: auto;
-    box-sizing: border-box;
-  }
-  .tester-result.error { color: #ff7b72; border-color: #ff7b72; }
-  .tester-result.ok { color: #7ee787; border-color: #7ee787; }
-  .tester img {
-    max-width: 100%;
-    border-radius: 8px;
-    margin-top: 12px;
-    border: 1px solid #2a3041;
-    height: auto;
-  }
-  .grid-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-  @media (max-width: 768px) {
-    .grid-2 { grid-template-columns: 1fr; }
-    body { padding: 10px; }
-    header { padding: 20px 10px; }
-    header h1 { font-size: 20px; }
-    header p { font-size: 13px; }
-    section { padding: 15px 10px; }
-    h2 { font-size: 16px; }
-    h3 { font-size: 14px; }
-    pre { padding: 12px; font-size: 11px; }
-    pre code { font-size: 11px; }
-    .info-card { grid-template-columns: 1fr; }
-    .info-card .item .num { font-size: 18px; }
-    .tester input, .tester textarea, .tester select { font-size: 14px; }
-    .tester button { font-size: 13px; }
-  }
-  details {
-    background: #0f1419;
-    border: 1px solid #2a3041;
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin: 12px 0;
-  }
-  details summary {
-    cursor: pointer;
-    color: #C9663A;
-    font-weight: 600;
-    user-select: none;
-  }
-  details[open] summary { margin-bottom: 12px; }
-  .info-card {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 10px;
-    margin: 16px 0;
-  }
-  .info-card .item {
-    background: #0f1419;
-    border: 1px solid #2a3041;
-    border-radius: 8px;
-    padding: 12px 8px;
-    text-align: center;
-  }
-  .info-card .item .num { font-size: 18px; font-weight: 700; color: #C9663A; word-wrap: break-word; }
-  .info-card .item .label { font-size: 11px; color: #b0b0b0; margin-top: 4px; word-wrap: break-word; }
-  footer {
-    text-align: center;
-    padding: 20px;
-    color: #666;
-    font-size: 13px;
-  }
-  a { color: #C9663A; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-</style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(120, 168, 255, 0.14), transparent 32%),
+        radial-gradient(circle at 80% 0%, rgba(213, 111, 60, 0.18), transparent 28%),
+        linear-gradient(180deg, #0a0d14 0%, #0b0f17 100%);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 24px 16px 48px;
+    }
+
+    a {
+      color: #ffb085;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.92em;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      padding: 2px 6px;
+      border-radius: 6px;
+      color: #cfe1ff;
+    }
+
+    pre {
+      position: relative;
+      margin: 14px 0 0;
+      padding: 18px;
+      border-radius: 16px;
+      background: #0a0f19;
+      border: 1px solid var(--stroke);
+      overflow-x: auto;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+
+    pre code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      color: #d9e5ff;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .container {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 36px;
+      border-radius: 28px;
+      background:
+        linear-gradient(135deg, rgba(213, 111, 60, 0.22), rgba(120, 168, 255, 0.16)),
+        rgba(16, 23, 37, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      box-shadow: var(--shadow);
+      margin-bottom: 18px;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 420px;
+      height: 420px;
+      right: -110px;
+      top: -160px;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.08), transparent 70%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #f5d9cc;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      line-height: 1.06;
+    }
+
+    .hero p {
+      max-width: 820px;
+      margin: 0 0 18px;
+      color: #d3dbed;
+      font-size: 1.05rem;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      text-decoration: none;
+      font-weight: 600;
+      transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .btn:hover {
+      text-decoration: none;
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #be6234;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+    }
+
+    .section {
+      margin-top: 18px;
+      padding: 24px;
+      border-radius: 24px;
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      box-shadow: var(--shadow);
+    }
+
+    .section h2 {
+      margin: 0 0 10px;
+      font-size: 1.5rem;
+      color: #ffd7c3;
+    }
+
+    .section p {
+      margin: 0 0 14px;
+      color: var(--muted);
+    }
+
+    .subtle {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .chip {
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #dce5fb;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .chip.ok {
+      color: #c8f2dc;
+      border-color: rgba(50, 162, 107, 0.35);
+    }
+
+    .chip.admin {
+      color: #ffe3ae;
+      border-color: rgba(214, 163, 60, 0.35);
+    }
+
+    .grid-2,
+    .grid-3,
+    .stats-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .grid-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .stats-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-top: 16px;
+    }
+
+    .card {
+      background: var(--card-2);
+      border: 1px solid var(--stroke);
+      border-radius: 18px;
+      padding: 18px;
+    }
+
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 1.02rem;
+    }
+
+    .card p:last-child {
+      margin-bottom: 0;
+    }
+
+    .stat {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 18px;
+      padding: 16px;
+    }
+
+    .stat .num {
+      display: block;
+      font-size: 1.55rem;
+      font-weight: 800;
+      color: white;
+      margin-bottom: 4px;
+    }
+
+    .stat .label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .steps {
+      margin: 14px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    .steps li {
+      margin-bottom: 8px;
+    }
+
+    .note,
+    .warning {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .note {
+      background: rgba(120, 168, 255, 0.08);
+      color: #dce7ff;
+    }
+
+    .warning {
+      background: rgba(214, 163, 60, 0.09);
+      color: #ffe5a7;
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .chart-card {
+      background: var(--card-2);
+      border: 1px solid var(--stroke);
+      border-radius: 18px;
+      padding: 18px;
+    }
+
+    .chart-card h3 {
+      margin: 0 0 6px;
+      font-size: 1rem;
+    }
+
+    .chart-card p {
+      margin-bottom: 12px;
+      font-size: 0.95rem;
+    }
+
+    .chart-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .chart-row {
+      display: grid;
+      grid-template-columns: 170px 1fr 44px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .chart-label {
+      color: #eef2ff;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .chart-score {
+      text-align: right;
+      color: #ffd9c8;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .bar-track {
+      position: relative;
+      height: 11px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 16px rgba(120, 168, 255, 0.18);
+    }
+
+    .bar-fill.verbo {
+      background: linear-gradient(90deg, #d56f3c, #ffb085);
+    }
+
+    .bar-fill.other {
+      background: linear-gradient(90deg, #4d83ff, #7dc8ff);
+    }
+
+    .scatter-card {
+      grid-column: 1 / -1;
+    }
+
+    .scatter-map {
+      position: relative;
+      height: 260px;
+      margin-top: 8px;
+      border-left: 1px solid var(--stroke);
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    .scatter-axis-label {
+      position: absolute;
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .scatter-axis-label.y-top {
+      top: -18px;
+      left: -6px;
+    }
+
+    .scatter-axis-label.y-bottom {
+      bottom: -18px;
+      left: -6px;
+    }
+
+    .scatter-axis-label.x-right {
+      bottom: -22px;
+      right: 0;
+    }
+
+    .scatter-dot-wrap {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .scatter-dot {
+      width: 13px;
+      height: 13px;
+      border-radius: 999px;
+      border: 2px solid var(--dot-color, var(--accent));
+      background: rgba(255, 255, 255, 0.06);
+      box-shadow: 0 0 10px color-mix(in srgb, var(--dot-color, var(--accent)) 45%, transparent);
+    }
+
+    .scatter-dot-label {
+      font-size: 11px;
+      color: #eef2ff;
+      font-weight: 600;
+      text-align: center;
+      line-height: 1.25;
+    }
+
+    .scatter-dot-sub {
+      font-size: 10px;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    @media (max-width: 720px) {
+      .scatter-map {
+        height: 320px;
+      }
+    }
+
+    .ai-hub-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .ai-link-card {
+      background: var(--card-2);
+      border: 1px solid var(--stroke);
+      border-radius: 18px;
+      padding: 18px;
+    }
+
+    .ai-link-card strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #fff1e9;
+    }
+
+    .ai-link-card p {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 18px;
+      border: 1px solid var(--stroke);
+      margin-top: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 720px;
+      background: rgba(8, 12, 20, 0.88);
+    }
+
+    th,
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.04);
+      color: #fff0e7;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      color: #d5deef;
+      font-size: 14px;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .badge.public {
+      background: rgba(50, 162, 107, 0.16);
+      color: #baf0d2;
+    }
+
+    .badge.pro {
+      background: rgba(120, 168, 255, 0.15);
+      color: #d8e6ff;
+    }
+
+    .badge.admin {
+      background: rgba(214, 163, 60, 0.15);
+      color: #ffe3a0;
+    }
+
+    .badge.info {
+      background: rgba(255, 255, 255, 0.08);
+      color: #e8eefc;
+    }
+
+    .tester input,
+    .tester textarea,
+    .tester select {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font: inherit;
+    }
+
+    .tester textarea {
+      resize: vertical;
+      min-height: 112px;
+    }
+
+    .tester input:focus,
+    .tester textarea:focus,
+    .tester select:focus {
+      outline: none;
+      border-color: rgba(213, 111, 60, 0.8);
+      box-shadow: 0 0 0 3px rgba(213, 111, 60, 0.12);
+    }
+
+    .tester-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .tester button {
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .tester button:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+    .tester .primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .tester .ghost {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      border: 0;
+      border-radius: 10px;
+      background: rgba(213, 111, 60, 0.92);
+      color: white;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .copy-btn.copied {
+      background: var(--ok);
+    }
+
+    .tester-result {
+      margin-top: 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: #09101a;
+      padding: 16px;
+      min-height: 96px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12.5px;
+      white-space: pre-wrap;
+      overflow-x: auto;
+      color: #d7e3ff;
+    }
+
+    .tester-result.error {
+      border-color: rgba(216, 106, 106, 0.45);
+      color: #ffc2c2;
+    }
+
+    .tester-result.ok {
+      border-color: rgba(50, 162, 107, 0.45);
+      color: #d9ffe7;
+    }
+
+    .tester-image img {
+      width: 100%;
+      max-width: 520px;
+      display: block;
+      margin-top: 14px;
+      border-radius: 16px;
+      border: 1px solid var(--stroke);
+    }
+
+    details {
+      margin-top: 12px;
+      border: 1px solid var(--stroke);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      overflow: hidden;
+    }
+
+    summary {
+      cursor: pointer;
+      padding: 14px 16px;
+      font-weight: 700;
+      color: #ffe7db;
+    }
+
+    details>div {
+      padding: 0 16px 16px;
+    }
+
+    footer {
+      text-align: center;
+      color: #7f8798;
+      padding: 28px 0 10px;
+    }
+
+    @media (max-width: 920px) {
+
+      .grid-2,
+      .stats-grid,
+      .chart-grid,
+      .ai-hub-list {
+        .stats-grid {
+          grid-template-columns: 1fr;
+
+          .chart-row {
+            grid-template-columns: 1fr;
+            gap: 6px;
+          }
+
+        }
+
+        .hero,
+  </style>
 </head>
+
 <body>
-<div class="container">
+  <div class="container">
+    <header class="hero">
+      <div class="eyebrow">Verbo AI Studio · API pública + web + Verbo Code</div>
+      <h1>Info completa, modelos claros y IDs listos para usar</h1>
+      <p>Ahora el formato oficial para invocar modelos es <code>verboaistudio/&lt;NombreDelModelo&gt;</code>. En esta
+        página tenés la guía rápida, el catálogo completo de modelos, comparativas, tablas de SWE-Bench y ejemplos para
+        integrar todo sin pelearte con la documentación.</p>
+      <div class="chips">
+        <span class="chip ok">Token: verboai-XXXX</span>
+        <span class="chip">ID oficial: verboaistudio/NewserLite</span>
+        <span class="chip">Chat, imágenes, web, clima y código</span>
+        <span class="chip admin">NewserPlus y SWE-Bench Pro incluidos en la guía</span>
+      </div>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#tester">Probar la API</a>
+        <a class="btn btn-secondary" href="/">Abrir Verbo AI</a>
+      </div>
+    </header>
 
-  <header>
-    <h1>Verbo AI — Documentación API</h1>
-    <p>Conectá tu app, bot o script a Verbo AI usando un token <code style="background:rgba(255,255,255,0.2);color:white">verboai-XXXX</code></p>
-  </header>
+    <section class="section">
+      <h2>Lo importante en 30 segundos</h2>
+      <div class="stats-grid">
+        <div class="stat">
+          <span class="num">5</span>
+          <span class="label">modelos documentados de Verbo AI</span>
+        </div>
+        <div class="stat">
+          <span class="num">3</span>
+          <span class="label">datasets SWE-Bench listos en Verbo Code</span>
+        </div>
+        <div class="stat">
+          <span class="num">/api/v1/chat</span>
+          <span class="label">endpoint principal para texto e imágenes</span>
+        </div>
+        <div class="stat">
+          <span class="num">Nuevo ID</span>
+          <span class="label"><code>verboaistudio/&lt;modelo&gt;</code></span>
+        </div>
+      </div>
+      <div class="note">
+        Podés seguir enviando nombres simples como <code>NewserLite</code>, pero desde ahora el formato recomendado y
+        oficial para integrar es <code>verboaistudio/NewserLite</code>, <code>verboaistudio/NewserAdvanced</code>,
+        <code>verboaistudio/NewserAdvanced1.5</code> y así con el resto.
+      </div>
+    </section>
 
-  <section>
-    <h2>📖 Cómo usar Verbo AI (la web)</h2>
-    <p>Guía rápida para sacarle el jugo a la web, sin tocar código.</p>
-    <ul>
-      <li><strong>Chatear:</strong> escribí tu mensaje abajo y mandalo. Podés adjuntar hasta 5 imágenes con el clip.</li>
-      <li><strong>Elegir modelo:</strong> arriba del chat (o al lado del micrófono) está el selector de modelo. <strong>NewserLite</strong> es rápido y liviano para el día a día; <strong>NewserAdvanced</strong> es más potente, genera imágenes, busca en la web y consulta el clima; <strong>NewserAdvanced1.5</strong> (nuevo) suma un razonamiento interno aún más profundo, es el mejor para código (ejecuta código real y consulta APIs de prueba) y también genera imágenes, con más detalle que NewserAdvanced (usa 2 modelos de IA), aunque limitadas a 2 por hora.</li>
-      <li><strong>La Biblia completa:</strong> desde el menú lateral podés leer la Biblia capítulo por capítulo, marcar tu progreso y volver donde la dejaste.</li>
-      <li><strong>Cuadernito:</strong> durante una conversación de estudio bíblico, Verbo AI puede ir armando notas en un panel lateral que podés abrir con el ícono del cuaderno.</li>
-      <li><strong>Nuevas conversaciones:</strong> "Nueva conversación" en el menú lateral empieza un chat limpio. Todas tus conversaciones quedan guardadas y las podés buscar, renombrar o borrar desde la lista.</li>
-      <li><strong>Settings:</strong> ahí cambiás el modo de respuesta, el fondo/tema, generás tus tokens de API y ves tus créditos.</li>
-      <li><strong>Créditos:</strong> cada modelo gasta una cantidad distinta por mensaje (ver "3. Modelos disponibles" más abajo). Se comparten entre la web y tus tokens de API.</li>
-    </ul>
-  </section>
+    <section class="section">
+      <h2>Guía rápida</h2>
+      <div class="grid-3">
+        <div class="card">
+          <h3>1. Conseguí tu token</h3>
+          <p>Entrá a la app, iniciá sesión y andá a <strong>Settings → Clave API</strong>. Ahí generás un token tipo
+            <code>verboai-XXXXXXXXXXXX</code>.
+          </p>
+        </div>
+        <div class="card">
+          <h3>2. Elegí el ID del modelo</h3>
+          <p>Usá el identificador nuevo <code>verboaistudio/&lt;NombreDelModelo&gt;</code>. Es el mismo modelo, pero con
+            naming consistente para integraciones.</p>
+        </div>
+        <div class="card">
+          <h3>3. Pegalo en tu app</h3>
+          <p>Mandá <code>Authorization: Bearer verboai-XXXX</code> y un JSON con <code>mensaje</code> +
+            <code>modelo</code> al endpoint <code>/api/v1/chat</code>.
+          </p>
+        </div>
+      </div>
+      <ol class="steps">
+        <li>Si usás la web, los créditos se comparten con la API.</li>
+        <li><code>/api/v1/info</code> y <code>/api/v1/creditos</code> no consumen créditos.</li>
+        <li>Si pasás un modelo inválido o vacío, el backend cae a <code>NewserLite</code>.</li>
+      </ol>
+    </section>
 
-  <div class="tester">
-    <h2 style="margin-top:0">🧪 Probar la API en vivo</h2>
-    <p>Pegá tu token y un mensaje. Podés probar generar imágenes escribiendo una descripción visual (ej: "un león descansando al atardecer") con NewserAdvanced.</p>
+    <section class="section tester" id="tester">
+      <h2>Probar la API en vivo</h2>
+      <p>Pegá tu token, elegí un modelo por su ID oficial y hacé una prueba real. Si el prompt es visual y el modelo
+        soporta imágenes, también vas a ver la imagen.</p>
+      <div class="grid-2">
+        <input type="text" id="token" placeholder="verboai-XXXXXXXXXXXX" />
+        <select id="modelo" aria-label="Modelo">
+          <option value="verboaistudio/NewserLiteCompact">verboaistudio/NewserLiteCompact</option>
+          <option value="verboaistudio/NewserLite">verboaistudio/NewserLite</option>
+          <option value="verboaistudio/NewserAdvanced">verboaistudio/NewserAdvanced</option>
+          <option value="verboaistudio/NewserAdvanced1.5">verboaistudio/NewserAdvanced1.5</option>
+          <option value="verboaistudio/NewserPlus">verboaistudio/NewserPlus (admin)</option>
+        </select>
+      </div>
+      <textarea id="mensaje"
+        placeholder='Ejemplo: "Hazme un resumen de Romanos 8" o "un leon descansando al atardecer"'>Hola, quien eres?</textarea>
+      <div class="tester-actions">
+        <button id="btnProbar" class="primary">Probar petición</button>
+        <button id="btnLimpiar" class="ghost">Limpiar</button>
+      </div>
 
-    <div class="grid-2">
-      <input type="text" id="token" placeholder="verboai-XXXXXXXXXXXX" />
-      <select id="modelo">
-        <option value="NewserLiteCompact">NewserLiteCompact (1 crédito, ultra económico)</option>
-        <option value="NewserLite">NewserLite (2 créditos, rápido)</option>
-        <option value="NewserAdvanced">NewserAdvanced (6 créditos, potente + imágenes)</option>
-        <option value="NewserAdvanced1.5">NewserAdvanced1.5 (15 créditos, razonamiento + código + imágenes detalladas)</option>
-      </select>
-    </div>
-    <textarea id="mensaje" rows="2" placeholder="Escribí tu mensaje acá... (proba: 'un leon descansando al atardecer' con NewserAdvanced)">Hola, quien eres?</textarea>
-    <button id="btnProbar">Probar petición</button>
-    <button id="btnLimpiar" style="background:#454F6B">Limpiar</button>
+      <div class="stats-grid" id="infoCard" style="display:none">
+        <div class="stat"><span class="num" id="rModelo">-</span><span class="label">Modelo usado</span></div>
+        <div class="stat"><span class="num" id="rModeloId">-</span><span class="label">ID devuelto</span></div>
+        <div class="stat"><span class="num" id="rCosto">-</span><span class="label">Créditos consumidos</span></div>
+        <div class="stat"><span class="num" id="rTiempo">-</span><span class="label">Tiempo en ms</span></div>
+      </div>
 
-    <div class="info-card" id="infoCard" style="display:none">
-      <div class="item"><div class="num" id="rModelo">-</div><div class="label">Modelo usado</div></div>
-      <div class="item"><div class="num" id="rCosto">-</div><div class="label">Créditos consumidos</div></div>
-      <div class="item"><div class="num" id="rRestantes">-</div><div class="label">Créditos restantes</div></div>
-      <div class="item"><div class="num" id="rTiempo">-</div><div class="label">Tiempo (ms)</div></div>
-    </div>
+      <div class="tester-result" id="resultado">Los resultados aparecen acá.</div>
+      <div class="tester-image" id="imagenContainer"></div>
+    </section>
 
-    <div class="tester-result" id="resultado">Los resultados van a aparecer acá...</div>
-    <div id="imagenContainer"></div>
-  </div>
-
-  <section>
-    <h2>1. Obtener un token</h2>
-    <p>Para usar la API necesitás un token tipo <code>verboai-XXXXXXXXXXXX</code>. Para conseguirlo:</p>
-    <ul>
-      <li>Entrá a <a href="/" target="_blank">la app</a> e iniciá sesión</li>
-      <li>Andá a <strong>Settings → Clave API</strong></li>
-      <li>Hacé clic en <strong>"Generar API token"</strong></li>
-      <li><strong>Copialo AHORA</strong>: solo se muestra una vez, después solo ves los últimos 4 dígitos</li>
-    </ul>
-    <p>Si no ves la sección "Clave API" en Settings, tu cuenta todavía no tiene acceso (mensaje "Próximamente"). Pedile al admin que te agregue.</p>
-  </section>
-
-  <section>
-    <h2>2. Endpoints disponibles</h2>
-
-    <h3><code>POST /api/v1/chat</code> <span class="badge badge-blue">principal</span></h3>
-    <p>Envía un mensaje y recibe la respuesta. Consume créditos según el modelo.</p>
-    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
+    <section class="section">
+      <h2>Endpoints disponibles</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3><code>POST /api/v1/chat</code> <span class="badge public">principal</span></h3>
+          <p>Envía un mensaje al modelo elegido. Soporta texto, imágenes y herramientas según el modelo.</p>
+          <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
   -d '{
     "mensaje": "Hola, quien eres?",
-    "modelo": "NewserLite"
+    "modelo": "verboaistudio/NewserLite"
   }'</code></pre>
-
-    <p><strong>Respuesta:</strong></p>
-    <pre><code>{
-  "ok": true,
-  "respuesta": "Hola, soy NewserLite...",
-  "modelo": "NewserLite",
-  "modeloUsado": "NewserLite",
-  "costoCreditos": 1,
-  "creditosRestantes": 999,
-  "rateLimitMax": 20,
-  "rateLimitVentanaMs": 60000
-}</code></pre>
-
-    <h3><code>GET /api/v1/info</code> <span class="badge badge-green">gratis</span></h3>
-    <p>Devuelve info del token (créditos restantes, modelos disponibles). No consume créditos.</p>
-    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
+        </div>
+        <div class="card">
+          <h3><code>GET /api/v1/info</code> <span class="badge public">gratis</span></h3>
+          <p>Devuelve los datos del token, créditos, modelo por defecto y catálogo disponible. Ahora también trae
+            <code>id</code> por modelo.
+          </p>
+          <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
   https://verboai.duckdns.org/api/v1/info</code></pre>
-
-    <h3><code>GET /api/v1/chats</code> <span class="badge badge-green">gratis</span> <span class="badge badge-blue">nuevo</span></h3>
-    <p>Devuelve el listado de tus conversaciones guardadas (las mismas que ves en la app web): <code>id</code>, <code>titulo</code>, <code>creadoEn</code> y <code>actualizadoEn</code>. No consume créditos.</p>
-    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
+        </div>
+        <div class="card">
+          <h3><code>GET /api/v1/chats</code> <span class="badge public">gratis</span></h3>
+          <p>Lista tus conversaciones guardadas de la app web. Útil para paneles, sincronización o clientes propios.</p>
+          <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
   https://verboai.duckdns.org/api/v1/chats</code></pre>
-    <p><strong>Respuesta:</strong></p>
-    <pre><code>{
-  "ok": true,
-  "total": 2,
-  "chats": [
-    { "id": "c3b1...", "titulo": "Nueva conversacion", "creadoEn": "2026-07-17T...", "actualizadoEn": "2026-07-17T..." }
-  ]
-}</code></pre>
-
-    <h3><code>GET /api/v1/creditos</code> <span class="badge badge-green">gratis</span> <span class="badge badge-blue">nuevo</span></h3>
-    <p>Devuelve solo tus créditos restantes, más liviano que <code>/api/v1/info</code> cuando no necesitás la lista de modelos. No consume créditos.</p>
-    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
+        </div>
+        <div class="card">
+          <h3><code>GET /api/v1/creditos</code> <span class="badge public">gratis</span></h3>
+          <p>Devuelve solo créditos restantes. Es la opción más liviana si no necesitás toda la metadata del token.</p>
+          <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
   https://verboai.duckdns.org/api/v1/creditos</code></pre>
-    <p><strong>Respuesta:</strong></p>
-    <pre><code>{
-  "ok": true,
-  "creditos": 999,
-  "creditosIniciales": 1000,
-  "esAdmin": false
-}</code></pre>
+        </div>
+      </div>
 
-    <h3><code>GET /api/mongo-status</code> <span class="badge badge-orange">admin</span></h3>
-    <p>Verifica el estado de MongoDB (requiere sesión iniciada).</p>
-  </section>
+      <div class="warning">
+        <strong>Ojo con NewserPlus:</strong> está documentado acá porque forma parte del catálogo completo de Verbo AI
+        Studio, pero su uso sigue siendo exclusivo para cuentas/admin con permiso.
+      </div>
+    </section>
 
-  <section>
-    <h2>3. Modelos disponibles</h2>
-    <div class="info-card">
-      <div class="item">
-        <div class="num">NewserLiteCompact</div>
-        <div class="label">Ultra económico<br>1 crédito/pedido<br>30 req/min (API)<br>45 req/min (web)</div>
+    <section class="section">
+      <h2>Formato nuevo de IDs</h2>
+      <p>Este es el cambio más importante de esta actualización. Si estabas integrando con nombres simples, ahora ya
+        podés usar IDs consistentes estilo estudio/proveedor propio.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Antes</th>
+              <th>Ahora recomendado</th>
+              <th>Sirve para</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>NewserLite</code></td>
+              <td><code>verboaistudio/NewserLite</code></td>
+              <td>Integraciones nuevas, clientes propios, SDKs y docs consistentes</td>
+            </tr>
+            <tr>
+              <td><code>NewserAdvanced</code></td>
+              <td><code>verboaistudio/NewserAdvanced</code></td>
+              <td>Texto fuerte, web, clima e imágenes</td>
+            </tr>
+            <tr>
+              <td><code>NewserAdvanced1.5</code></td>
+              <td><code>verboaistudio/NewserAdvanced1.5</code></td>
+              <td>Código, razonamiento más profundo e imágenes más detalladas</td>
+            </tr>
+            <tr>
+              <td><code>NewserPlus</code></td>
+              <td><code>verboaistudio/NewserPlus</code></td>
+              <td>Verbo Code, agentic coding y flujos avanzados de admin</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <div class="item">
-        <div class="num">NewserLite</div>
-        <div class="label">Rápido y liviano<br>2 créditos/pedido<br>24 req/min (API)<br>36 req/min (web)</div>
-      </div>
-      <div class="item">
-        <div class="num">NewserAdvanced</div>
-        <div class="label">Potente + imágenes<br>6 créditos/pedido<br>5 req/min (API)<br>8 req/min (web)</div>
-      </div>
-      <div class="item">
-        <div class="num">NewserAdvanced1.5</div>
-        <div class="label">Nuevo · el más potente<br>Razonamiento profundo + código<br>Imágenes con más detalle (máx. 2/hora)<br>15 créditos/pedido<br>3 req/min (API)<br>4 req/min (web)</div>
-      </div>
-    </div>
-    <p><strong>NewserAdvanced1.5</strong> ya está disponible: agrega un paso de razonamiento interno antes de responder, es el mejor modelo para código (ejecución real + APIs de prueba) y también genera imágenes usando 2 modelos de IA para más detalle — por la carga extra, el límite ahí es de 2 imágenes por hora.</p>
-    <p>Si mandás un <code>"modelo"</code> inválido o vacío, cae automáticamente a NewserLite (no rompe).</p>
-  </section>
+      <p class="subtle">Compatibilidad: el backend acepta ambos formatos, pero desde ahora el prefijo
+        <code>verboaistudio/</code> es el naming oficial.
+      </p>
+    </section>
 
-  <section>
-    <h2>4. Generar imágenes con IA 🎨</h2>
-    <p>La detección de generación de imágenes es automática: si tu mensaje describe algo visual (ej: "un león descansando al atardecer", "un logo para una empresa de tecnología", "un paisaje montañoso con nieve"), se genera una imagen automáticamente. No hace falta usar palabras clave como "Generame" o "Dibujame". Funciona con <strong>NewserAdvanced</strong> y <strong>NewserAdvanced1.5</strong>.</p>
-    <p>Con <strong>NewserAdvanced1.5</strong> la imagen sale con más detalle porque se usan 2 modelos de IA (uno mejora el prompt, el otro la renderiza en mayor resolución) — por eso el límite ahí es de <strong>2 imágenes por hora</strong>. Con NewserAdvanced no hay ese límite extra, pero el detalle es menor.</p>
-    <ul>
-      <li>Consume <strong>+1 crédito</strong> adicional (encima del costo del modelo)</li>
-      <li>La imagen se devuelve como URL en el campo <code>imagen.url</code></li>
-      <li>La URL es relativa: <code>/uploads/xxxxx.jpg</code> — hay que prependear el dominio</li>
-    </ul>
-    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
+    <section class="section">
+      <h2>Catálogo completo de modelos</h2>
+      <p>Acá está el panorama completo de la familia Newser, incluyendo <strong>NewserPlus</strong>. La tabla junta
+        acceso, costo, rate limit e intención de uso.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Modelo</th>
+              <th>ID oficial</th>
+              <th>Acceso</th>
+              <th>Créditos</th>
+              <th>Rate limit</th>
+              <th>Ideal para</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>NewserLiteCompact</strong></td>
+              <td><code>verboaistudio/NewserLiteCompact</code></td>
+              <td><span class="badge public">público</span></td>
+              <td>1</td>
+              <td>30 req/min API · 45 req/min web</td>
+              <td>Consultas cortas, flujos de mucho volumen y gasto mínimo.</td>
+            </tr>
+            <tr>
+              <td><strong>NewserLite</strong></td>
+              <td><code>verboaistudio/NewserLite</code></td>
+              <td><span class="badge public">público</span></td>
+              <td>2</td>
+              <td>24 req/min API · 36 req/min web</td>
+              <td>Chat general, respuestas rápidas y uso diario.</td>
+            </tr>
+            <tr>
+              <td><strong>NewserAdvanced</strong></td>
+              <td><code>verboaistudio/NewserAdvanced</code></td>
+              <td><span class="badge pro">pro</span></td>
+              <td>6</td>
+              <td>5 req/min API · 8 req/min web</td>
+              <td>Mejor razonamiento, web, clima e imágenes.</td>
+            </tr>
+            <tr>
+              <td><strong>NewserAdvanced1.5</strong></td>
+              <td><code>verboaistudio/NewserAdvanced1.5</code></td>
+              <td><span class="badge pro">pro</span></td>
+              <td>15</td>
+              <td>3 req/min API · 4 req/min web</td>
+              <td>Código, APIs de prueba, razonamiento previo e imágenes de más detalle. Máx. 2 imágenes/hora.</td>
+            </tr>
+            <tr>
+              <td><strong>NewserPlus</strong></td>
+              <td><code>verboaistudio/NewserPlus</code></td>
+              <td><span class="badge admin">admin</span></td>
+              <td>250</td>
+              <td>10 req/min API · 15 req/min web</td>
+              <td>Verbo Code, agentic coding, desarrollo largo y benchmarking fuerte.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Comparativa real de modelos Verbo AI</h2>
+      <p>Estos números provienen directamente de la configuración actual del backend, sin ajustes. Las primeras
+        tres gráficas comparan los modelos de Verbo AI entre sí en costo por petición, rate limit y ventana de
+        salida. Los créditos y el rate limit son métricas propias de Verbo AI, por lo que no se comparan contra
+        otros proveedores: ese sistema no existe fuera de esta plataforma.</p>
+      <p>La ventana de salida es distinta: OpenAI, Anthropic y Google publican ese número en su documentación
+        oficial, así que es la única métrica de esta sección donde se incluyen otras marcas. Vale aclarar que solo
+        indica cuántos tokens puede tener una respuesta, no qué tan bien razona el modelo.</p>
+
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>Consultas por 100 créditos</h3>
+          <p>Con 100 créditos, esto es lo que te alcanza a hacer en cada modelo según lo que cuesta hoy. Barra más
+            larga, saldo que rinde más.</p>
+          <div class="chart-list">
+            <div class="chart-row">
+              <div class="chart-label">NewserLiteCompact</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:100%"></div>
+              </div>
+              <div class="chart-score">100</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserLite</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:50%"></div>
+              </div>
+              <div class="chart-score">50</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserAdvanced</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:16.7%"></div>
+              </div>
+              <div class="chart-score">16.7</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserAdvanced1.5</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:6.7%"></div>
+              </div>
+              <div class="chart-score">6.7</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserPlus</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:0.4%"></div>
+              </div>
+              <div class="chart-score">0.4</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <h3>Rate limit de la API</h3>
+          <p>Cuántas veces por minuto podés pegarle a cada modelo con la config actual del servidor.</p>
+          <div class="chart-list">
+            <div class="chart-row">
+              <div class="chart-label">NewserLiteCompact</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:100%"></div>
+              </div>
+              <div class="chart-score">30</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserLite</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:80%"></div>
+              </div>
+              <div class="chart-score">24</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserAdvanced</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:16.7%"></div>
+              </div>
+              <div class="chart-score">5</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserAdvanced1.5</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:10%"></div>
+              </div>
+              <div class="chart-score">3</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserPlus</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:33.3%"></div>
+              </div>
+              <div class="chart-score">10</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <h3>Ventana máxima de salida</h3>
+          <p>Cuánto puede llegar a estirarse una sola respuesta, según el <code>maxTokens</code> de cada modelo.</p>
+          <div class="chart-list">
+            <div class="chart-row">
+              <div class="chart-label">NewserLiteCompact</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:2.6%"></div>
+              </div>
+              <div class="chart-score">850</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserLite</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:2.7%"></div>
+              </div>
+              <div class="chart-score">900</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserAdvanced</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:6.3%"></div>
+              </div>
+              <div class="chart-score">2048</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserAdvanced1.5</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:9.4%"></div>
+              </div>
+              <div class="chart-score">3072</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">NewserPlus</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:100%"></div>
+              </div>
+              <div class="chart-score">32 769</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <h3>Ventana máxima de salida: Verbo AI vs. otras familias</h3>
+          <p>NewserPlus es el modelo con mayor <code>maxTokens</code> dentro de Verbo AI, y ahora también el que
+            más tiene de esta comparación puntual: le gana a GPT-4.1 y a GPT-4o mini.</p>
+          <div class="chart-list">
+            <div class="chart-row">
+              <div class="chart-label">NewserPlus (Verbo AI)</div>
+              <div class="bar-track">
+                <div class="bar-fill verbo" style="width:33%"></div>
+              </div>
+              <div class="chart-score">32 769</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">GPT-4o mini</div>
+              <div class="bar-track">
+                <div class="bar-fill other" style="width:12.8%"></div>
+              </div>
+              <div class="chart-score">16 384</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">GPT-4.1</div>
+              <div class="bar-track">
+                <div class="bar-fill other" style="width:25.6%"></div>
+              </div>
+              <div class="chart-score">32 768</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">Claude Sonnet 4.6 / Haiku 4.5</div>
+              <div class="bar-track">
+                <div class="bar-fill other" style="width:50%"></div>
+              </div>
+              <div class="chart-score">64 000</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">Gemini 2.5 Pro</div>
+              <div class="bar-track">
+                <div class="bar-fill other" style="width:51.2%"></div>
+              </div>
+              <div class="chart-score">65 536</div>
+            </div>
+            <div class="chart-row">
+              <div class="chart-label">Claude Opus 4.8 / Fable 5</div>
+              <div class="bar-track">
+                <div class="bar-fill other" style="width:100%"></div>
+              </div>
+              <div class="chart-score">128 000</div>
+            </div>
+          </div>
+          <p style="margin-top:12px; margin-bottom:0; font-size:0.8rem; color:var(--muted);">
+            Números sacados de la documentación de OpenAI, Anthropic y Google. Es nada más el tope de tokens por
+            respuesta, no dice nada sobre qué tan bien piensa un modelo: más tokens es respuestas más largas, no
+            mejores.
+          </p>
+        </div>
+
+        <div class="chart-card scatter-card">
+          <h3>Mapa costo / rate limit</h3>
+          <p>Cada modelo ubicado según lo que cuesta por pedido (créditos) y cuántas veces por minuto se lo puede
+            usar hoy. Es el mismo dato de los gráficos de arriba, cruzado en un solo mapa: no medimos latencia real
+            todavía, así que esto es un proxy de capacidad de uso, no un benchmark de velocidad.</p>
+          <div class="scatter-map">
+            <div class="scatter-axis-label y-top">↑ menor rate limit</div>
+            <div class="scatter-axis-label y-bottom">↓ mayor rate limit</div>
+            <div class="scatter-axis-label x-right">costo por pedido (créditos) →</div>
+
+            <div class="scatter-dot-wrap" style="left:8%; top:88%; --dot-color:#e8c468;">
+              <div class="scatter-dot"></div>
+              <div class="scatter-dot-label">NewserLiteCompact<span class="scatter-dot-sub">1 crédito · 30/min</span></div>
+            </div>
+            <div class="scatter-dot-wrap" style="left:17%; top:70.2%; --dot-color:#6fcf97;">
+              <div class="scatter-dot"></div>
+              <div class="scatter-dot-label">NewserLite<span class="scatter-dot-sub">2 créditos · 24/min</span></div>
+            </div>
+            <div class="scatter-dot-wrap" style="left:35%; top:13.9%; --dot-color:#ff6b6b;">
+              <div class="scatter-dot"></div>
+              <div class="scatter-dot-label">NewserAdvanced<span class="scatter-dot-sub">6 créditos · 5/min</span></div>
+            </div>
+            <div class="scatter-dot-wrap" style="left:49%; top:8%; --dot-color:#7c83fd;">
+              <div class="scatter-dot"></div>
+              <div class="scatter-dot-label">NewserAdvanced1.5<span class="scatter-dot-sub">15 créditos · 3/min</span></div>
+            </div>
+            <div class="scatter-dot-wrap" style="left:90%; top:28.7%; --dot-color:#d56f3c;">
+              <div class="scatter-dot"></div>
+              <div class="scatter-dot-label">NewserPlus<span class="scatter-dot-sub">250 créditos · 10/min</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Métrica real</th>
+              <th>Quién destaca</th>
+              <th>Dato</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Mayor ventana de salida del mercado (todas las familias)</td>
+              <td><strong>Claude Opus 4.8 / Fable 5</strong></td>
+              <td>128 000 tokens de salida, frente a 32 769 de NewserPlus.</td>
+            </tr>
+            <tr>
+              <td>Mejor rendimiento por crédito</td>
+              <td><strong>NewserLiteCompact</strong></td>
+              <td>100 consultas por cada 100 créditos.</td>
+            </tr>
+            <tr>
+              <td>Mayor rate limit público</td>
+              <td><strong>NewserLiteCompact</strong></td>
+              <td>30 req/min en API y 45 req/min en web.</td>
+            </tr>
+            <tr>
+              <td>Mayor ventana de salida</td>
+              <td><strong>NewserPlus</strong></td>
+              <td><code>maxTokens: 32769</code>.</td>
+            </tr>
+            <tr>
+              <td>Mejor punto medio entre costo y capacidad</td>
+              <td><strong>NewserAdvanced</strong></td>
+              <td>6 créditos, 2048 tokens y soporte de herramientas.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="zona-ia">
+      <h2>Zona especial para IAs y agentes</h2>
+      <p>Acá queda el punto de entrada público para que otras IAs puedan entender Verbo AI, leer la documentación,
+        descubrir enlaces importantes y analizar la parte pública del producto sin depender del chat privado.</p>
+
+      <div class="ai-hub-list">
+        <div class="ai-link-card">
+          <strong><a href="/info">/info</a></strong>
+          <p>La página pública principal. Resume producto, modelos, endpoints, comparativas y guía de integración.</p>
+          <code>https://verboai.duckdns.org/info</code>
+        </div>
+        <div class="ai-link-card">
+          <strong><a href="/ai.txt">/ai.txt</a></strong>
+          <p>Ficha corta para agentes: nombre, desarrollador, documentación, endpoint principal y enlaces clave.</p>
+          <code>https://verboai.duckdns.org/ai.txt</code>
+        </div>
+        <div class="ai-link-card">
+          <strong><a href="/llms.txt">/llms.txt</a></strong>
+          <p>Guía extensa para modelos de lenguaje con contexto del producto, URLs públicas y notas de acceso.</p>
+          <code>https://verboai.duckdns.org/llms.txt</code>
+        </div>
+        <div class="ai-link-card">
+          <strong><a href="/api/config">/api/config</a></strong>
+          <p>Config pública de la app: modelo default, catálogo visible y metadatos del producto para integraciones.</p>
+          <code>https://verboai.duckdns.org/api/config</code>
+        </div>
+      </div>
+
+      <div class="note">
+        Si una IA necesita analizar la parte pública del proyecto, el flujo recomendado es:
+        <strong>/ai.txt</strong> → <strong>/llms.txt</strong> → <strong>/info</strong> → <strong>/api/config</strong>.
+        La app web principal existe, pero la experiencia interactiva requiere sesión; por eso esta zona pública
+        concentra el contexto necesario para análisis y descubrimiento.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>SWE-Bench Pro, Lite y Verifiable</h2>
+      <p>En Verbo Code ya existe el módulo <strong>SWE-Bench Pro</strong> con estos datasets:
+        <code>SWE-Bench Lite</code>, <code>SWE-Bench Verifiable</code> y <code>SWE-Bench Pro</code>. Hoy los modelos
+        conectados ahí son <strong>NewserPlus</strong> y <strong>NewserAdvanced1.5</strong>.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Dataset</th>
+              <th>Qué mide</th>
+              <th>Modelo recomendado</th>
+              <th>Cuándo usarlo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>SWE-Bench Lite</strong></td>
+              <td>Subset más liviano y rápido para pruebas iniciales.</td>
+              <td><code>verboaistudio/NewserAdvanced1.5</code></td>
+              <td>Comparaciones rápidas o smoke tests de coding.</td>
+            </tr>
+            <tr>
+              <td><strong>SWE-Bench Verifiable</strong></td>
+              <td>Casos verificables con evaluación más controlada.</td>
+              <td><code>verboaistudio/NewserAdvanced1.5</code></td>
+              <td>Medir consistencia técnica antes de correr tandas pesadas.</td>
+            </tr>
+            <tr>
+              <td><strong>SWE-Bench Pro</strong></td>
+              <td>Benchmark más exigente para bugs y features reales.</td>
+              <td><code>verboaistudio/NewserPlus</code></td>
+              <td>Evaluación seria de agentic coding y resolución de issues complejos.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">
+        En términos prácticos: si querés “la mesa completa” para ingeniería de software real, <strong>NewserPlus +
+          SWE-Bench Pro</strong> es la combinación alta. Si querés validar rápido sin gastar tanto,
+        <strong>NewserAdvanced1.5 + Lite/Verifiable</strong> te da un punto medio muy útil.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Cómo elegir sin simular benchmarks</h2>
+      <p>Para una comparación real contra otras IAs hace falta correr el mismo benchmark, en el mismo entorno y con la
+        misma metodología. Mientras eso no esté publicado, esta guía se queda en terreno verificable: métricas del
+        sistema y recomendación de uso basada en capacidades reales del producto.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Si necesitás...</th>
+              <th>Modelo recomendado</th>
+              <th>Base real</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Máximo ahorro y volumen</td>
+              <td><strong>NewserLiteCompact</strong></td>
+              <td>1 crédito por petición y el rate limit más alto.</td>
+            </tr>
+            <tr>
+              <td>Uso diario equilibrado</td>
+              <td><strong>NewserLite</strong></td>
+              <td>2 créditos por petición con buen throughput.</td>
+            </tr>
+            <tr>
+              <td>Herramientas, imágenes y mejor profundidad</td>
+              <td><strong>NewserAdvanced</strong></td>
+              <td>2048 tokens, web, clima e imágenes.</td>
+            </tr>
+            <tr>
+              <td>Código más serio y más contexto</td>
+              <td><strong>NewserAdvanced1.5</strong></td>
+              <td>3072 tokens y perfil técnico más fuerte en la configuración actual.</td>
+            </tr>
+            <tr>
+              <td>Verbo Code y agentic coding pesado</td>
+              <td><strong>NewserPlus</strong></td>
+              <td>32 769 tokens y flujo especializado para programación avanzada.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Imágenes con IA</h2>
+      <p>Si tu prompt describe una escena visual, un logo, una portada o algo claramente gráfico, Verbo AI detecta la
+        intención y genera imagen automáticamente con los modelos que lo soportan.</p>
+      <ul class="steps">
+        <li><strong>NewserAdvanced</strong> genera imagen con buen balance velocidad/calidad.</li>
+        <li><strong>NewserAdvanced1.5</strong> usa dos capas para sacar más detalle y por eso tiene el límite de
+          <strong>2 imágenes por hora</strong>.
+        </li>
+        <li>La imagen vuelve en <code>imagen.url</code>; si la URL es relativa, prependé el dominio.</li>
+      </ul>
+      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
   -d '{
     "mensaje": "un leon descansando al atardecer",
-    "modelo": "NewserAdvanced"
+    "modelo": "verboaistudio/NewserAdvanced"
   }'</code></pre>
-    <p><strong>Respuesta:</strong></p>
-    <pre><code>{
-  "ok": true,
-  "respuesta": "Imagen generada: un leon descansando al atardecer",
-  "modelo": "NewserAdvanced",
-  "costoCreditos": 6,
-  "costoBase": 5,
-  "costoExtraHerramientas": 1,
-  "imagen": {
-    "url": "/uploads/1234567890-abcdef.jpg",
-    "prompt": "un leon descansando al atardecer",
-    "tamanoKB": 102
-  },
-  "creditosRestantes": 994
-}</code></pre>
-    <p>Para descargar la imagen, prependeá el dominio: <code>https://verboai.duckdns.org/uploads/1234567890-abcdef.jpg</code></p>
-  </section>
+    </section>
 
-  <section>
-    <h2>5. Código completo para tu app</h2>
-    <p>Copiá el que corresponda a tu lenguaje. Reemplazá <code>verboai-XXXX</code> por tu token.</p>
-
-    <details open>
-      <summary>JavaScript (Node.js 18+ o navegador)</summary>
-      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>const TOKEN = "verboai-XXXX";
+    <section class="section">
+      <h2>Ejemplos de integración</h2>
+      <details open>
+        <summary>JavaScript</summary>
+        <div>
+          <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>const TOKEN = "verboai-XXXX";
 const URL = "https://verboai.duckdns.org/api/v1/chat";
 
-async function preguntar(mensaje, modelo = "NewserLite") {
+async function preguntar(mensaje, modelo = "verboaistudio/NewserLite") {
   const resp = await fetch(URL, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${TOKEN}`,
+      Authorization: `Bearer ${TOKEN}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ mensaje, modelo }),
   });
   const data = await resp.json();
-  if (!data.ok) throw new Error(data.error);
+  if (!resp.ok || !data.ok) throw new Error(data.error || "Error");
   return data;
-}
-
-// Ejemplo: chat básico
-const r = await preguntar("Hola, quien eres?", "NewserLite");
-console.log(r.respuesta, "créditos:", r.creditosRestantes);
-
-// Ejemplo: generar imagen
-const r2 = await preguntar("un leon", "NewserAdvanced");
-if (r2.imagen) {
-  const url = "https://verboai.duckdns.org" + r2.imagen.url;
-  console.log("Imagen:", url);
 }</code></pre>
-    </details>
+        </div>
+      </details>
 
-    <details>
-      <summary>Python 3.7+ (sin dependencias)</summary>
-      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>import json
+      <details>
+        <summary>Python</summary>
+        <div>
+          <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>import json
 import urllib.request
 
 TOKEN = "verboai-XXXX"
 URL = "https://verboai.duckdns.org/api/v1/chat"
 
-def preguntar(mensaje, modelo="NewserLite"):
+def preguntar(mensaje, modelo="verboaistudio/NewserLite"):
     body = json.dumps({"mensaje": mensaje, "modelo": modelo}).encode()
     req = urllib.request.Request(URL, data=body, method="POST")
     req.add_header("Authorization", f"Bearer {TOKEN}")
@@ -452,203 +1424,182 @@ def preguntar(mensaje, modelo="NewserLite"):
         data = json.loads(resp.read().decode())
     if not data.get("ok"):
         raise Exception(data.get("error"))
-    return data
+    return data</code></pre>
+        </div>
+      </details>
 
-# Ejemplo: chat básico
-r = preguntar("Hola, quien eres?", "NewserLite")
-print(r["respuesta"], "creditos:", r["creditosRestantes"])
-
-# Ejemplo: generar imagen
-r = preguntar("un leon", "NewserAdvanced")
-if r.get("imagen"):
-    print("Imagen:", "https://verboai.duckdns.org" + r["imagen"]["url"])</code></pre>
-    </details>
-
-    <details>
-      <summary>PHP 5.6+ (con cURL)</summary>
-      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>&lt;?php
-$TOKEN = "verboai-XXXX";
-$URL = "https://verboai.duckdns.org/api/v1/chat";
-
-function preguntar($mensaje, $modelo = "NewserLite") {
-    global $TOKEN, $URL;
-    $body = json_encode(["mensaje" => $mensaje, "modelo" => $modelo]);
-    $ch = curl_init($URL);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        "Authorization: Bearer $TOKEN",
-        "Content-Type: application/json",
-    ]);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 120);
-    $resp = curl_exec($ch);
-    curl_close($ch);
-    return json_decode($resp, true);
-}
-
-// Ejemplo
-$r = preguntar("Hola, quien eres?", "NewserLite");
-echo $r["respuesta"] . "\n";
-?&gt;</code></pre>
-    </details>
-
-    <details>
-      <summary>cURL (bash / terminal)</summary>
-      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code># Chat básico
-curl -X POST https://verboai.duckdns.org/api/v1/chat \
+      <details>
+        <summary>cURL</summary>
+        <div>
+          <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
-  -d '{"mensaje":"Hola, quien eres?"}'
+  -d '{"mensaje":"Explicame Romanos 8","modelo":"verboaistudio/NewserAdvanced"}'</code></pre>
+        </div>
+      </details>
+    </section>
 
-# Con NewserAdvanced
-curl -X POST https://verboai.duckdns.org/api/v1/chat \
-  -H "Authorization: Bearer verboai-XXXX" \
-  -H "Content-Type: application/json" \
-  -d '{"mensaje":"Explicame el libro de Job","modelo":"NewserAdvanced"}'
+    <section class="section">
+      <h2>Errores comunes</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Qué significa</th>
+              <th>Qué revisar</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>400</code></td>
+              <td>Falta el <code>mensaje</code> o el body está mal formado.</td>
+              <td>Mandá JSON válido y revisá comillas/campos.</td>
+            </tr>
+            <tr>
+              <td><code>401</code></td>
+              <td>Token ausente, inválido o revocado.</td>
+              <td>Usá <code>Authorization: Bearer verboai-XXXX</code>.</td>
+            </tr>
+            <tr>
+              <td><code>402</code></td>
+              <td>No alcanzan los créditos para ese modelo.</td>
+              <td>Probá con Lite o recargá acceso/créditos.</td>
+            </tr>
+            <tr>
+              <td><code>403</code></td>
+              <td>Intentaste usar un modelo restringido, como <code>NewserPlus</code>.</td>
+              <td>Necesitás permisos de admin/cuenta habilitada.</td>
+            </tr>
+            <tr>
+              <td><code>429</code></td>
+              <td>Límite por ventana alcanzado.</td>
+              <td>Esperá y reintentá, o bajá a un modelo más liviano.</td>
+            </tr>
+            <tr>
+              <td><code>502</code> / <code>500</code></td>
+              <td>El proveedor de IA o la capa gratis no respondió bien.</td>
+              <td>Reintentá en unos minutos.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-# Generar imagen
-curl -X POST https://verboai.duckdns.org/api/v1/chat \
-  -H "Authorization: Bearer verboai-XXXX" \
-  -H "Content-Type: application/json" \
-  -d '{"mensaje":"un leon","modelo":"NewserAdvanced"}'
-
-# Info del token (no gasta créditos)
-curl -H "Authorization: Bearer verboai-XXXX" \
-  https://verboai.duckdns.org/api/v1/info</code></pre>
-    </details>
-  </section>
-
-  <section>
-    <h2>6. Códigos de error</h2>
-    <ul>
-      <li><code>401</code> — Token inválido, revocado, o falta el header <code>Authorization</code></li>
-      <li><code>402</code> — No tenés créditos suficientes (ej: NewserAdvanced necesita 5)</li>
-      <li><code>429</code> — Rate limit alcanzado (demasiados pedidos por minuto)</li>
-      <li><code>400</code> — Body mal formado o falta <code>"mensaje"</code></li>
-      <li><code>502</code> — El proveedor de IA no responde (probá de nuevo en unos minutos)</li>
-    </ul>
-  </section>
-
-  <section>
-    <h2>7. CLI de terminal (opcional)</h2>
-    <p>Si preferís usar Verbo AI desde la terminal, descargá el archivo <code>cli/verboai.py</code> del repositorio y ejecutá:</p>
-    <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code># Guardar el token (una sola vez)
+    <section class="section">
+      <h2>CLI de terminal</h2>
+      <p>Si preferís usar Verbo AI desde terminal, el cliente Python sigue disponible y es útil para chatear, consultar
+        créditos y listar modelos.</p>
+      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code># Guardar el token
 python verboai.py login verboai-XXXX
 
-# Iniciar chat interactivo
+# Chat interactivo
 python verboai.py run
 
 # Ver info del token
 python verboai.py info</code></pre>
-    <p>El CLI levanta un servidor proxy local en <code>http://127.0.0.1:7788</code> (alta seguridad, el token no se expone). Comandos dentro del chat: <code>/modelo</code>, <code>/creditos</code>, <code>/info</code>, <code>/salir</code>.</p>
-  </section>
+      <p class="subtle">El proxy local corre en <code>http://127.0.0.1:7788</code>. Comandos del chat:
+        <code>/modelo</code>, <code>/creditos</code>, <code>/info</code>, <code>/salir</code>.
+      </p>
+    </section>
 
-  <footer>
-    Verbo AI — Documentación API · <a href="/">Volver a la app</a>
-  </footer>
-</div>
+    <footer>
+      Verbo AI Studio · Info y documentación · <a href="/">Volver a la app</a>
+    </footer>
+  </div>
 
-<script>
-  const btnProbar = document.getElementById('btnProbar');
-  const btnLimpiar = document.getElementById('btnLimpiar');
-  const resultado = document.getElementById('resultado');
-  const imagenContainer = document.getElementById('imagenContainer');
-  const infoCard = document.getElementById('infoCard');
+  <script>
+    const btnProbar = document.getElementById('btnProbar');
+    const btnLimpiar = document.getElementById('btnLimpiar');
+    const resultado = document.getElementById('resultado');
+    const imagenContainer = document.getElementById('imagenContainer');
+    const infoCard = document.getElementById('infoCard');
 
-  btnProbar.addEventListener('click', async () => {
-    const token = document.getElementById('token').value.trim();
-    const modelo = document.getElementById('modelo').value;
-    const mensaje = document.getElementById('mensaje').value.trim();
+    btnProbar.addEventListener('click', async () => {
+      const token = document.getElementById('token').value.trim();
+      const modelo = document.getElementById('modelo').value;
+      const mensaje = document.getElementById('mensaje').value.trim();
 
-    if (!token) {
-      resultado.className = 'tester-result error';
-      resultado.textContent = 'Error: falta el token';
-      return;
-    }
-    if (!mensaje) {
-      resultado.className = 'tester-result error';
-      resultado.textContent = 'Error: falta el mensaje';
-      return;
-    }
-
-    btnProbar.disabled = true;
-    btnProbar.textContent = 'Enviando...';
-    resultado.className = 'tester-result';
-    resultado.textContent = 'Enviando petición...';
-    imagenContainer.innerHTML = '';
-    infoCard.style.display = 'none';
-
-    const inicio = Date.now();
-    try {
-      const resp = await fetch('/api/v1/chat', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + token,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ mensaje, modelo }),
-      });
-      const data = await resp.json();
-      const tiempo = Date.now() - inicio;
-
-      if (!resp.ok || !data.ok) {
+      if (!token) {
         resultado.className = 'tester-result error';
-        resultado.textContent = `Error ${resp.status}: ${data.error || 'desconocido'}`;
-        btnProbar.disabled = false;
-        btnProbar.textContent = 'Probar petición';
+        resultado.textContent = 'Error: falta el token.';
+        return;
+      }
+      if (!mensaje) {
+        resultado.className = 'tester-result error';
+        resultado.textContent = 'Error: falta el mensaje.';
         return;
       }
 
-      resultado.className = 'tester-result ok';
-      // Escapar HTML para evitar inyección
-      const textoLimpio = JSON.stringify(data, null, 2)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      resultado.textContent = textoLimpio;
+      btnProbar.disabled = true;
+      btnProbar.textContent = 'Enviando...';
+      resultado.className = 'tester-result';
+      resultado.textContent = 'Enviando petición...';
+      imagenContainer.innerHTML = '';
+      infoCard.style.display = 'none';
 
-      infoCard.style.display = 'grid';
-      document.getElementById('rModelo').textContent = data.modeloUsado || '-';
-      document.getElementById('rCosto').textContent = data.costoCreditos || '-';
-      var restantes = data.creditosRestantes;
-      document.getElementById('rRestantes').textContent = restantes == -1 ? '∞' : (restantes != null ? restantes : '-');
-      document.getElementById('rTiempo').textContent = tiempo;
+      const inicio = Date.now();
+      try {
+        const resp = await fetch('/api/v1/chat', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ mensaje, modelo }),
+        });
+        const data = await resp.json();
+        const tiempo = Date.now() - inicio;
 
-      if (data.imagen && data.imagen.url) {
-        const url = data.imagen.url.startsWith('http') ? data.imagen.url : data.imagen.url;
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = data.imagen.prompt || 'imagen generada';
-        imagenContainer.appendChild(img);
+        if (!resp.ok || !data.ok) {
+          resultado.className = 'tester-result error';
+          resultado.textContent = `Error ${resp.status}: ${data.error || 'desconocido'}`;
+          return;
+        }
+
+        resultado.className = 'tester-result ok';
+        resultado.textContent = JSON.stringify(data, null, 2);
+        infoCard.style.display = 'grid';
+        document.getElementById('rModelo').textContent = data.modeloUsado || '-';
+        document.getElementById('rModeloId').textContent = data.modeloUsadoId || data.modeloId || '-';
+        document.getElementById('rCosto').textContent = data.costoCreditos != null ? data.costoCreditos : '-';
+        document.getElementById('rTiempo').textContent = tiempo;
+
+        if (data.imagen && data.imagen.url) {
+          const img = document.createElement('img');
+          img.src = data.imagen.url;
+          img.alt = data.imagen.prompt || 'imagen generada';
+          imagenContainer.appendChild(img);
+        }
+      } catch (e) {
+        resultado.className = 'tester-result error';
+        resultado.textContent = 'Error de red: ' + e.message;
+      } finally {
+        btnProbar.disabled = false;
+        btnProbar.textContent = 'Probar petición';
       }
-    } catch (e) {
-      resultado.className = 'tester-result error';
-      resultado.textContent = 'Error de red: ' + e.message;
-    }
-    btnProbar.disabled = false;
-    btnProbar.textContent = 'Probar petición';
-  });
-
-  btnLimpiar.addEventListener('click', () => {
-    document.getElementById('mensaje').value = '';
-    resultado.className = 'tester-result';
-    resultado.textContent = 'Los resultados van a aparecer acá...';
-    imagenContainer.innerHTML = '';
-    infoCard.style.display = 'none';
-  });
-
-  function copiar(btn) {
-    const code = btn.parentElement.querySelector('code').textContent;
-    navigator.clipboard.writeText(code).then(() => {
-      btn.textContent = 'Copiado ✓';
-      btn.classList.add('copied');
-      setTimeout(() => {
-        btn.textContent = 'Copiar';
-        btn.classList.remove('copied');
-      }, 1800);
     });
-  }
-</script>
+
+    btnLimpiar.addEventListener('click', () => {
+      document.getElementById('mensaje').value = '';
+      resultado.className = 'tester-result';
+      resultado.textContent = 'Los resultados aparecen acá.';
+      imagenContainer.innerHTML = '';
+      infoCard.style.display = 'none';
+    });
+
+    function copiar(btn) {
+      const code = btn.parentElement.querySelector('code').textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        btn.textContent = 'Copiado';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copiar';
+          btn.classList.remove('copied');
+        }, 1600);
+      });
+    }
+  </script>
 </body>
+
 </html>

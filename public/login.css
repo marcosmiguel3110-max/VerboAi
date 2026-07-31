@@ -345,7 +345,9 @@ body {
   padding: 40px 20px;
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
   min-height: 100vh;
 }
 

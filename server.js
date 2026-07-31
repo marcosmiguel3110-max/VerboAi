@@ -512,7 +512,7 @@ const MODELOS_DISPONIBLES = {
     costoCreditos: 250,
     rateLimitMax: 10,
     rateLimitMaxWeb: 15,
-    maxTokens: 4096,
+    maxTokens: 32769,
     badge: 'admin',
     disponible: true,
     soloAdmin: true,
@@ -524,9 +524,23 @@ const MODELOS_DISPONIBLES = {
 };
 const MODELO_DEFAULT = 'NewserLite';
 
+function construirIdModelo(nombre) {
+  return `verboaistudio/${nombre}`;
+}
+
+function normalizarNombreModelo(valor) {
+  if (typeof valor !== 'string') return '';
+  const limpio = valor.trim().replace(/^["']|["']$/g, '');
+  if (!limpio) return '';
+  if (limpio.toLowerCase().startsWith('verboaistudio/')) {
+    return limpio.slice('verboaistudio/'.length).trim();
+  }
+  return limpio;
+}
+
 function resolverModelo(valor, usuario) {
   if (typeof valor !== 'string') return MODELOS_DISPONIBLES[MODELO_DEFAULT];
-  const limpio = valor.trim();
+  const limpio = normalizarNombreModelo(valor);
   if (!limpio) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
   const clave = Object.keys(MODELOS_DISPONIBLES).find((k) => k.toLowerCase() === limpio.toLowerCase());
   if (!clave) return MODELOS_DISPONIBLES[MODELO_DEFAULT];
@@ -906,7 +920,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
         model: model,
         messages: [{ role: 'system', content: systemPrompt }, ...messages],
         temperature: 0.7,
-        max_tokens: 16384,
+        max_tokens: 32769,
         stream: usarStreamingReal,
       };
 
@@ -3104,7 +3118,9 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
       ok: true,
       respuesta: textoLimpio,
       modelo: configModelo.nombre,
+      modeloId: construirIdModelo(configModelo.nombre),
       modeloUsado: configModelo.nombre,
+      modeloUsadoId: construirIdModelo(configModelo.nombre),
       modeloReal: modeloUsadoReal, // modelo OpenRouter free | glm-4 | pollinations (info util para saber que capa respondio)
       costoCreditos: costoTotal,
       costoBase: configModelo.costoCreditos,
@@ -3132,12 +3148,14 @@ app.get('/api/v1/info', (req, res) => {
   const creditosGlobales = leerCreditosGlobales(token.propietario);
 
   const modelos = Object.values(MODELOS_DISPONIBLES)
-    .filter((m) => !m.soloAdmin) // Excluir siempre modelos soloAdmin (solo verbocode)
+    .filter((m) => !m.soloAdmin || esAdmin || esAdminToken)
     .map((m) => ({
+      id: construirIdModelo(m.nombre),
       nombre: m.nombre,
       descripcion: m.descripcion,
       costoCreditos: m.costoCreditos,
       rateLimitMax: m.rateLimitMax,
+      rateLimitMaxWeb: m.rateLimitMaxWeb,
       rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
       maxTokens: m.maxTokens,
       badge: m.badge || null,
@@ -3153,6 +3171,7 @@ app.get('/api/v1/info', (req, res) => {
     creditosIniciales: esAdmin ? -1 : 1000,
     rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
     modeloDefault: MODELO_DEFAULT,
+    modeloDefaultId: construirIdModelo(MODELO_DEFAULT),
     modelos,
     creadoEn: token.creadoEn,
     ultimoUso: token.ultimoUso,
@@ -4503,6 +4522,7 @@ app.get('/verbocode/editor/:projectId', (req, res) => res.redirect(301, `/verboc
 // ============================================================
 app.get('/api/verbocode/models', requiereAdminVerboCode, (req, res) => {
   const modelos = Object.values(MODELOS_VERBO_CODE).map((m) => ({
+    id: construirIdModelo(m.nombre),
     nombre: m.nombre,
     descripcion: m.descripcion,
     badge: m.badge || null,
@@ -9267,6 +9287,7 @@ app.get('/api/config', (req, res) => {
   const modelos = Object.values(MODELOS_DISPONIBLES)
     .filter((m) => !m.soloAdmin || esAdminConfig)
     .map((m) => ({
+      id: construirIdModelo(m.nombre),
       nombre: m.nombre,
       descripcion: m.descripcion,
       costoCreditos: m.costoCreditos,
@@ -9282,7 +9303,9 @@ app.get('/api/config', (req, res) => {
     url: "https://verboai.duckdns.org",
     documentacion: "/info",
     modelo: MODELO_DEFAULT,
+    modeloId: construirIdModelo(MODELO_DEFAULT),
     modeloDefault: MODELO_DEFAULT,
+    modeloDefaultId: construirIdModelo(MODELO_DEFAULT),
     esAdmin: esAdminConfig,
     modelos,
   });
