@@ -690,6 +690,11 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
         break;
       }
 
+      if (r.noRetrySameModel) {
+        console.log(`[llamarModeloGratis] ${modelo} devolvio un error terminal del proveedor, probando siguiente modelo...`);
+        break;
+      }
+
       // Si es 429 y no es el último intento, reintentar con backoff
       if (typeof r.error === 'string' && r.error.includes('HTTP 429') && intento < maxIntentosPorModelo) {
         console.log(`[llamarModeloGratis] Rate limit en ${modelo}, reintentando...`);
@@ -928,10 +933,23 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
 
         const texto = resp.data?.choices?.[0]?.message?.content || '';
         const finishReason = resp.data?.choices?.[0]?.finish_reason || null;
+        const nativeFinishReason = resp.data?.choices?.[0]?.native_finish_reason || null;
         if (!texto || !texto.trim()) {
           console.error('[openrouter-free] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
           if (keyIndex !== null) updateKeyStats(keyIndex, false, false);
-          ultimoError = 'Respuesta vacia de OpenRouter';
+          const finishError = finishReason === 'error' || nativeFinishReason === 'error';
+          ultimoError = finishError
+            ? `OpenRouter devolvio finish_reason=error para ${model}`
+            : 'Respuesta vacia de OpenRouter';
+          if (finishError) {
+            return {
+              ok: false,
+              error: ultimoError,
+              noRetrySameModel: true,
+              finishReason,
+              nativeFinishReason,
+            };
+          }
           continue;
         }
 
@@ -999,8 +1017,19 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
       if (!resultadoStream.ok) {
         const detalle = resultadoStream.detalle || '';
         console.error(`[openrouter-free] Intento ${intento + 1} (stream) HTTP ${resultadoStream.status}: ${detalle}`.slice(0, 300));
-        ultimoError = resultadoStream.status ? `HTTP ${resultadoStream.status}` : (detalle || 'Error de streaming');
+        const finishError = resultadoStream.finishReason === 'error';
+        ultimoError = finishError
+          ? `OpenRouter devolvio finish_reason=error para ${model} (stream)`
+          : (resultadoStream.status ? `HTTP ${resultadoStream.status}` : (detalle || 'Error de streaming'));
         if (keyIndex !== null) updateKeyStats(keyIndex, false, resultadoStream.status === 429, detalle);
+        if (finishError) {
+          return {
+            ok: false,
+            error: ultimoError,
+            noRetrySameModel: true,
+            finishReason: resultadoStream.finishReason,
+          };
+        }
         if (resultadoStream.status === 429) continue;
         if ([429, 502, 503, 504].includes(resultadoStream.status)) continue;
         if (resultadoStream.status && resultadoStream.status >= 400 && resultadoStream.status < 500) break;
@@ -1009,7 +1038,18 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
 
       if (!resultadoStream.texto || !resultadoStream.texto.trim()) {
         if (keyIndex !== null) updateKeyStats(keyIndex, false, false);
-        ultimoError = 'Respuesta vacia de OpenRouter (stream)';
+        const finishError = resultadoStream.finishReason === 'error';
+        ultimoError = finishError
+          ? `OpenRouter devolvio finish_reason=error para ${model} (stream)`
+          : 'Respuesta vacia de OpenRouter (stream)';
+        if (finishError) {
+          return {
+            ok: false,
+            error: ultimoError,
+            noRetrySameModel: true,
+            finishReason: resultadoStream.finishReason,
+          };
+        }
         continue;
       }
 
