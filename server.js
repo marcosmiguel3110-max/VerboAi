@@ -284,7 +284,11 @@ const GPT4FREE_URL = (process.env.GPT4FREE_URL || '').trim();
 const GPT4FREE_MODEL = process.env.GPT4FREE_MODEL || 'glm-4';
 const GPT4FREE_ENABLED = (process.env.GPT4FREE_ENABLED_PRO || 'false').toLowerCase() === 'true';
 const GPT4FREE_TIMEOUT = parseInt(process.env.GPT4FREE_TIMEOUT || '60000', 10);
-const GPT4FREE_API_KEY = process.env.GPT4FREE_API_KEY || ''; // opcional segun el puente
+// API keys de GPT4FREE (múltiples para rotación)
+const GPT4FREE_API_KEYS = (process.env.GPT4FREE_API_KEYS || '')
+  .split(',')
+  .map(k => k.trim())
+  .filter(k => k);
 
 // ============================================================
 // CAPA ANTHROPIC DIRECTA — modelos premium con API key
@@ -292,7 +296,11 @@ const GPT4FREE_API_KEY = process.env.GPT4FREE_API_KEY || ''; // opcional segun e
 // Para usar Claude Opus, Sonnet, Haiku directamente desde Anthropic.
 // Requiere API key válida de Anthropic (formato sk-ant-...).
 const ANTHROPIC_ENABLED = (process.env.ANTHROPIC_ENABLED || 'false').toLowerCase() === 'true';
-const ANTHROPIC_API_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
+// API keys de Anthropic (múltiples para rotación)
+const ANTHROPIC_API_KEYS = (process.env.ANTHROPIC_API_KEYS || '')
+  .split(',')
+  .map(k => k.trim())
+  .filter(k => k);
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
 const ANTHROPIC_TIMEOUT = parseInt(process.env.ANTHROPIC_TIMEOUT || '120000', 10);
 
@@ -873,6 +881,158 @@ OPENROUTER_API_KEYS.forEach((key, i) => {
   };
 });
 
+// Sistema de rotación para GPT4FREE
+const gpt4freeKeyStats = {};
+GPT4FREE_API_KEYS.forEach((key, i) => {
+  gpt4freeKeyStats[i] = {
+    requests: 0,
+    successes: 0,
+    failures: 0,
+    rateLimits: 0,
+    consecutiveFailures: 0,
+    cooldownUntil: 0,
+    lastUsed: 0
+  };
+});
+
+function selectBestGpt4FreeKey() {
+  if (GPT4FREE_API_KEYS.length === 0) return null;
+  if (GPT4FREE_API_KEYS.length === 1) return 0;
+
+  const now = Date.now();
+  const availableKeys = [];
+
+  for (let i = 0; i < GPT4FREE_API_KEYS.length; i++) {
+    const stats = gpt4freeKeyStats[i];
+    if (now > stats.cooldownUntil) {
+      availableKeys.push({
+        index: i,
+        score: stats.requests > 0 ? stats.successes / stats.requests : 1,
+        lastUsed: stats.lastUsed
+      });
+    }
+  }
+
+  if (availableKeys.length === 0) {
+    let minCooldown = Infinity;
+    let bestIndex = 0;
+    for (let i = 0; i < GPT4FREE_API_KEYS.length; i++) {
+      const timeUntilCooldown = gpt4freeKeyStats[i].cooldownUntil - now;
+      if (timeUntilCooldown < minCooldown) {
+        minCooldown = timeUntilCooldown;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  }
+
+  availableKeys.sort((a, b) => b.score - a.score);
+  return availableKeys[0].index;
+}
+
+function markGpt4FreeKeyCooldown(index, duration = KEY_COOLDOWN_DURATION) {
+  if (index >= 0 && index < GPT4FREE_API_KEYS.length) {
+    gpt4freeKeyStats[index].cooldownUntil = Date.now() + duration;
+    gpt4freeKeyStats[index].consecutiveFailures = 0;
+  }
+}
+
+function updateGpt4FreeKeyStats(index, success, isRateLimit) {
+  if (index >= 0 && index < GPT4FREE_API_KEYS.length) {
+    const stats = gpt4freeKeyStats[index];
+    stats.lastUsed = Date.now();
+    if (success) {
+      stats.successes++;
+      stats.consecutiveFailures = 0;
+    } else {
+      stats.failures++;
+      stats.consecutiveFailures++;
+      if (isRateLimit) {
+        stats.rateLimits++;
+        markGpt4FreeKeyCooldown(index, KEY_COOLDOWN_DURATION);
+      } else if (stats.consecutiveFailures >= KEY_FAILURE_THRESHOLD) {
+        markGpt4FreeKeyCooldown(index, KEY_COOLDOWN_DURATION);
+      }
+    }
+  }
+}
+
+// Sistema de rotación para Anthropic
+const anthropicKeyStats = {};
+ANTHROPIC_API_KEYS.forEach((key, i) => {
+  anthropicKeyStats[i] = {
+    requests: 0,
+    successes: 0,
+    failures: 0,
+    rateLimits: 0,
+    consecutiveFailures: 0,
+    cooldownUntil: 0,
+    lastUsed: 0
+  };
+});
+
+function selectBestAnthropicKey() {
+  if (ANTHROPIC_API_KEYS.length === 0) return null;
+  if (ANTHROPIC_API_KEYS.length === 1) return 0;
+
+  const now = Date.now();
+  const availableKeys = [];
+
+  for (let i = 0; i < ANTHROPIC_API_KEYS.length; i++) {
+    const stats = anthropicKeyStats[i];
+    if (now > stats.cooldownUntil) {
+      availableKeys.push({
+        index: i,
+        score: stats.requests > 0 ? stats.successes / stats.requests : 1,
+        lastUsed: stats.lastUsed
+      });
+    }
+  }
+
+  if (availableKeys.length === 0) {
+    let minCooldown = Infinity;
+    let bestIndex = 0;
+    for (let i = 0; i < ANTHROPIC_API_KEYS.length; i++) {
+      const timeUntilCooldown = anthropicKeyStats[i].cooldownUntil - now;
+      if (timeUntilCooldown < minCooldown) {
+        minCooldown = timeUntilCooldown;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  }
+
+  availableKeys.sort((a, b) => b.score - a.score);
+  return availableKeys[0].index;
+}
+
+function markAnthropicKeyCooldown(index, duration = KEY_COOLDOWN_DURATION) {
+  if (index >= 0 && index < ANTHROPIC_API_KEYS.length) {
+    anthropicKeyStats[index].cooldownUntil = Date.now() + duration;
+    anthropicKeyStats[index].consecutiveFailures = 0;
+  }
+}
+
+function updateAnthropicKeyStats(index, success, isRateLimit) {
+  if (index >= 0 && index < ANTHROPIC_API_KEYS.length) {
+    const stats = anthropicKeyStats[index];
+    stats.lastUsed = Date.now();
+    if (success) {
+      stats.successes++;
+      stats.consecutiveFailures = 0;
+    } else {
+      stats.failures++;
+      stats.consecutiveFailures++;
+      if (isRateLimit) {
+        stats.rateLimits++;
+        markAnthropicKeyCooldown(index, KEY_COOLDOWN_DURATION);
+      } else if (stats.consecutiveFailures >= KEY_FAILURE_THRESHOLD) {
+        markAnthropicKeyCooldown(index, KEY_COOLDOWN_DURATION);
+      }
+    }
+  }
+}
+
 // Función para seleccionar la mejor key disponible
 function selectBestKey() {
   if (OPENROUTER_API_KEYS.length === 0) return null;
@@ -967,8 +1127,11 @@ if (OPENROUTER_API_KEYS.length > 0) {
 
 // Log de configuración de Anthropic
 console.log(`[CONFIG] Anthropic API: ${ANTHROPIC_ENABLED ? 'HABILITADA' : 'DESHABILITADA'}`);
-if (ANTHROPIC_ENABLED && ANTHROPIC_API_KEY) {
-  console.log(`[CONFIG] Anthropic Key: ${ANTHROPIC_API_KEY.substring(0, 20)}...${ANTHROPIC_API_KEY.substring(ANTHROPIC_API_KEY.length - 10)}`);
+console.log(`[CONFIG] Anthropic API Keys cargadas: ${ANTHROPIC_API_KEYS.length}`);
+if (ANTHROPIC_ENABLED && ANTHROPIC_API_KEYS.length > 0) {
+  ANTHROPIC_API_KEYS.forEach((key, i) => {
+    console.log(`[CONFIG] Anthropic Key ${i}: ${key.substring(0, 20)}...${key.substring(key.length - 10)}`);
+  });
   console.log(`[CONFIG] Anthropic Model: ${ANTHROPIC_MODEL}`);
 }
 
@@ -1220,7 +1383,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
 
 // Llama a Anthropic directamente (Claude Opus, Sonnet, Haiku)
 async function llamarAnthropic(messages, systemPrompt, model = ANTHROPIC_MODEL, opciones = {}) {
-  if (!ANTHROPIC_ENABLED || !ANTHROPIC_API_KEY) {
+  if (!ANTHROPIC_ENABLED || ANTHROPIC_API_KEYS.length === 0) {
     return { ok: false, error: 'Anthropic deshabilitado o sin API key' };
   }
 
@@ -1244,10 +1407,15 @@ async function llamarAnthropic(messages, systemPrompt, model = ANTHROPIC_MODEL, 
       // Anthropic tiene reasoning integrado en sus modelos
     }
 
+    // Seleccionar mejor API key con rotación
+    const anthropicKeyIndex = selectBestAnthropicKey();
+    const anthropicKey = ANTHROPIC_API_KEYS[anthropicKeyIndex];
+    anthropicKeyStats[anthropicKeyIndex].requests++;
+
     const resp = await axios.post('https://api.anthropic.com/v1/messages', body, {
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
+        'x-api-key': anthropicKey,
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'false',
       },
@@ -1259,6 +1427,7 @@ async function llamarAnthropic(messages, systemPrompt, model = ANTHROPIC_MODEL, 
     if (resp.status < 200 || resp.status >= 300) {
       const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
       console.error(`[anthropic] HTTP ${resp.status}: ${detalle}`);
+      updateAnthropicKeyStats(anthropicKeyIndex, false, resp.status === 429);
       return { ok: false, error: `HTTP ${resp.status}` };
     }
 
@@ -1267,11 +1436,13 @@ async function llamarAnthropic(messages, systemPrompt, model = ANTHROPIC_MODEL, 
 
     if (!texto || !texto.trim()) {
       console.error('[anthropic] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+      updateAnthropicKeyStats(anthropicKeyIndex, false, false);
       return { ok: false, error: 'Respuesta vacia de Anthropic' };
     }
 
     console.log(`[anthropic] OK - ${texto.length} chars por ${model} (stop_reason: ${finishReason})`);
-    return { ok: true, texto: texto.trim(), modelo: model, finishReason };
+    updateAnthropicKeyStats(anthropicKeyIndex, true, false);
+    return { ok: true, tipo: 'anthropic', texto: texto.trim(), modelo: model, finishReason };
 
   } catch (error) {
     console.error('[anthropic] Error:', error.message);
@@ -1323,9 +1494,13 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
       'Content-Type': 'application/json',
     };
 
-    // Agregar API key si está configurada
-    if (GPT4FREE_API_KEY) {
-      headers['Authorization'] = `Bearer ${GPT4FREE_API_KEY}`;
+    // Usar API key con rotación si hay disponibles
+    let gpt4freeKeyIndex = null;
+    if (GPT4FREE_API_KEYS.length > 0) {
+      gpt4freeKeyIndex = selectBestGpt4FreeKey();
+      const key = GPT4FREE_API_KEYS[gpt4freeKeyIndex];
+      headers['Authorization'] = `Bearer ${key}`;
+      gpt4freeKeyStats[gpt4freeKeyIndex].requests++;
     }
 
     const resp = await axios.post(url, body, {
@@ -1338,6 +1513,9 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
     if (resp.status < 200 || resp.status >= 300) {
       const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
       console.error(`[g4f] HTTP ${resp.status}: ${detalle}`);
+      if (gpt4freeKeyIndex !== null) {
+        updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, resp.status === 429);
+      }
       return { ok: false, error: `HTTP ${resp.status}` };
     }
 
@@ -1346,10 +1524,16 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
 
     if (!texto || !texto.trim()) {
       console.error('[g4f] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+      if (gpt4freeKeyIndex !== null) {
+        updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, false);
+      }
       return { ok: false, error: 'Respuesta vacia de G4F' };
     }
 
     console.log(`[g4f] OK - ${texto.length} chars por ${model} (finish_reason: ${finishReason})`);
+    if (gpt4freeKeyIndex !== null) {
+      updateGpt4FreeKeyStats(gpt4freeKeyIndex, true, false);
+    }
     return { ok: true, tipo: 'g4f', texto: texto.trim(), modelo: model, finishReason };
 
   } catch (error) {
@@ -1440,7 +1624,15 @@ async function llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones = {}) {
     : GPT4FREE_URL.replace(/\/+$/, '') + '/v1/chat/completions';
 
   const headers = { 'Content-Type': 'application/json' };
-  if (GPT4FREE_API_KEY) headers.Authorization = `Bearer ${GPT4FREE_API_KEY}`;
+  
+  // Usar API key con rotación si hay disponibles
+  let gpt4freeKeyIndex = null;
+  if (GPT4FREE_API_KEYS.length > 0) {
+    gpt4freeKeyIndex = selectBestGpt4FreeKey();
+    const key = GPT4FREE_API_KEYS[gpt4freeKeyIndex];
+    headers.Authorization = `Bearer ${key}`;
+    gpt4freeKeyStats[gpt4freeKeyIndex].requests++;
+  }
 
   const body = {
     model: GPT4FREE_MODEL,
@@ -1463,15 +1655,24 @@ async function llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones = {}) {
     if (resp.status < 200 || resp.status >= 300) {
       const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
       console.error(`[glm-4] puente devolvio HTTP ${resp.status}: ${detalle}`);
+      if (gpt4freeKeyIndex !== null) {
+        updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, resp.status === 429);
+      }
       return { ok: false, error: `HTTP ${resp.status}` };
     }
     const texto = resp.data?.choices?.[0]?.message?.content || '';
     const finishReason = resp.data?.choices?.[0]?.finish_reason || null;
     if (!texto || !texto.trim()) {
+      if (gpt4freeKeyIndex !== null) {
+        updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, false);
+      }
       console.error('[glm-4] puente devolvio respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
       return { ok: false, error: 'Respuesta vacia del puente GLM-4' };
     }
     console.log(`[glm-4] OK - ${texto.length} chars devueltos por ${GPT4FREE_MODEL} desde ${url.slice(0, 60)}... (finish_reason: ${finishReason})`);
+    if (gpt4freeKeyIndex !== null) {
+      updateGpt4FreeKeyStats(gpt4freeKeyIndex, true, false);
+    }
     return { ok: true, texto: texto.trim(), modelo: GPT4FREE_MODEL, finishReason };
   } catch (e) {
     if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return { ok: false, error: 'cancelado' };
