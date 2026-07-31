@@ -361,17 +361,17 @@ const NOMBRE_MODELO_PUBLICO = 'NewserLite';
 const MODELOS_DISPONIBLES = {
   NewserLite: {
     nombre: 'NewserLite',
-    descripcion: 'Rapido y liviano. Ideal para la mayoria de las consultas.',
-    // REWORK: cascada reordenada de menor a mayor tamaño (antes probaba primero el modelo de 20B).
-    // Empezar por el modelo mas chico (3B) hace que el caso comun (la mayoria de las consultas de
-    // Lite son simples) responda mas rapido y consuma menos computo; solo se sube de tamaño si el
-    // modelo chico falla o esta rate-limited, asi no se pierde calidad en los casos que la necesitan.
-    modeloOpenRouter: 'meta-llama/llama-3.2-3b-instruct:free',
+    descripcion: 'Rapido y ligero. Perfecto para consultas cotidianas.',
+    // Usar G4F si está habilitado, sino cascada de modelos free
+    modeloOpenRouter: GPT4FREE_ENABLED ? 'g4f-bridge' : 'meta-llama/llama-3.2-3b-instruct:free',
     modelosOpenRouterTexto: [
+      // G4F Bridge (PRIMERO si está habilitado)
+      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
+      // Cascada de modelos free (menor a mayor tamaño)
       'meta-llama/llama-3.2-3b-instruct:free',
       'nvidia/nemotron-nano-9b-v2:free',
       'openai/gpt-oss-20b:free',
-    ],
+    ].filter(Boolean),
     modeloOpenRouterVision: 'nvidia/nemotron-nano-12b-v2-vl:free',
     modelosOpenRouterVision: [
       'nvidia/nemotron-nano-12b-v2-vl:free',
@@ -388,10 +388,7 @@ const MODELOS_DISPONIBLES = {
   },
   NewserLiteCompact: {
     nombre: 'NewserLiteCompact',
-    descripcion: 'Igual que NewserLite pero mas economico: ~17% mas eficiente en el uso de tokens por respuesta, ideal para consultas cortas y de alto volumen.',
-    // Misma cascada de modelos que NewserLite (mismo acceso, mismo comportamiento), la diferencia
-    // esta en el presupuesto de tokens (mas chico = menos costo por respuesta) y en que se permiten
-    // mas consultas por ventana de tiempo, ya que cada una es mas barata de generar.
+    descripcion: 'Ultra ligero. Ideal para consultas rapidas y frecuentes.',
     modeloOpenRouter: 'meta-llama/llama-3.2-3b-instruct:free',
     modelosOpenRouterTexto: [
       'meta-llama/llama-3.2-3b-instruct:free',
@@ -413,7 +410,7 @@ const MODELOS_DISPONIBLES = {
   },
   NewserAdvanced: {
     nombre: 'NewserAdvanced',
-    descripcion: 'Mas potente. Razonamiento profundo. Genera imagenes, busca en la web y consulta el clima.',
+    descripcion: 'Potente. Genera imagenes, busca en la web y razona mejor.',
     modeloOpenRouter: 'meta-llama/llama-3.3-70b-instruct:free',
     modelosOpenRouterTexto: [
       'meta-llama/llama-3.3-70b-instruct:free',
@@ -439,7 +436,7 @@ const MODELOS_DISPONIBLES = {
   },
   'NewserAdvanced1.5': {
     nombre: 'NewserAdvanced1.5',
-    descripcion: 'El mas potente. Un razonamiento interno previo aun mas profundo antes de responder. Mejor en codigo: ejecuta codigo real y consulta APIs de prueba. Tambien genera imagenes con mas detalle (2 modelos de IA), maximo 2 por hora. Rate limits mas estrictos.',
+    descripcion: 'El mas potente. Ejecuta codigo real y genera imagenes de alta calidad.',
     modeloOpenRouter: 'nvidia/nemotron-3-super-120b-a12b:free',
     modelosOpenRouterTexto: [
       'nvidia/nemotron-3-super-120b-a12b:free',
@@ -473,7 +470,7 @@ const MODELOS_DISPONIBLES = {
   },
   NewserPlus: {
     nombre: 'NewserPlus',
-    descripcion: 'ULTRA - DeepSeek V4 Pro + G4F Bridge + OpenRouter Free. Supera a GPT-4 con DeepSeek V4 Pro (modelo premium más potente) vía glm-bridge, fallback a mejores modelos free. Optimizado para coding complejo, reasoning avanzado y agentic workflows.',
+    descripcion: 'Ultra potente. Coding complejo y razonamiento avanzado.',
     // Usar G4F si está habilitado, sino Anthropic, sino el mejor modelo free
     modeloOpenRouter: GPT4FREE_ENABLED ? 'g4f-bridge' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-ultra-550b-a55b:free'),
     modelosOpenRouterTexto: [
@@ -482,15 +479,15 @@ const MODELOS_DISPONIBLES = {
       // Anthropic Direct (segundo si está habilitado)
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Mejores modelos free (prioridad)
-      'nvidia/nemotron-3-ultra-550b-a55b:free',  // 550B params, mejor free disponible
-      'nvidia/nemotron-3-super-120b-a12b:free',  // 120B params, strong reasoning
-      'cohere/north-mini-code:free',             // Especializado en código
-      'nvidia/nemotron-3-nano-30b-a3b:free',     // 30B params, rápido
-      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', // Reasoning specialist
-      'meta-llama/llama-3.3-70b-instruct:free',  // 70B params, generalista fuerte
-      'nousresearch/hermes-3-llama-3.1-405b:free', // 405B params, largo contexto
-      'poolside/laguna-m.1:free',                 // Coding specialist
-      'z-ai/glm-4.5-air:free',                    // GLM-4.5 free tier
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'cohere/north-mini-code:free',
+      'nvidia/nemotron-3-nano-30b-a3b:free',
+      'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
+      'poolside/laguna-m.1:free',
+      'z-ai/glm-4.5-air:free',
     ].filter(Boolean),
     modeloOpenRouterRazonamiento: GPT4FREE_ENABLED ? 'g4f-bridge' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'),
     modelosOpenRouterRazonamiento: [
@@ -532,13 +529,12 @@ const MODELOS_DISPONIBLES = {
       'nvidia/nemotron-nano-12b-v2-vl:free',
       'nvidia/nemotron-3.5-content-safety:free',
     ].filter(Boolean),
-    costoCreditos: GPT4FREE_ENABLED ? 200 : (ANTHROPIC_ENABLED ? 500 : 250),  // 200 con G4F (free), 500 con Anthropic, 250 free
-    rateLimitMax: GPT4FREE_ENABLED ? 15 : (ANTHROPIC_ENABLED ? 5 : 10),     // 15 con G4F, 5 con Anthropic, 10 free
-    rateLimitMaxWeb: GPT4FREE_ENABLED ? 20 : (ANTHROPIC_ENABLED ? 8 : 15),  // 20 con G4F, 8 con Anthropic, 15 free
-    maxTokens: GPT4FREE_ENABLED ? 16000 : (ANTHROPIC_ENABLED ? 16000 : 8000), // 16K con G4F/Anthropic, 8K free
-    badge: 'admin',
+    costoCreditos: GPT4FREE_ENABLED ? 200 : (ANTHROPIC_ENABLED ? 500 : 250),
+    rateLimitMax: 4,  // Rate limit estricto por cuenta para NewserPlus
+    rateLimitMaxWeb: 6,
+    maxTokens: GPT4FREE_ENABLED ? 16000 : (ANTHROPIC_ENABLED ? 16000 : 8000),
+    badge: 'ULTRA/PRO/CODING',
     disponible: true,
-    soloAdmin: true,
     imagenModelo: POLLINATIONS_PRO_MODEL,
     imagenAncho: POLLINATIONS_PRO_WIDTH,
     imagenAlto: POLLINATIONS_PRO_HEIGHT,
@@ -592,6 +588,13 @@ function resolverModelo(valor, usuario) {
 const RATE_LIMIT_WEB = new Map();
 const RATE_LIMIT_WEB_VENTANA_MS = 60 * 1000;
 
+// Sistema de degradación de modelos por uso excesivo (por cuenta)
+const USO_MODELO_POR_CUENTA = new Map();
+const USO_MODELO_VENTANA_MS = 60 * 60 * 1000; // 1 hora
+const LIMITE_USO_NEWERPLUS = 10; // 10 mensajes de NewserPlus por hora
+const LIMITE_USO_ADVANCED15 = 10; // 10 mensajes de NewserAdvanced1.5 por hora
+const LIMITE_USO_ADVANCED = 999; // Sin límite para NewserAdvanced
+
 // Limite especial para imagenes en alta calidad de NewserAdvanced1.5: usa 2 modelos de IA
 // (uno mejora el prompt, el otro renderiza), asi que solo se permiten 2 imagenes por hora.
 const IMG_LIMIT_15 = new Map();
@@ -638,6 +641,44 @@ function verificarRateLimitWeb(usuario, configModelo) {
   usos.push(ahora);
   RATE_LIMIT_WEB.set(clave, usos);
   return { ok: true };
+}
+
+// Verificar y registrar uso de modelos para degradación
+function verificarUsoModelo(usuario, nombreModelo) {
+  if (!usuario) return { ok: true, modeloDegradado: null };
+  const clave = `${usuario}|${nombreModelo}`;
+  const ahora = Date.now();
+  let usos = USO_MODELO_POR_CUENTA.get(clave) || [];
+  usos = usos.filter((ts) => ahora - ts < USO_MODELO_VENTANA_MS);
+  
+  let limite = 999;
+  if (nombreModelo === 'NewserPlus') limite = LIMITE_USO_NEWERPLUS;
+  else if (nombreModelo === 'NewserAdvanced1.5') limite = LIMITE_USO_ADVANCED15;
+  else if (nombreModelo === 'NewserAdvanced') limite = LIMITE_USO_ADVANCED;
+  
+  if (usos.length >= limite) {
+    const masViejo = Math.min(...usos);
+    const tiempoRestanteMin = Math.ceil((USO_MODELO_VENTANA_MS - (ahora - masViejo)) / 60000);
+    
+    // Determinar modelo degradado
+    let modeloDegradado = null;
+    if (nombreModelo === 'NewserPlus') {
+      modeloDegradado = 'NewserAdvanced1.5';
+    } else if (nombreModelo === 'NewserAdvanced1.5') {
+      modeloDegradado = 'NewserAdvanced';
+    }
+    
+    return {
+      ok: false,
+      modeloDegradado,
+      tiempoRestanteMin,
+      error: `Alta demanda. Espera ${tiempoRestanteMin} min. Cambiando a ${modeloDegradado || 'NewserAdvanced'}.`
+    };
+  }
+  
+  usos.push(ahora);
+  USO_MODELO_POR_CUENTA.set(clave, usos);
+  return { ok: true, modeloDegradado: null };
 }
 
 function esperarMinimo(promesa, ms) {
@@ -708,7 +749,14 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
             { role: 'assistant', content: textoAcumulado },
             { role: 'user', content: 'Continuá exactamente donde te quedaste. No repitas nada de lo ya escrito, no reinicies archivos ni agregues explicaciones nuevas, seguí el contenido tal cual iba.' },
           ];
-          const rCont = await llamarOpenRouterFree(mensajesContinuar, systemPrompt, modelo, opciones);
+          let rCont;
+          if (modelo === 'g4f-bridge') {
+            rCont = await llamarG4F(mensajesContinuar, systemPrompt, GPT4FREE_MODEL, opciones);
+          } else if (modelo === 'anthropic-direct') {
+            rCont = await llamarAnthropic(mensajesContinuar, systemPrompt, ANTHROPIC_MODEL, opciones);
+          } else {
+            rCont = await llamarOpenRouterFree(mensajesContinuar, systemPrompt, modelo, opciones);
+          }
           if (!rCont.ok || !rCont.texto) break;
           // Algunos modelos (sobre todo los que "piensan en voz alta" en texto
           // plano en vez de usar <think>) no respetan "no repitas nada" y
@@ -2951,6 +2999,20 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
     configModelo = resolverModelo(null, token.propietario);
   }
 
+  // Verificar uso del modelo para degradación (solo para chat, no verbocode)
+  const controlUsoModelo = verificarUsoModelo(token.propietario, configModelo.nombre);
+  let mensajeDegradacion = null;
+  if (!controlUsoModelo.ok && controlUsoModelo.modeloDegradado) {
+    // Degradar al modelo inferior
+    mensajeDegradacion = controlUsoModelo.error;
+    try {
+      configModelo = resolverModelo(controlUsoModelo.modeloDegradado, token.propietario);
+    } catch (e) {
+      if (e.modeloBloqueado) return res.status(e.codigo || 400).json({ ok: false, error: e.message });
+      configModelo = resolverModelo(null, token.propietario);
+    }
+  }
+
   const controlUso = registrarUsoToken(token, {
     costo: 0,
     rateLimitMax: configModelo.rateLimitMax,
@@ -3326,7 +3388,7 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
     const costoTotal = configModelo.costoCreditos + costoRealHerramientas;
 
     const actualizado = buscarTokenPorValor(valorToken);
-    res.json({
+    return res.json({
       ok: true,
       respuesta: textoLimpio,
       modelo: configModelo.nombre,
@@ -3342,6 +3404,7 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
       creditosRestantes: token.propietario.startsWith('local:') ? -1 : leerCreditosGlobales(token.propietario),
       rateLimitMax: configModelo.rateLimitMax,
       rateLimitVentanaMs: TOKEN_RATE_LIMIT_VENTANA_MS,
+      mensajeDegradacion: mensajeDegradacion, // Mensaje de alta demanda si hubo degradación
     });
   } catch (e) {
     console.error('[api/v1/chat] Error:', e.message);
