@@ -473,11 +473,13 @@ const MODELOS_DISPONIBLES = {
   },
   NewserPlus: {
     nombre: 'NewserPlus',
-    descripcion: 'ULTRA - Claude 3.5 Sonnet + Anthropic Direct + OpenRouter Free. Supera a GPT-4 con Anthropic Claude cuando está habilitado, fallback a mejores modelos free. Optimizado para coding complejo, reasoning avanzado y agentic workflows.',
-    // Usar Anthropic si está habilitado, sino el mejor modelo free
-    modeloOpenRouter: ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    descripcion: 'ULTRA - DeepSeek V4 Pro + G4F Bridge + OpenRouter Free. Supera a GPT-4 con DeepSeek V4 Pro (modelo premium más potente) vía glm-bridge, fallback a mejores modelos free. Optimizado para coding complejo, reasoning avanzado y agentic workflows.',
+    // Usar G4F si está habilitado, sino Anthropic, sino el mejor modelo free
+    modeloOpenRouter: GPT4FREE_ENABLED ? 'g4f-bridge' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-ultra-550b-a55b:free'),
     modelosOpenRouterTexto: [
-      // Anthropic Direct (PRIMERO si está habilitado)
+      // G4F Bridge (PRIMERO si está habilitado)
+      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
+      // Anthropic Direct (segundo si está habilitado)
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Mejores modelos free (prioridad)
       'nvidia/nemotron-3-ultra-550b-a55b:free',  // 550B params, mejor free disponible
@@ -490,9 +492,11 @@ const MODELOS_DISPONIBLES = {
       'poolside/laguna-m.1:free',                 // Coding specialist
       'z-ai/glm-4.5-air:free',                    // GLM-4.5 free tier
     ].filter(Boolean),
-    modeloOpenRouterRazonamiento: ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    modeloOpenRouterRazonamiento: GPT4FREE_ENABLED ? 'g4f-bridge' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'),
     modelosOpenRouterRazonamiento: [
-      // Anthropic Direct (PRIMERO si está habilitado)
+      // G4F Bridge (PRIMERO si está habilitado)
+      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
+      // Anthropic Direct (segundo si está habilitado)
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Mejores modelos free de reasoning
       'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', // Reasoning specialist
@@ -503,7 +507,9 @@ const MODELOS_DISPONIBLES = {
     ].filter(Boolean),
     // Cascada optimizada para coding
     modelosOpenRouterCodigo: [
-      // Anthropic Direct (PRIMERO si está habilitado)
+      // G4F Bridge (PRIMERO si está habilitado)
+      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
+      // Anthropic Direct (segundo si está habilitado)
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Mejores modelos free para código
       'cohere/north-mini-code:free',                    // #1 free coding model
@@ -514,9 +520,11 @@ const MODELOS_DISPONIBLES = {
       'meta-llama/llama-3.3-70b-instruct:free',         // General coding
       'nousresearch/hermes-3-llama-3.1-405b:free',      // Complex coding
     ].filter(Boolean),
-    modeloOpenRouterVision: ANTHROPIC_ENABLED ? 'anthropic-direct' : 'google/gemma-4-31b-it:free',
+    modeloOpenRouterVision: GPT4FREE_ENABLED ? 'g4f-bridge' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'google/gemma-4-31b-it:free'),
     modelosOpenRouterVision: [
-      // Anthropic Direct (PRIMERO si está habilitado)
+      // G4F Bridge (PRIMERO si está habilitado)
+      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
+      // Anthropic Direct (segundo si está habilitado)
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Mejores modelos free multimodales
       'google/gemma-4-31b-it:free',
@@ -524,10 +532,10 @@ const MODELOS_DISPONIBLES = {
       'nvidia/nemotron-nano-12b-v2-vl:free',
       'nvidia/nemotron-3.5-content-safety:free',
     ].filter(Boolean),
-    costoCreditos: ANTHROPIC_ENABLED ? 500 : 250,  // Más alto con Anthropic (costo real)
-    rateLimitMax: ANTHROPIC_ENABLED ? 5 : 10,     // Más restrictivo con Anthropic
-    rateLimitMaxWeb: ANTHROPIC_ENABLED ? 8 : 15,
-    maxTokens: ANTHROPIC_ENABLED ? 16000 : 8000,   // 16K con Anthropic, 8K free
+    costoCreditos: GPT4FREE_ENABLED ? 200 : (ANTHROPIC_ENABLED ? 500 : 250),  // 200 con G4F (free), 500 con Anthropic, 250 free
+    rateLimitMax: GPT4FREE_ENABLED ? 15 : (ANTHROPIC_ENABLED ? 5 : 10),     // 15 con G4F, 5 con Anthropic, 10 free
+    rateLimitMaxWeb: GPT4FREE_ENABLED ? 20 : (ANTHROPIC_ENABLED ? 8 : 15),  // 20 con G4F, 8 con Anthropic, 15 free
+    maxTokens: GPT4FREE_ENABLED ? 16000 : (ANTHROPIC_ENABLED ? 16000 : 8000), // 16K con G4F/Anthropic, 8K free
     badge: 'admin',
     disponible: true,
     soloAdmin: true,
@@ -538,9 +546,9 @@ const MODELOS_DISPONIBLES = {
     // Capacidades avanzadas
     soportaReasoning: true,
     soportaTools: true,
-    soportaStructuredOutputs: ANTHROPIC_ENABLED,    // Disponible con Anthropic
-    soportaPromptCaching: ANTHROPIC_ENABLED,        // Disponible con Anthropic
-    contextWindow: ANTHROPIC_ENABLED ? 200000 : 128000, // 200K con Anthropic, 128K free
+    soportaStructuredOutputs: GPT4FREE_ENABLED || ANTHROPIC_ENABLED,    // Disponible con G4F y Anthropic
+    soportaPromptCaching: GPT4FREE_ENABLED || ANTHROPIC_ENABLED,        // Disponible con G4F y Anthropic
+    contextWindow: GPT4FREE_ENABLED ? 200000 : (ANTHROPIC_ENABLED ? 200000 : 128000), // 200K con G4F/Anthropic, 128K free
   },
 };
 const MODELO_DEFAULT = 'NewserLite';
@@ -674,8 +682,10 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
       };
 
       let r;
-      // Si el modelo es 'anthropic-direct', usar la función de Anthropic
-      if (modelo === 'anthropic-direct') {
+      // Si el modelo es 'g4f-bridge', usar la función de G4F
+      if (modelo === 'g4f-bridge') {
+        r = await llamarG4F(messages, systemPrompt, GPT4FREE_MODEL, opcionesConConfig);
+      } else if (modelo === 'anthropic-direct') {
         r = await llamarAnthropic(messages, systemPrompt, ANTHROPIC_MODEL, opcionesConConfig);
       } else {
         r = await llamarOpenRouterFree(messages, systemPrompt, modelo, opcionesConConfig);
@@ -1216,6 +1226,78 @@ async function llamarAnthropic(messages, systemPrompt, model = ANTHROPIC_MODEL, 
 
   } catch (error) {
     console.error('[anthropic] Error:', error.message);
+    return { ok: false, error: error.message };
+  }
+}
+
+// Llama a G4F Bridge (DeepSeek R1, V3, etc.) vía glm-bridge
+async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opciones = {}) {
+  if (!GPT4FREE_ENABLED || !GPT4FREE_URL) {
+    return { ok: false, error: 'G4F deshabilitado o sin URL' };
+  }
+
+  try {
+    // Determinar la URL completa
+    const url = GPT4FREE_URL.endsWith('/v1/chat/completions')
+      ? GPT4FREE_URL
+      : `${GPT4FREE_URL}/v1/chat/completions`;
+
+    // Convertir mensajes al formato OpenAI (compatible con G4F)
+    const openaiMessages = messages.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }));
+
+    // Agregar system prompt como primer mensaje si existe
+    if (systemPrompt) {
+      openaiMessages.unshift({
+        role: 'system',
+        content: systemPrompt
+      });
+    }
+
+    const body = {
+      model: model,
+      messages: openaiMessages,
+      temperature: 0.7,
+      max_tokens: opciones.maxTokens || 4096,
+    };
+
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+
+    // Agregar API key si está configurada
+    if (GPT4FREE_API_KEY) {
+      headers['Authorization'] = `Bearer ${GPT4FREE_API_KEY}`;
+    }
+
+    const resp = await axios.post(url, body, {
+      headers,
+      timeout: GPT4FREE_TIMEOUT,
+      signal: opciones.signal,
+      validateStatus: () => true,
+    });
+
+    if (resp.status < 200 || resp.status >= 300) {
+      const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
+      console.error(`[g4f] HTTP ${resp.status}: ${detalle}`);
+      return { ok: false, error: `HTTP ${resp.status}` };
+    }
+
+    const texto = resp.data?.choices?.[0]?.message?.content || '';
+    const finishReason = resp.data?.choices?.[0]?.finish_reason || null;
+
+    if (!texto || !texto.trim()) {
+      console.error('[g4f] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+      return { ok: false, error: 'Respuesta vacia de G4F' };
+    }
+
+    console.log(`[g4f] OK - ${texto.length} chars por ${model} (finish_reason: ${finishReason})`);
+    return { ok: true, tipo: 'g4f', texto: texto.trim(), modelo: model, finishReason };
+
+  } catch (error) {
+    console.error('[g4f] Error:', error.message);
     return { ok: false, error: error.message };
   }
 }
