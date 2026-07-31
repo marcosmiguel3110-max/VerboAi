@@ -19,6 +19,7 @@ const estado = {
   modoDesign: false,            // modo Design (Canvas/3D) activado desde el botón del chat
   profundidad: 'medium',        // nivel de profundidad de código: medium | avanzado | extendido | ultracode
   webIdeStatusTimer: null,
+  webIdeUltimaClaveConexion: '',
 };
 
 // ============================================================
@@ -226,6 +227,7 @@ async function cargarProyecto() {
     document.getElementById('vcProyectoNombre').value = estado.proyecto.nombre;
     document.getElementById('vcProyectoNombre').disabled = false;
     actualizarUiWebIde();
+    anunciarConexionWebIde(obtenerEstadoConexionWebIde());
 
     renderArchivos();
 
@@ -281,20 +283,67 @@ function obtenerRutaTerminalActual() {
   return estadoConexion?.cwd || estadoConexion?.folderPath || '/proyecto';
 }
 
+function obtenerBasePreviewWebIde() {
+  const estadoConexion = obtenerEstadoConexionWebIde();
+  if (!estadoConexion?.conectado || !estadoConexion?.localServerRunning || !estadoConexion?.previewUrl) return '';
+  return estadoConexion.previewUrl;
+}
+
+function obtenerUrlPreviewWebIde() {
+  const base = obtenerBasePreviewWebIde();
+  if (!base) return '';
+  const entrada = resolverArchivoEntradaPreview();
+  try {
+    const destino = entrada ? new URL(entrada.replace(/^\/+/, ''), base) : new URL(base);
+    destino.searchParams.set('_vc', String(Date.now()));
+    return destino.toString();
+  } catch (_) {
+    return base;
+  }
+}
+
+function puedeUsarPreviewLocalEnIframe(previewUrl) {
+  if (!previewUrl) return false;
+  if (window.location.protocol !== 'https:') return true;
+  return previewUrl.startsWith('https://');
+}
+
+function anunciarConexionWebIde(estadoConexion) {
+  if (!estadoConexion?.conectado) return;
+  const ruta = estadoConexion.folderPath || estadoConexion.cwd || '';
+  const clave = `${ruta}|${estadoConexion.previewUrl || ''}`;
+  if (!clave || estado.webIdeUltimaClaveConexion === clave) return;
+  estado.webIdeUltimaClaveConexion = clave;
+
+  const pasos = [
+    'Web IDE ya quedó **conectado** con tu carpeta real.',
+    '',
+    ruta ? `- Carpeta vinculada: \`${ruta}\`` : null,
+    estadoConexion.previewUrl ? `- Mini servidor local: ${estadoConexion.previewUrl}` : null,
+    '- La terminal ahora corre en esa carpeta real con PowerShell.',
+    '- Si la IA crea, edita o elimina archivos, los vas a ver reflejados ahí en tiempo real.',
+  ].filter(Boolean);
+
+  agregarMensajeLocalAsistente(pasos.join('\n'), 'Web IDE');
+}
+
 function actualizarUiWebIde() {
   const badge = document.getElementById('vcWebIdeEstado');
   const prompt = document.getElementById('vcTerminalPrompt');
   const btn = document.getElementById('btnWebIde');
+  const corner = document.getElementById('vcWebIdeCorner');
   const estadoConexion = obtenerEstadoConexionWebIde();
   const conectado = !!estadoConexion?.conectado;
   const ruta = estadoConexion?.folderPath || estadoConexion?.cwd || '';
   const promptTexto = obtenerRutaTerminalActual();
+  const previewUrl = obtenerBasePreviewWebIde();
+  const detalle = ruta || previewUrl;
 
   if (badge) {
-    badge.textContent = conectado ? `Conectado${ruta ? ` · ${ruta}` : ''}` : 'Sin conectar';
+    badge.textContent = conectado ? `Conectado${detalle ? ` · ${detalle}` : ''}` : 'Sin conectar';
     badge.className = `vc-webide-estado ${conectado ? 'conectado' : 'desconectado'}`;
     badge.title = conectado
-      ? `Web IDE conectado${ruta ? ` en ${ruta}` : ''}`
+      ? `Web IDE conectado${ruta ? ` en ${ruta}` : ''}${previewUrl ? `\nPreview local: ${previewUrl}` : ''}`
       : 'Descargá el BAT para conectar una carpeta local a este proyecto';
   }
 
@@ -306,19 +355,32 @@ function actualizarUiWebIde() {
   if (btn) {
     btn.classList.toggle('activo', conectado);
     btn.title = conectado
-      ? `Web IDE conectado${ruta ? `: ${ruta}` : ''}`
+      ? `Web IDE conectado${ruta ? `: ${ruta}` : ''}${previewUrl ? ` · preview ${previewUrl}` : ''}`
       : 'Descargar el BAT para conectar esta carpeta a Verbo Code';
+  }
+
+  if (corner) {
+    corner.textContent = conectado
+      ? `Web IDE · conectado${detalle ? ` · ${detalle}` : ''}`
+      : 'Web IDE · sin conectar';
+    corner.className = `vc-webide-corner ${conectado ? 'conectado' : 'desconectado'}`;
+    corner.title = conectado
+      ? `Web IDE conectado${ruta ? ` en ${ruta}` : ''}${previewUrl ? `\nPreview local: ${previewUrl}` : ''}`
+      : 'Web IDE sin conectar';
   }
 }
 
 function actualizarEstadoWebIde(webIde) {
   if (!estado.proyecto) return;
+  const estadoPrevio = obtenerEstadoConexionWebIde();
   estado.proyecto.webIde = {
     ...(estado.proyecto.webIde || {}),
     ...(webIde || {}),
     estadoConexion: webIde?.estadoConexion || estado.proyecto.webIde?.estadoConexion || null,
   };
   actualizarUiWebIde();
+  const estadoActual = obtenerEstadoConexionWebIde();
+  if (!estadoPrevio?.conectado && estadoActual?.conectado) anunciarConexionWebIde(estadoActual);
 }
 
 async function refrescarEstadoWebIde(silencioso = false) {
@@ -387,7 +449,7 @@ async function descargarWebIde() {
         '1. Mové el `.bat` a la carpeta real que querés vincular.',
         '2. Abrilo y dejá esa ventana abierta mientras trabajás.',
         `3. Si todavía no existe la carpeta, podés crear una nueva llamada \`${carpeta}\` y ejecutar el BAT ahí.`,
-        '4. Cuando conecte, el badge de arriba y la terminal van a mostrar la ruta real de esa carpeta.',
+        '4. Cuando conecte, vas a ver el estado en una esquina, la terminal va a apuntar a esa ruta y también se levanta un mini servidor local liviano para preview.',
       ].join('\n'),
       'Web IDE'
     );
@@ -2082,14 +2144,27 @@ function mostrarPreview() {
     return;
   }
   const frame = document.getElementById('vcPreviewFrame');
-  const html = construirHtmlParaPreview();
-  frame.srcdoc = html;
+  const previewUrl = obtenerUrlPreviewWebIde();
+  if (previewUrl && resolverArchivoEntradaPreview() && puedeUsarPreviewLocalEnIframe(previewUrl)) {
+    frame.removeAttribute('srcdoc');
+    frame.src = previewUrl;
+  } else {
+    const html = construirHtmlParaPreview();
+    frame.removeAttribute('src');
+    frame.srcdoc = html;
+  }
   document.getElementById('modalPreview').classList.remove('oculto');
 }
 
 function probarProyecto() {
   if (!proyectoTieneCodigoPrevisualizable()) {
     mostrarToast('Todavía no hay nada previsualizable (falta un .html o .js)', 'error');
+    return;
+  }
+  const previewUrl = obtenerUrlPreviewWebIde();
+  if (previewUrl && resolverArchivoEntradaPreview()) {
+    window.open(previewUrl, '_blank');
+    mostrarToast('Abriendo preview local de la carpeta conectada...', 'success');
     return;
   }
   // Abrir en nueva ventana/pestaña con el HTML completo

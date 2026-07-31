@@ -88,6 +88,77 @@
   gap: 6px;
 }
 
+.vc-webide-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--vc-border);
+  background: var(--vc-bg-tertiary);
+  color: var(--vc-text-muted);
+  white-space: nowrap;
+  max-width: min(42vw, 480px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vc-webide-estado.conectado {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.vc-webide-estado.desconectado {
+  background: var(--vc-bg-tertiary);
+  color: var(--vc-text-muted);
+}
+
+.vc-btn-icon-header.activo {
+  background: rgba(34, 197, 94, 0.1);
+  color: #15803d;
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+.vc-webide-corner {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  z-index: 80;
+  display: inline-flex;
+  align-items: center;
+  max-width: min(44vw, 460px);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--vc-border);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--vc-text-muted);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(10px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.vc-webide-corner.conectado {
+  background: rgba(220, 252, 231, 0.95);
+  color: #166534;
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.vc-webide-corner.desconectado {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--vc-text-muted);
+}
+
 /* Botones del header — CHICOS estilo IDE */
 .vc-btn-icon-header {
   display: flex;

@@ -4142,6 +4142,12 @@ function limpiarTextoPlanoWebIde(valor, max = 280) {
   return String(valor || '').replace(/\0/g, '').trim().slice(0, max);
 }
 
+function normalizarPreviewUrlWebIde(url) {
+  const valor = limpiarTextoPlanoWebIde(url, 500);
+  if (!/^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d{1,5})?(?:\/|$)/i.test(valor)) return '';
+  return valor.endsWith('/') ? valor : `${valor}/`;
+}
+
 function sanitizarNombreCarpetaWebIde(nombre) {
   return String(nombre || 'proyecto')
     .normalize('NFD')
@@ -4180,6 +4186,9 @@ function asegurarSesionWebIde(proyecto) {
       lastSeen: 0,
       folderPath: '',
       cwd: '',
+      previewUrl: '',
+      previewPort: null,
+      localServerRunning: false,
       machineName: '',
       clientVersion: '',
       nextCommandId: 1,
@@ -4201,6 +4210,9 @@ function serializarEstadoConexionWebIde(proyecto) {
     conectadoDesde: sesion?.connectedAt ? new Date(sesion.connectedAt).toISOString() : null,
     folderPath: sesion?.folderPath || '',
     cwd: sesion?.cwd || '',
+    previewUrl: sesion?.previewUrl || '',
+    previewPort: Number.isFinite(sesion?.previewPort) ? sesion.previewPort : null,
+    localServerRunning: !!sesion?.localServerRunning,
     machineName: sesion?.machineName || '',
     clientVersion: sesion?.clientVersion || '',
     pollIntervalMs: WEBIDE_POLL_INTERVAL_MS,
@@ -4248,6 +4260,9 @@ function actualizarSesionWebIde(proyecto, data = {}) {
   sesion.lastSeen = ahora;
   sesion.folderPath = limpiarTextoPlanoWebIde(data.folderPath || sesion.folderPath, 500);
   sesion.cwd = limpiarTextoPlanoWebIde(data.cwd || data.folderPath || sesion.cwd, 500);
+  sesion.previewUrl = normalizarPreviewUrlWebIde(data.previewUrl || sesion.previewUrl);
+  sesion.previewPort = Number.isFinite(Number(data.previewPort)) ? Number(data.previewPort) : (sesion.previewPort || null);
+  sesion.localServerRunning = data.localServerRunning === undefined ? !!sesion.localServerRunning : !!data.localServerRunning;
   sesion.machineName = limpiarTextoPlanoWebIde(data.machineName || sesion.machineName, 120);
   sesion.clientVersion = limpiarTextoPlanoWebIde(data.clientVersion || sesion.clientVersion, 80);
   return sesion;
@@ -4707,6 +4722,8 @@ app.post('/api/v1/verbocode/link/:syncId/command-result/:commandId', express.jso
     exitCode: Number.isFinite(req.body?.exitCode) ? req.body.exitCode : null,
     cwd: sesion?.cwd || '',
     folderPath: sesion?.folderPath || '',
+    previewUrl: sesion?.previewUrl || '',
+    previewPort: Number.isFinite(sesion?.previewPort) ? sesion.previewPort : null,
   };
 
   sesion.commands = (sesion.commands || []).filter((cmd) => cmd.id !== tarea.id);
@@ -5968,6 +5985,10 @@ app.post('/api/verbocode/execute', codeRateLimit, requiereAdminVerboCode, async 
       error: resultado.exito ? null : (resultado.stderr || 'El comando remoto falló.'),
       exitCode: resultado.exitCode,
       remotePath: resultado.cwd || resultado.folderPath || '',
+      cwd: resultado.cwd || '',
+      folderPath: resultado.folderPath || '',
+      previewUrl: resultado.previewUrl || '',
+      previewPort: Number.isFinite(resultado.previewPort) ? resultado.previewPort : null,
       conectado: true,
     });
   }

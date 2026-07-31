@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 import argparse
 import hashlib
+import http.server
 import json
 import os
 import shutil
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -192,6 +194,56 @@ def run_command(command, cwd):
         return {"stdout": "", "stderr": str(exc), "exito": False, "exitCode": None}
 
 
+class FolderHttpRequestHandler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *args, directory_getter=None, **kwargs):
+        self._directory_getter = directory_getter or (lambda: Path.cwd())
+        super().__init__(*args, directory=str(self._directory_getter()), **kwargs)
+
+    def translate_path(self, path):
+        self.directory = str(self._directory_getter())
+        return super().translate_path(path)
+
+    def log_message(self, _format, *_args):
+        return
+
+
+class LocalPreviewServer:
+    def __init__(self, folder):
+        self.folder = Path(folder)
+        self.httpd = None
+        self.thread = None
+        self.port = None
+
+    @property
+    def url(self):
+        if not self.port:
+            return ""
+        return f"http://127.0.0.1:{self.port}/"
+
+    def start(self):
+        handler = lambda *args, **kwargs: FolderHttpRequestHandler(
+            *args,
+            directory_getter=lambda: self.folder,
+            **kwargs,
+        )
+        self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        self.httpd.daemon_threads = True
+        self.port = int(self.httpd.server_address[1])
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+
+    def update_folder(self, folder):
+        self.folder = Path(folder)
+
+    def stop(self):
+        if self.httpd:
+            self.httpd.shutdown()
+            self.httpd.server_close()
+            self.httpd = None
+        self.thread = None
+        self.port = None
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Cliente liviano de Verbo Code Web IDE")
     parser.add_argument("--server", required=True)
@@ -213,6 +265,8 @@ def main():
     last_revision = 0
     local_hash = None
     last_error = ""
+    preview_server = LocalPreviewServer(folder)
+    preview_server.start()
 
     out("================================================")
     out(" Verbo Code Web IDE")
@@ -220,6 +274,7 @@ def main():
     out(f" Proyecto: {current_name}")
     out(f" Carpeta:  {folder}")
     out(f" Cliente:  {machine_name}")
+    out(f" Preview:  {preview_server.url}")
     out("")
 
     while True:
@@ -233,6 +288,9 @@ def main():
                     "cwd": str(folder),
                     "machineName": machine_name,
                     "clientVersion": VERSION,
+                    "previewUrl": preview_server.url,
+                    "previewPort": preview_server.port,
+                    "localServerRunning": True,
                 },
                 args.secret,
                 timeout=70,
@@ -243,6 +301,7 @@ def main():
 
             desired_name = poll.get("desiredFolderName") or current_name
             folder = rename_folder_if_needed(folder, desired_name)
+            preview_server.update_folder(folder)
 
             project = poll.get("project")
             if project:
@@ -264,6 +323,9 @@ def main():
                         "cwd": str(folder),
                         "machineName": machine_name,
                         "clientVersion": VERSION,
+                        "previewUrl": preview_server.url,
+                        "previewPort": preview_server.port,
+                        "localServerRunning": True,
                     },
                     args.secret,
                     timeout=90,
@@ -290,6 +352,9 @@ def main():
                         "cwd": str(folder),
                         "machineName": machine_name,
                         "clientVersion": VERSION,
+                        "previewUrl": preview_server.url,
+                        "previewPort": preview_server.port,
+                        "localServerRunning": True,
                     },
                     args.secret,
                     timeout=90,
