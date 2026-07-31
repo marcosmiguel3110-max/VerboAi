@@ -4390,6 +4390,10 @@ if "%~1"=="" (
 )
 
 for %%I in ("%VERBOCODE_FOLDER%") do set "VERBOCODE_FOLDER=%%~fI"
+set "VERBOCODE_FOLDER_ARG=%VERBOCODE_FOLDER%"
+if not "%VERBOCODE_FOLDER_ARG%"=="" (
+  if "%VERBOCODE_FOLDER_ARG:~-1%"=="\\" set "VERBOCODE_FOLDER_ARG=%VERBOCODE_FOLDER_ARG%."
+)
 
 if not exist "%VERBOCODE_CLIENT_DIR%" mkdir "%VERBOCODE_CLIENT_DIR%"
 
@@ -4429,7 +4433,7 @@ echo.
 echo Iniciando sincronizacion con Verbo Code...
 echo Esta ventana tiene que quedar abierta mientras quieras seguir conectado.
 echo.
-%PY_CMD% "%VERBOCODE_CLIENT%" --server "%VERBOCODE_SERVER%" --sync-id "%VERBOCODE_SYNC_ID%" --secret "%VERBOCODE_SECRET%" --folder "%VERBOCODE_FOLDER%" --project-name "%VERBOCODE_PROJECT_NAME%" --bat-name "%VERBOCODE_BAT_NAME%"
+%PY_CMD% "%VERBOCODE_CLIENT%" --server "%VERBOCODE_SERVER%" --sync-id "%VERBOCODE_SYNC_ID%" --secret "%VERBOCODE_SECRET%" --folder "%VERBOCODE_FOLDER_ARG%" --project-name "%VERBOCODE_PROJECT_NAME%" --bat-name "%VERBOCODE_BAT_NAME%"
 echo.
 echo Conexion Web IDE finalizada.
 pause

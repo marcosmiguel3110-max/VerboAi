@@ -4,6 +4,7 @@ import hashlib
 import http.server
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -30,6 +31,18 @@ IGNORE_FILES = {"thumbs.db", ".ds_store"}
 
 def out(text=""):
     print(text, flush=True)
+
+
+def clean_windows_folder_arg(raw_value):
+    value = str(raw_value or "").strip()
+    if not value:
+        return value
+
+    match = re.match(r'^(?P<folder>.+?)"\s+--(?:project-name|bat-name)\b(?P<rest>.*)$', value, re.IGNORECASE)
+    if match:
+        return match.group("folder").rstrip().rstrip("\\/")
+
+    return value.rstrip('"')
 
 
 def sanitize_folder_name(name):
@@ -252,13 +265,31 @@ def parse_args():
     parser.add_argument("--folder", required=True)
     parser.add_argument("--project-name", default="Proyecto Verbo Code")
     parser.add_argument("--bat-name", default="")
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    raw_folder = str(args.folder or "")
+    if '" --project-name ' in raw_folder.lower() or '" --bat-name ' in raw_folder.lower():
+        folder_match = re.match(r'^(?P<folder>.+?)"\s+(?P<rest>--.*)$', raw_folder, re.IGNORECASE)
+        if folder_match:
+            args.folder = clean_windows_folder_arg(folder_match.group("folder"))
+            resto = folder_match.group("rest")
+            project_match = re.search(r'--project-name\s+(.+?)(?=\s+--bat-name\b|$)', resto, re.IGNORECASE)
+            bat_match = re.search(r'--bat-name\s+(.+?)$', resto, re.IGNORECASE)
+            if project_match:
+                args.project_name = project_match.group(1).strip().strip('"')
+            if bat_match:
+                args.bat_name = bat_match.group(1).strip().strip('"')
+    else:
+        args.folder = clean_windows_folder_arg(raw_folder)
+
+    return args
 
 
 def main():
     args = parse_args()
     server = args.server.rstrip("/")
-    folder = Path(args.folder).resolve()
+    folder = Path(args.folder).expanduser().resolve()
+    folder.mkdir(parents=True, exist_ok=True)
     bat_name = Path(args.bat_name).name if args.bat_name else ""
     machine_name = socket.gethostname()
     current_name = args.project_name
