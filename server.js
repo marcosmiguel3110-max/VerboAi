@@ -624,6 +624,68 @@ function resolverModelo(valor, usuario) {
 const RATE_LIMIT_WEB = new Map();
 const RATE_LIMIT_WEB_VENTANA_MS = 60 * 1000;
 
+// Sistema de aislamiento de abusos por cuenta (scraping inverso)
+const ABUSOS_POR_CUENTA = new Map();
+const ABUSO_VENTANA_MS = 5 * 60 * 1000; // 5 minutos
+const MAX_ABUSOS_ANTES_DE_BAN = 10; // 10 abusos en 5 minutos = ban temporal
+
+// Rate limits específicos por cuenta para web search (más estrictos)
+const WEB_SEARCH_LIMIT_POR_CUENTA = new Map();
+const WEB_SEARCH_VENTANA_MS = 60 * 1000; // 1 minuto
+const WEB_SEARCH_MAX_POR_MINUTO = 5; // 5 búsquedas por minuto por cuenta
+
+// Sistema de tracking de abusos por cuenta
+function registrarAbuso(clave, tipo) {
+  if (!clave) return;
+  const abusos = ABUSOS_POR_CUENTA.get(clave) || [];
+  const ahora = Date.now();
+  abusos.push({ tipo, timestamp: ahora });
+  // Limpiar abusos viejos (más de 5 minutos)
+  const validos = abusos.filter(a => ahora - a.timestamp < ABUSO_VENTANA_MS);
+  ABUSOS_POR_CUENTA.set(clave, validos);
+}
+
+function verificarBanTemporal(clave) {
+  if (!clave) return { ok: true };
+  const abusos = ABUSOS_POR_CUENTA.get(clave) || [];
+  const ahora = Date.now();
+  const validos = abusos.filter(a => ahora - a.timestamp < ABUSO_VENTANA_MS);
+  
+  if (validos.length >= MAX_ABUSOS_ANTES_DE_BAN) {
+    const tiempoRestante = Math.ceil((ABUSO_VENTANA_MS - (ahora - validos[0].timestamp)) / 1000);
+    return {
+      ok: false,
+      status: 429,
+      error: `Cuenta temporalmente baneada por abuso (${validos.length} abusos en 5 minutos). Espera ${tiempoRestante}s antes de volver a usar el sistema.`,
+      reintentarEnSeg: tiempoRestante,
+    };
+  }
+  return { ok: true };
+}
+
+// Rate limit específico para web search por cuenta
+function verificarWebSearchLimit(clave) {
+  if (!clave) return { ok: true };
+  const ahora = Date.now();
+  let usos = WEB_SEARCH_LIMIT_POR_CUENTA.get(clave) || [];
+  usos = usos.filter(ts => ahora - ts < WEB_SEARCH_VENTANA_MS);
+  
+  if (usos.length >= WEB_SEARCH_MAX_POR_MINUTO) {
+    const masViejo = Math.min(...usos);
+    const reintentarEnSeg = Math.ceil((WEB_SEARCH_VENTANA_MS - (ahora - masViejo)) / 1000);
+    return {
+      ok: false,
+      status: 429,
+      error: `Demasiadas búsquedas web (${WEB_SEARCH_MAX_POR_MINUTO}/minuto). Espera ${reintentarEnSeg}s.`,
+      reintentarEnSeg,
+    };
+  }
+  
+  usos.push(ahora);
+  WEB_SEARCH_LIMIT_POR_CUENTA.set(clave, usos);
+  return { ok: true };
+}
+
 // Sistema de degradación de modelos por uso excesivo (por cuenta)
 const USO_MODELO_POR_CUENTA = new Map();
 const USO_MODELO_VENTANA_MS = 60 * 60 * 1000; // 1 hora
@@ -3591,7 +3653,8 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
 
     if (webSearchQueryApi) {
       try {
-        const resultado = await buscarWebGoogle(webSearchQueryApi);
+        const claveCuenta = token ? `token:${token.id}` : (usuario || null);
+        const resultado = await buscarWebGoogle(webSearchQueryApi, claveCuenta);
         if (resultado.exito) {
           costoRealHerramientas += 1;
           herramientasResultado.push({
@@ -3604,10 +3667,15 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
             resultado.resultados.map((r, i) => `${i + 1}. ${r.titulo} — ${r.resumen} (${r.link})`).join('\n');
           textoLimpio = `${textoLimpio}${textoResultados}`;
         } else {
+          console.error('[api/v1/chat] web search falló:', resultado.error);
+          if (resultado.rateLimit) {
+            // Si es rate limit por cuenta, registrar abuso
+            registrarAbuso(claveCuenta, 'web_search_rate_limit');
+          }
           herramientasResultado.push({ herramienta: 'web', error: resultado.error || 'No se pudo buscar en la web.' });
         }
       } catch (e) {
-        console.error('[api/v1/chat] Error en WEB:', e.message);
+        console.error('[api/v1/chat] error en web search:', e.message);
         herramientasResultado.push({ herramienta: 'web', error: `Error interno: ${e.message}` });
       }
     }
@@ -8648,7 +8716,16 @@ const GOOGLE_CSE_IDS = [
 const GOOGLE_CSE_API_KEY = process.env.GOOGLE_CSE_API_KEY || '';
 const SEARCHX_API_KEY = process.env.SEARCHX_API_KEY || '';
 
-async function buscarWebGoogle(query) {
+async function buscarWebGoogle(query, claveCuenta = null) {
+  // Verificar rate limit por cuenta antes de buscar
+  if (claveCuenta) {
+    const limitCheck = verificarWebSearchLimit(claveCuenta);
+    if (!limitCheck.ok) {
+      console.log(`[web-search] Rate limit por cuenta activado: ${limitCheck.error}`);
+      return { exito: false, error: limitCheck.error, rateLimit: true };
+    }
+  }
+
   // Si la query es muy larga (>80 chars), cortarla a las primeras palabras
   // DuckDuckGo no devuelve resultados con queries muy largas
   let q = (query || '').trim();
@@ -8657,7 +8734,7 @@ async function buscarWebGoogle(query) {
     q = palabras;
   }
   
-  console.log(`[web-search] Iniciando búsqueda con query: "${q}"`);
+  console.log(`[web-search] Iniciando búsqueda con query: "${q}"${claveCuenta ? ` (cuenta: ${claveCuenta})` : ''}`);
   
   // Intento 1: SearchX API (3K queries/día gratis, requiere API key)
   if (SEARCHX_API_KEY) {
@@ -8668,6 +8745,10 @@ async function buscarWebGoogle(query) {
       return searchx;
     }
     console.log(`[web-search] SearchX falló: ${searchx.error}`);
+    // Registrar abuso si falló por rate limit de la API externa
+    if (claveCuenta && searchx.error.includes('429')) {
+      registrarAbuso(claveCuenta, 'searchx_rate_limit');
+    }
   } else {
     console.log(`[web-search] SearchX API key no configurada, saltando`);
   }
@@ -8710,6 +8791,10 @@ async function buscarWebGoogle(query) {
       return g;
     }
     console.log(`[web-search] Google CSE falló: ${g.error}`);
+    // Registrar abuso si falló por rate limit de Google CSE
+    if (claveCuenta && g.error.includes('429')) {
+      registrarAbuso(claveCuenta, 'google_cse_rate_limit');
+    }
   }
   
   console.log(`[web-search] Todos los intentos fallaron`);
