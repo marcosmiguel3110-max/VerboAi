@@ -2410,6 +2410,80 @@ const TOKEN_CREDITOS_INICIALES = 1000;
 const TOKEN_RATE_LIMIT_VENTANA_MS = 60 * 1000;
 const TOKEN_RATE_LIMIT_MAX = 20;
 
+// Sistema de detección de abuso por cuenta (no global)
+const ABUSE_DETECTION_WINDOW_MS = 3600 * 1000; // 1 hora
+const ABUSE_THRESHOLD_REQUESTS = 500; // 500 requests por hora = abuso
+const ABUSE_WARNING_THRESHOLD = 300; // 300 requests por hora = advertencia
+const accountAbuseTracker = new Map(); // email -> { timestamps: [], warnings: 0, lastWarning: null, penalizedUntil: null }
+
+function verificarAbusoCuenta(usuario) {
+  if (!usuario || usuarioEsAdmin(usuario)) {
+    return { allowed: true, reason: null };
+  }
+
+  const ahora = Date.now();
+  const tracker = accountAbuseTracker.get(usuario) || { 
+    timestamps: [], 
+    warnings: 0, 
+    lastWarning: null, 
+    penalizedUntil: null 
+  };
+
+  // Limpiar timestamps viejos (>1 hora)
+  tracker.timestamps = tracker.timestamps.filter(t => ahora - t < ABUSE_DETECTION_WINDOW_MS);
+
+  // Verificar si está penalizado
+  if (tracker.penalizedUntil && ahora < tracker.penalizedUntil) {
+    const tiempoRestante = Math.ceil((tracker.penalizedUntil - ahora) / 60000); // minutos
+    return { 
+      allowed: false, 
+      reason: `Cuenta penalizada por abuso. Vuelve a intentar en ${tiempoRestante} minutos.`,
+      penalizedUntil: tracker.penalizedUntil
+    };
+  }
+
+  // Contar requests en la última hora
+  const requestsLastHour = tracker.timestamps.length;
+
+  // Detectar abuso
+  if (requestsLastHour >= ABUSE_THRESHOLD_REQUESTS) {
+    // Penalizar la cuenta por 1 hora
+    tracker.penalizedUntil = ahora + (3600 * 1000); // 1 hora de penalización
+    tracker.warnings++;
+    tracker.lastWarning = ahora;
+    accountAbuseTracker.set(usuario, tracker);
+    
+    console.warn(`[Abuso] Cuenta ${usuario} penalizada por exceso de requests (${requestsLastHour}/hora)`);
+    
+    return { 
+      allowed: false, 
+      reason: 'Cuenta penalizada por abuso de requests. Demasiadas peticiones en poco tiempo.',
+      penalizedUntil: tracker.penalizedUntil
+    };
+  }
+
+  // Advertencia
+  if (requestsLastHour >= ABUSE_WARNING_THRESHOLD && (!tracker.lastWarning || ahora - tracker.lastWarning > 1800000)) {
+    tracker.warnings++;
+    tracker.lastWarning = ahora;
+    accountAbuseTracker.set(usuario, tracker);
+    
+    console.warn(`[Abuso] Advertencia para cuenta ${usuario} (${requestsLastHour}/hora)`);
+    
+    return { 
+      allowed: true, 
+      warning: `Advertencia: estás haciendo muchas peticiones (${requestsLastHour}/hora). Si continúas, tu cuenta será penalizada temporalmente.`,
+      requestsLastHour
+    };
+  }
+
+  // Registrar el request actual
+  tracker.timestamps.push(ahora);
+  accountAbuseTracker.set(usuario, tracker);
+
+  return { allowed: true, requestsLastHour };
+}
+
 function leerApiTokens() {
   try {
     const d = JSON.parse(fs.readFileSync(API_TOKENS_FILE, 'utf-8'));
@@ -3394,6 +3468,16 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
   const token = buscarTokenPorValor(valorToken);
   if (!token) {
     return res.status(401).json({ ok: false, error: 'Token invalido o revocado.' });
+  }
+
+  // Verificar abuso de cuenta (rate limiting por cuenta, no global)
+  const verificacionAbuso = verificarAbusoCuenta(token.propietario);
+  if (!verificacionAbuso.allowed) {
+    return res.status(429).json({ 
+      ok: false, 
+      error: verificacionAbuso.reason,
+      penalizedUntil: verificacionAbuso.penalizedUntil
+    });
   }
 
   if (req.body == null || typeof req.body !== 'object' || Array.isArray(req.body)) {
