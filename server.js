@@ -371,12 +371,11 @@ const MODELOS_DISPONIBLES = {
     nombre: 'NewserLite',
     descripcion: 'Rapido y ligero. Perfecto para consultas cotidianas.',
     // Usar G4F si está habilitado, sino cascada de modelos free
-    modeloOpenRouter: GPT4FREE_ENABLED ? 'g4f-bridge' : 'meta-llama/llama-3.2-3b-instruct:free',
+    modeloOpenRouter: GPT4FREE_ENABLED ? 'g4f-bridge' : 'nvidia/nemotron-nano-9b-v2:free',
     modelosOpenRouterTexto: [
       // G4F Bridge (PRIMERO si está habilitado)
       GPT4FREE_ENABLED ? 'g4f-bridge' : null,
       // Cascada de modelos free (menor a mayor tamaño)
-      'meta-llama/llama-3.2-3b-instruct:free',
       'nvidia/nemotron-nano-9b-v2:free',
       'openai/gpt-oss-20b:free',
     ].filter(Boolean),
@@ -397,9 +396,8 @@ const MODELOS_DISPONIBLES = {
   NewserLiteCompact: {
     nombre: 'NewserLiteCompact',
     descripcion: 'Ultra ligero. Ideal para consultas rapidas y frecuentes.',
-    modeloOpenRouter: 'meta-llama/llama-3.2-3b-instruct:free',
+    modeloOpenRouter: 'nvidia/nemotron-nano-9b-v2:free',
     modelosOpenRouterTexto: [
-      'meta-llama/llama-3.2-3b-instruct:free',
       'nvidia/nemotron-nano-9b-v2:free',
       'openai/gpt-oss-20b:free',
     ],
@@ -6646,7 +6644,14 @@ Elimina un archivo.
 Instala un paquete npm. Crea/actualiza package.json. Se carga desde esm.sh CDN.
 
 [[RUN::comando]]
-Ejecutá un comando de terminal REAL vos misma — literalmente corre, no hace falta que el usuario lo tipee ni que vos le digas "corré esto en la terminal". Comandos de archivos (ls, cat, touch, rm, mv, echo >, mkdir) se aplican directo sobre los archivos reales del proyecto; cualquier otro comando (node script.js, python script.py, npm run algo, etc) corre en el sandbox de ejecución. El usuario lo ve en vivo en su terminal mientras corre. USÁ ESTO PROACTIVAMENTE, no lo menciones solamente: si el usuario pide instalar algo, verificar que un script funcione, correr tests, hacer un build, listar archivos, o cualquier tarea de terminal — ejecutala vos con [[RUN::...]] en la misma respuesta, en vez de explicarle qué comando debería correr él.
+Ejecutá un comando de terminal REAL vos misma — literalmente corre, no hace falta que el usuario lo tipee ni que vos le digas "corré esto en la terminal". Comandos de archivos (ls, cat, touch, rm, mv, echo >, mkdir) se aplican directo sobre los archivos reales del proyecto; cualquier otro comando (node script.js, python script.py, npm run algo, etc) corre en el sandbox de ejecución. El usuario lo ve en vivo en su terminal mientras corre.
+
+OBLIGATORIO: USÁ [[RUN::...]] PROACTIVAMENTE EN TODAS LAS RESPUESTAS:
+- Después de crear archivos con código, SIEMPRE ejecutá [[RUN::ls]] para verificar que se crearon
+- Si creaste un script JS/Python, ejecutalo con [[RUN::node archivo.js]] o [[RUN::python archivo.py]]
+- Si instalaste algo con NPM, verificá con [[RUN::npm list]]
+- Si el usuario pide verificar algo, probar algo, o ver si funciona — EJECUTALO con RUN
+- NUNCA digas "probá esto" o "corré esto" — EJECUTALO VOS MISMA con [[RUN::...]]
 
 IMPORTANTE: Para CREAR archivos del proyecto, usá SIEMPRE [[FILE_CREATE::nombre.ext::contenido]] en lugar de comandos de terminal como node -e "fs.writeFileSync(...)". Los comandos RUN solo se ejecutan en el sandbox temporal y NO se guardan en el proyecto. Solo usa RUN para verificar código, correr tests, o comandos que no necesiten persistir.
 
