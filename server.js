@@ -1483,12 +1483,15 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
 
   // Resolver el modelo real usando el sistema de múltiples modelos
   const modeloReal = GPT4FREE_MODELS[model] || model;
+  console.log(`[g4f] Llamando con modelo solicitado: ${model}, modelo real: ${modeloReal}`);
 
   try {
     // Determinar la URL completa
     const url = GPT4FREE_URL.endsWith('/v1/chat/completions')
       ? GPT4FREE_URL
       : `${GPT4FREE_URL}/v1/chat/completions`;
+
+    console.log(`[g4f] URL: ${url}`);
 
     // Convertir mensajes al formato OpenAI (compatible con G4F)
     const openaiMessages = messages.map(msg => ({
@@ -1565,7 +1568,10 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
     return { ok: true, tipo: 'g4f', texto: texto.trim(), modelo: model, finishReason };
 
   } catch (error) {
-    console.error('[g4f] Error:', error.message);
+    console.error('[g4f] Error:', error.message, error.stack);
+    if (gpt4freeKeyIndex !== null) {
+      updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, false);
+    }
     return { ok: false, error: error.message };
   }
 }
