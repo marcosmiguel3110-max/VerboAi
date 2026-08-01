@@ -8622,24 +8622,22 @@ async function buscarWebGoogle(query) {
   
   console.log(`[web-search] Iniciando búsqueda con query: "${q}"`);
   
-  // Intento 1: DuckDuckGo
+  // Intento 1: SearXNG (gratuito, no requiere tarjeta)
+  console.log(`[web-search] Intentando SearXNG`);
+  const searx = await buscarWebSearXNG(q);
+  if (searx.exito) {
+    console.log(`[web-search] SearXNG exitoso`);
+    return searx;
+  }
+  console.log(`[web-search] SearXNG falló: ${searx.error}`);
+  
+  // Intento 2: DuckDuckGo
   const ddg = await buscarWebDuckDuckGo(q);
   if (ddg.exito) {
     console.log(`[web-search] DuckDuckGo exitoso`);
     return ddg;
   }
   console.log(`[web-search] DuckDuckGo falló: ${ddg.error}`);
-  
-  // Intento 2: Google CSE (si hay API key)
-  if (GOOGLE_CSE_API_KEY) {
-    console.log(`[web-search] Intentando Google CSE`);
-    const g = await buscarWebGoogleReal(q);
-    if (g.exito) {
-      console.log(`[web-search] Google CSE exitoso`);
-      return g;
-    }
-    console.log(`[web-search] Google CSE falló: ${g.error}`);
-  }
   
   // Intento 3: DuckDuckGo con query más corta
   if (q.split(' ').length > 4) {
@@ -8653,8 +8651,19 @@ async function buscarWebGoogle(query) {
     console.log(`[web-search] DuckDuckGo (corta) falló: ${ddg2.error}`);
   }
   
+  // Intento 4: Google CSE (solo si hay API key configurada, requiere tarjeta)
+  if (GOOGLE_CSE_API_KEY) {
+    console.log(`[web-search] Intentando Google CSE (requiere tarjeta)`);
+    const g = await buscarWebGoogleReal(q);
+    if (g.exito) {
+      console.log(`[web-search] Google CSE exitoso`);
+      return g;
+    }
+    console.log(`[web-search] Google CSE falló: ${g.error}`);
+  }
+  
   console.log(`[web-search] Todos los intentos fallaron`);
-  return ddg;
+  return searx;
 }
 
 async function buscarWebDuckDuckGo(query) {
@@ -8722,6 +8731,56 @@ async function buscarWebDuckDuckGo(query) {
   } catch (e) { 
     console.error(`[web-search] Error: ${e.message}`);
     return { exito: false, error: "DuckDuckGo fallo: " + e.message }; 
+  }
+}
+
+async function buscarWebSearXNG(query) {
+  try {
+    const q = (query || "").trim();
+    if (!q) return { exito: false, error: "Query vacia" };
+    console.log(`[web-search] Buscando en SearXNG: "${q}"`);
+    
+    // Usar instancias públicas de SearXNG (rotación automática)
+    const instancias = [
+      'https://searx.be',
+      'https://searx.work',
+      'https://searxng.org',
+      'https://search.sapti.me',
+    ];
+    
+    for (const instancia of instancias) {
+      try {
+        const url = `${instancia}/search?q=${encodeURIComponent(q)}&format=json&language=es`;
+        const resp = await fetch(url, {
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36", "Accept": "application/json" },
+          signal: AbortSignal.timeout(10000),
+        });
+        
+        if (!resp.ok) continue;
+        
+        const data = await resp.json();
+        if (!data.results || !Array.isArray(data.results)) continue;
+        
+        const resultados = data.results.slice(0, 5).map(r => ({
+          titulo: r.title || r.title || '',
+          link: r.url || r.url || '',
+          resumen: r.content || r.content || '',
+        })).filter(r => r.titulo && r.link);
+        
+        if (resultados.length > 0) {
+          console.log(`[web-search] SearXNG exitoso (${instancia}): ${resultados.length} resultados`);
+          return { exito: true, cseUsado: "searxng", resultados };
+        }
+      } catch (e) {
+        console.log(`[web-search] Instancia ${instancia} falló: ${e.message}`);
+        continue;
+      }
+    }
+    
+    return { exito: false, error: "SearXNG no devolvió resultados (todas las instancias fallaron)." };
+  } catch (e) {
+    console.error(`[web-search] Error SearXNG: ${e.message}`);
+    return { exito: false, error: "SearXNG fallo: " + e.message };
   }
 }
 
