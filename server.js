@@ -290,8 +290,6 @@ const GPT4FREE_MODELS = {
   'deepseek-v4-pro': process.env.GPT4FREE_MODEL4 || 'deepseek-v4-pro',
 };
 const GPT4FREE_ENABLED = (process.env.GPT4FREE_ENABLED_PRO || 'false').toLowerCase() === 'true';
-// Sistema de cooldown por modelo específico cuando un modelo llega al límite de requests
-const GPT4FREE_MODEL_COOLDOWN = new Map(); // Map: modelo -> timestamp fin cooldown
 const GPT4FREE_TIMEOUT = parseInt(process.env.GPT4FREE_TIMEOUT || '300000', 10); // Aumentado a 5 minutos para evitar timeouts
 // API keys de GPT4FREE (múltiples para rotación)
 const GPT4FREE_API_KEYS = (process.env.GPT4FREE_API_KEYS || '')
