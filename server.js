@@ -400,6 +400,22 @@ const MODELOS_DISPONIBLES = {
     badge: null,
     disponible: true,
   },
+  // Modelo ultra liviano para respuestas simples (saludos, preguntas cortas, etc)
+  NewserLiteUltra: {
+    nombre: 'NewserLiteUltra',
+    descripcion: 'Ultra liviano para respuestas simples (saludos, preguntas cortas).',
+    modeloOpenRouter: 'nvidia/nemotron-nano-9b-v2:free',
+    modelosOpenRouterTexto: [
+      'nvidia/nemotron-nano-9b-v2:free',
+      'openai/gpt-oss-20b:free',
+    ],
+    costoCreditos: 1,
+    rateLimitMax: 40,
+    rateLimitMaxWeb: 60,
+    maxTokens: 800,
+    badge: 'ultra',
+    disponible: true,
+  },
   NewserLiteCompact: {
     nombre: 'NewserLiteCompact',
     descripcion: 'Ultra ligero. Ideal para consultas rapidas y frecuentes.',
@@ -584,6 +600,63 @@ const MODELOS_DISPONIBLES = {
   },
 };
 const MODELO_DEFAULT = 'NewserLite';
+
+// Sistema de detección de complejidad para optimizar uso de modelos
+function detectarComplejidadMensaje(mensaje) {
+  const texto = mensaje.toLowerCase();
+  const longitud = mensaje.length;
+  
+  // Patrones de mensajes simples
+  const patronesSimples = [
+    /^(hola|hey|hi|buenos|buenas|saludos)/i,
+    /^(gracias|thanks|thank you)/i,
+    /^(chau|adios|bye|goodbye)/i,
+    /^(ok|vale|de acuerdo|entendido)/i,
+    /^(si|no|yes|no)/i,
+    /^(que tal|como estas|how are you)/i,
+    /^(bien|mal|regular)/i,
+    /^(genial|perfecto|excelente)/i,
+    /^(claro|seguro|por supuesto)/i,
+  ];
+  
+  // Verificar si es un mensaje simple
+  const esSimple = patronesSimples.some(patron => patron.test(texto));
+  
+  // Si es muy corto (< 30 caracteres) o coincide con patrones simples
+  if (longitud < 30 || esSimple) {
+    return 'simple';
+  }
+  
+  // Si es moderadamente corto (< 100 caracteres) sin palabras clave complejas
+  if (longitud < 100) {
+    const palabrasClaveComplejas = [
+      'explicar', 'analizar', 'investigar', 'desarrollar', 'crear',
+      'programar', 'codigo', 'investigacion', 'analisis', 'desarrollo',
+      'investigar', 'buscar', 'web', 'internet', 'google', 'search',
+      'generar', 'producir', 'construir', 'implementar', 'diseñar'
+    ];
+    
+    const tienePalabrasClave = palabrasClaveComplejas.some(palabra => texto.includes(palabra));
+    if (!tienePalabrasClave) {
+      return 'simple';
+    }
+  }
+  
+  return 'complejo';
+}
+
+function seleccionarModeloSegunComplejidad(mensaje, modeloDefault) {
+  const complejidad = detectarComplejidadMensaje(mensaje);
+  
+  // Si es simple y el usuario no especificó un modelo, usar NewserLiteUltra
+  if (complejidad === 'simple' && !modeloDefault) {
+    console.log(`[Complejidad] Mensaje simple detectado, usando NewserLiteUltra`);
+    return MODELOS_DISPONIBLES.NewserLiteUltra;
+  }
+  
+  // Si es complejo o el usuario especificó un modelo, usar el modelo default
+  return MODELOS_DISPONIBLES[modeloDefault] || MODELOS_DISPONIBLES.NewserLite;
+}
 
 function construirIdModelo(nombre) {
   return `verboaistudio/${nombre}`;
@@ -10613,7 +10686,14 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       // Usar NewserAdvanced1.5 por defecto cuando profundidad está activa
       modeloSolicitado = 'NewserAdvanced1.5';
     }
-    configModelo = resolverModelo(modeloSolicitado, usuarioParaModelo);
+    
+    // Si no hay modelo especificado, usar detección de complejidad para optimizar
+    if (!modeloSolicitado) {
+      const modeloOptimizado = seleccionarModeloSegunComplejidad(mensajeOriginal, null);
+      configModelo = modeloOptimizado;
+    } else {
+      configModelo = resolverModelo(modeloSolicitado, usuarioParaModelo);
+    }
   } catch (e) {
     if (e.modeloBloqueado) return res.status(e.codigo || 400).json({ error: e.message });
     return res.status(400).json({ error: e.message });
