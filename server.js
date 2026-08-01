@@ -1824,6 +1824,9 @@ async function llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones = {}) {
     }
     return { ok: true, texto: texto.trim(), modelo: GPT4FREE_MODEL, finishReason };
   } catch (e) {
+    if (gpt4freeKeyIndex !== null) {
+      updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, false);
+    }
     if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') return { ok: false, error: 'cancelado' };
     console.error('[glm-4] fallo la peticion al puente:', e.message);
     return { ok: false, error: e.message };
