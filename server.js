@@ -11488,6 +11488,17 @@ app.get('/api/mongo-status', (req, res) => {
 
 const servidorHttp = app.listen(PORT, () => {
   console.log(`Verbo AI (${NOMBRE_MODELO_PUBLICO}) escuchando en http://localhost:${PORT}`);
+  
+  // Aumentar timeouts del servidor para evitar AbortError en requests largos
+  servidorHttp.requestTimeout = 10 * 60 * 1000; // 10 minutos
+  servidorHttp.headersTimeout = 10 * 60 * 1000; // 10 minutos
+  servidorHttp.keepAliveTimeout = 10 * 60 * 1000; // 10 minutos
+  servidorHttp.setTimeout(10 * 60 * 1000, (socket) => {
+    console.warn('[Server] Socket timeout, destroying connection');
+    socket.destroy();
+  });
+  
+  console.log('[Server] Timeouts configurados: 10 minutos para requests largos');
   try {
     const os = require('os');
     const interfaces = os.networkInterfaces();
