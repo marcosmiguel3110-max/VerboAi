@@ -708,17 +708,49 @@ const WEB_SEARCH_VENTANA_MS = 60 * 1000; // 1 minuto
 const WEB_SEARCH_MAX_POR_MINUTO = 5; // 5 búsquedas por minuto por cuenta
 
 // Instancias públicas de SearXNG (sin API key, formato JSON)
+// Actualizado con instancias verificadas en 2026
 const SEARXNG_INSTANCES = [
-  'https://searx.tuxcloud.net',
-  'https://searx.rtrace.io',
-  'https://searx.cz',
+  'https://searx.tiekoetter.com',
+  'https://searxng.viking-sec.xyz',
+  'https://search.lab42.ovh',
+  'https://lantern.co.im',
+  'https://searx.tuiter.ovh',
+  'https://searx.ovh',
+  'https://searxng.arkadi.one',
+  'https://suche.rzgierskopp.de',
+  'https://searxng.devol.it',
+  'https://suche.probst.click',
+  'https://search.inthemansion.com',
+  'https://search.rymstudio.it',
+  'https://searxng.noho.st/x',
+  'https://search.autumn64.xyz',
+  'https://zotop.zaclys.com',
+  'https://busca.lynze.net',
+  'https://searxng.cz',
+  'https://search.wilderland.ovh',
+  'https://busca.bolha.one',
+  'https://searxng.pietro.in',
+  'https://ponysearch.eu',
+  'https://ala.mbre.es',
+  'https://searx.underworld.fr',
+  'https://searx.thepolarbear.co.uk',
+  'https://searx.ascosilinux.com',
+  'https://www.cloudsearch.me',
   'https://searx.envs.net',
   'https://sx.vern.cc',
-  'https://search.disroot.org',
-  'https://search.dismail.de',
-  'https://searxng.devol.it',
   'https://search.fuckoffgoogle.net',
-  'https://searx.underworld.fr',
+  'https://suche.tromdienste.de',
+  'https://search.fsftn.org',
+  'https://nogoo.me',
+  'https://search.fshm.org',
+  'https://search.dismail.de',
+  'https://search.birdcat.cafe',
+  'https://searx.bndkt.io',
+  'https://search.disroot.org',
+  'https://hopniss.net',
+  'https://search.nolog.cz',
+  'https://searx.mha.fi',
+  'https://opnxng.com',
 ];
 
 // Sistema de tracking de abusos por cuenta
@@ -730,6 +762,37 @@ function registrarAbuso(clave, tipo) {
   // Limpiar abusos viejos (más de 5 minutos)
   const validos = abusos.filter(a => ahora - a.timestamp < ABUSO_VENTANA_MS);
   ABUSOS_POR_CUENTA.set(clave, validos);
+}
+
+// Sistema de caché para resultados de búsqueda web
+const WEB_SEARCH_CACHE = new Map();
+const WEB_SEARCH_CACHE_TTL = 30 * 60 * 1000; // 30 minutos
+
+function obtenerCacheWebSearch(query) {
+  const cacheKey = query.toLowerCase().trim();
+  const cached = WEB_SEARCH_CACHE.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < WEB_SEARCH_CACHE_TTL) {
+    console.log(`[web-search] Cache hit para: "${query}"`);
+    return cached.result;
+  }
+  return null;
+}
+
+function guardarCacheWebSearch(query, result) {
+  const cacheKey = query.toLowerCase().trim();
+  WEB_SEARCH_CACHE.set(cacheKey, {
+    result,
+    timestamp: Date.now()
+  });
+  // Limpiar cache viejo periódicamente
+  if (WEB_SEARCH_CACHE.size > 1000) {
+    const ahora = Date.now();
+    for (const [key, value] of WEB_SEARCH_CACHE.entries()) {
+      if (ahora - value.timestamp > WEB_SEARCH_CACHE_TTL) {
+        WEB_SEARCH_CACHE.delete(key);
+      }
+    }
+  }
 }
 
 function verificarBanTemporal(clave) {
@@ -9009,11 +9072,18 @@ async function buscarWebGoogle(query, claveCuenta = null) {
   
   console.log(`[web-search] Iniciando búsqueda con query: "${q}"${claveCuenta ? ` (cuenta: ${claveCuenta})` : ''}`);
   
+  // Verificar caché primero
+  const cached = obtenerCacheWebSearch(q);
+  if (cached) {
+    return cached;
+  }
+  
   // Intento 1: SearXNG directo (sin API key, múltiples instancias)
   console.log(`[web-search] Intentando SearXNG directo (sin API key)`);
   const searxng = await buscarWebSearXNGDirecto(q);
   if (searxng.exito) {
     console.log(`[web-search] SearXNG directo exitoso`);
+    guardarCacheWebSearch(q, searxng);
     return searxng;
   }
   console.log(`[web-search] SearXNG directo falló: ${searxng.error}`);
@@ -9024,6 +9094,7 @@ async function buscarWebGoogle(query, claveCuenta = null) {
     const searchx = await buscarWebSearchX(q);
     if (searchx.exito) {
       console.log(`[web-search] SearchX exitoso`);
+      guardarCacheWebSearch(q, searchx);
       return searchx;
     }
     console.log(`[web-search] SearchX falló: ${searchx.error}`);
@@ -9040,6 +9111,7 @@ async function buscarWebGoogle(query, claveCuenta = null) {
   const searx = await buscarWebSearXNG(q);
   if (searx.exito) {
     console.log(`[web-search] SearXNG exitoso`);
+    guardarCacheWebSearch(q, searx);
     return searx;
   }
   console.log(`[web-search] SearXNG falló: ${searx.error}`);
@@ -9048,6 +9120,7 @@ async function buscarWebGoogle(query, claveCuenta = null) {
   const ddg = await buscarWebDuckDuckGo(q);
   if (ddg.exito) {
     console.log(`[web-search] DuckDuckGo exitoso`);
+    guardarCacheWebSearch(q, ddg);
     return ddg;
   }
   console.log(`[web-search] DuckDuckGo falló: ${ddg.error}`);
@@ -9059,6 +9132,7 @@ async function buscarWebGoogle(query, claveCuenta = null) {
     const ddg2 = await buscarWebDuckDuckGo(qCorta);
     if (ddg2.exito) {
       console.log(`[web-search] DuckDuckGo (corta) exitoso`);
+      guardarCacheWebSearch(q, ddg2);
       return ddg2;
     }
     console.log(`[web-search] DuckDuckGo (corta) falló: ${ddg2.error}`);
@@ -9070,6 +9144,7 @@ async function buscarWebGoogle(query, claveCuenta = null) {
     const g = await buscarWebGoogleReal(q);
     if (g.exito) {
       console.log(`[web-search] Google CSE exitoso`);
+      guardarCacheWebSearch(q, g);
       return g;
     }
     console.log(`[web-search] Google CSE falló: ${g.error}`);
