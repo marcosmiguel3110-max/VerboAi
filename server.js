@@ -636,11 +636,16 @@ const WEB_SEARCH_MAX_POR_MINUTO = 5; // 5 búsquedas por minuto por cuenta
 
 // Instancias públicas de SearXNG (sin API key, formato JSON)
 const SEARXNG_INSTANCES = [
-  'https://searx.party',
-  'https://searx.tiekoetter.com',
-  'https://searx.ninja',
-  'https://searx.be',
-  'https://searx.work',
+  'https://searx.tuxcloud.net',
+  'https://searx.rtrace.io',
+  'https://searx.cz',
+  'https://searx.envs.net',
+  'https://sx.vern.cc',
+  'https://search.disroot.org',
+  'https://search.dismail.de',
+  'https://searxng.devol.it',
+  'https://search.fuckoffgoogle.net',
+  'https://searx.underworld.fr',
 ];
 
 // Sistema de tracking de abusos por cuenta
