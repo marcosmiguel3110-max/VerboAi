@@ -6,58 +6,89 @@ Evita el límite de 24h usando múltiples proveedores
 
 import sys
 import json
-import asyncio
-from g4f import ChatCompletion
-from g4f.Provider import Copilot, PollinationsAI, OpenRouterFree
-from g4f.models import gpt_4o, gpt_4o_mini, gpt_3_5_turbo
-
-# Lista de proveedores con prioridad (según documentación de g4f)
-PROVIDERS = [
+from g4f.client import Client
+from g4f.Provider import (
     Copilot,
     PollinationsAI,
     OpenRouterFree,
+    OpenaiChat,
+    Gemini,
+    Groq,
+    DeepSeek,
+    Perplexity,
+    Phind,
+    FreeChatgpt,
+    Liaobots,
+    Blackbox,
+    Bing,
+    You,
+    HuggingChat,
+    MetaAI,
+    GigaChat,
+)
+from g4f.Provider import RetryProvider
+
+# Lista completa de proveedores para rotación automática
+PROVIDERS_LIST = [
+    Copilot,
+    PollinationsAI,
+    OpenRouterFree,
+    OpenaiChat,
+    Gemini,
+    Groq,
+    DeepSeek,
+    Perplexity,
+    Phind,
+    FreeChatgpt,
+    Liaobots,
+    Blackbox,
+    Bing,
+    You,
+    HuggingChat,
+    MetaAI,
+    GigaChat,
 ]
 
-# Mapeo de modelos
+# Mapeo de modelos (usar strings en lugar de objetos para mayor compatibilidad)
 MODELOS = {
-    "gpt-4o": gpt_4o,
-    "gpt-4o-mini": gpt_4o_mini,
-    "gpt-3.5-turbo": gpt_3_5_turbo,
+    "gpt-4o": "gpt-4o",
+    "gpt-4o-mini": "gpt-4o-mini",
+    "gpt-3.5-turbo": "gpt-3.5-turbo",
 }
 
-async def llamar_g4f_con_rotacion(modelo_nombre, mensajes, max_intentos=3):
+def llamar_g4f_con_rotacion(modelo_nombre, mensajes, max_intentos=3):
     """
-    Llama a G4F rotando entre proveedores si uno falla
+    Llama a G4F usando RetryProvider para rotación automática de proveedores
     """
-    modelo = MODELOS.get(modelo_nombre, gpt_4o_mini)
+    modelo = MODELOS.get(modelo_nombre, "gpt-4o-mini")
     
-    for intento in range(max_intentos):
-        for provider in PROVIDERS:
-            try:
-                print(f"[G4F] Intentando proveedor: {provider.__name__} (intento {intento + 1})")
-                
-                response = await ChatCompletion.create_async(
-                    model=modelo,
-                    provider=provider,
-                    messages=mensajes,
-                    timeout=30,
-                )
-                
-                print(f"[G4F] Éxito con proveedor: {provider.__name__}")
-                return {
-                    "ok": True,
-                    "respuesta": response,
-                    "proveedor": provider.__name__,
-                }
-                
-            except Exception as e:
-                print(f"[G4F] Proveedor {provider.__name__} falló: {str(e)}")
-                continue
-    
-    return {
-        "ok": False,
-        "error": "Todos los proveedores fallaron después de múltiples intentos",
-    }
+    try:
+        # Usar RetryProvider para rotación automática
+        client = Client(
+            provider=RetryProvider(PROVIDERS_LIST, shuffle=False)
+        )
+        
+        print(f"[G4F] Llamando con modelo: {modelo} usando RetryProvider con {len(PROVIDERS_LIST)} proveedores")
+        
+        response = client.chat.completions.create(
+            model=modelo,
+            messages=mensajes,
+        )
+        
+        texto = response.choices[0].message.content
+        print(f"[G4F] Éxito - respuesta de {len(texto)} caracteres")
+        
+        return {
+            "ok": True,
+            "respuesta": texto,
+        }
+        
+    except Exception as e:
+        print(f"[G4F] Error: {str(e)}")
+        return {
+            "ok": False,
+            "error": str(e),
+        }
 
 def main():
     # Leer argumentos de stdin
@@ -74,9 +105,9 @@ def main():
         print(json.dumps({"ok": False, "error": "No se proporcionaron mensajes"}))
         sys.exit(1)
     
-    # Ejecutar llamada asíncrona
+    # Ejecutar llamada
     try:
-        resultado = asyncio.run(llamar_g4f_con_rotacion(modelo, mensajes))
+        resultado = llamar_g4f_con_rotacion(modelo, mensajes)
         print(json.dumps(resultado))
     except Exception as e:
         print(json.dumps({"ok": False, "error": f"Error interno: {str(e)}"}))
