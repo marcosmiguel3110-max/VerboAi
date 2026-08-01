@@ -634,6 +634,9 @@ const WEB_SEARCH_LIMIT_POR_CUENTA = new Map();
 const WEB_SEARCH_VENTANA_MS = 60 * 1000; // 1 minuto
 const WEB_SEARCH_MAX_POR_MINUTO = 5; // 5 búsquedas por minuto por cuenta
 
+// Free Search API (wrapper sobre SearXNG, sin API key)
+const FREE_SEARCH_API_URL = 'https://freesearch.replit.app/search';
+
 // Sistema de tracking de abusos por cuenta
 function registrarAbuso(clave, tipo) {
   if (!clave) return;
@@ -8738,7 +8741,16 @@ async function buscarWebGoogle(query, claveCuenta = null) {
   
   console.log(`[web-search] Iniciando búsqueda con query: "${q}"${claveCuenta ? ` (cuenta: ${claveCuenta})` : ''}`);
   
-  // Intento 1: SearchX API (3K queries/día gratis, requiere API key)
+  // Intento 1: Free Search API (sin API key, wrapper sobre SearXNG)
+  console.log(`[web-search] Intentando Free Search API (sin API key)`);
+  const freesearch = await buscarWebFreeSearch(q);
+  if (freesearch.exito) {
+    console.log(`[web-search] Free Search exitoso`);
+    return freesearch;
+  }
+  console.log(`[web-search] Free Search falló: ${freesearch.error}`);
+  
+  // Intento 2: SearchX API (3K queries/día gratis, requiere API key)
   if (SEARCHX_API_KEY) {
     console.log(`[web-search] Intentando SearchX API`);
     const searchx = await buscarWebSearchX(q);
@@ -8755,7 +8767,7 @@ async function buscarWebGoogle(query, claveCuenta = null) {
     console.log(`[web-search] SearchX API key no configurada, saltando`);
   }
   
-  // Intento 2: SearXNG (gratuito, no requiere tarjeta)
+  // Intento 3: SearXNG (gratuito, no requiere tarjeta)
   console.log(`[web-search] Intentando SearXNG`);
   const searx = await buscarWebSearXNG(q);
   if (searx.exito) {
@@ -8764,7 +8776,7 @@ async function buscarWebGoogle(query, claveCuenta = null) {
   }
   console.log(`[web-search] SearXNG falló: ${searx.error}`);
   
-  // Intento 3: DuckDuckGo
+  // Intento 4: DuckDuckGo
   const ddg = await buscarWebDuckDuckGo(q);
   if (ddg.exito) {
     console.log(`[web-search] DuckDuckGo exitoso`);
@@ -8772,7 +8784,7 @@ async function buscarWebGoogle(query, claveCuenta = null) {
   }
   console.log(`[web-search] DuckDuckGo falló: ${ddg.error}`);
   
-  // Intento 4: DuckDuckGo con query más corta
+  // Intento 5: DuckDuckGo con query más corta
   if (q.split(' ').length > 4) {
     const qCorta = q.split(' ').slice(0, 4).join(' ');
     console.log(`[web-search] Intentando DuckDuckGo con query corta: "${qCorta}"`);
@@ -8784,7 +8796,7 @@ async function buscarWebGoogle(query, claveCuenta = null) {
     console.log(`[web-search] DuckDuckGo (corta) falló: ${ddg2.error}`);
   }
   
-  // Intento 5: Google CSE (solo si hay API key configurada, requiere tarjeta)
+  // Intento 6: Google CSE (solo si hay API key configurada, requiere tarjeta)
   if (GOOGLE_CSE_API_KEY) {
     console.log(`[web-search] Intentando Google CSE (requiere tarjeta)`);
     const g = await buscarWebGoogleReal(q);
@@ -9007,6 +9019,46 @@ async function buscarWebSearchX(query) {
   } catch (e) {
     console.error(`[web-search] Error SearchX: ${e.message}`);
     return { exito: false, error: "SearchX fallo: " + e.message };
+  }
+}
+
+async function buscarWebFreeSearch(query) {
+  try {
+    const q = (query || "").trim();
+    if (!q) return { exito: false, error: "Query vacia" };
+    
+    console.log(`[web-search] Buscando en Free Search API: "${q}"`);
+    const url = `${FREE_SEARCH_API_URL}?query=${encodeURIComponent(q)}&max_results=5`;
+    
+    const resp = await fetch(url, {
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(10000),
+    });
+    
+    if (!resp.ok) {
+      return { exito: false, error: `Free Search HTTP ${resp.status}` };
+    }
+    
+    const data = await resp.json();
+    if (!data.results || !Array.isArray(data.results)) {
+      return { exito: false, error: "Free Search no devolvió resultados válidos" };
+    }
+    
+    const resultados = data.results.slice(0, 5).map(r => ({
+      titulo: r.title || '',
+      link: r.url || r.link || '',
+      resumen: r.snippet || r.content || r.description || '',
+    })).filter(r => r.titulo && r.link);
+    
+    if (resultados.length > 0) {
+      console.log(`[web-search] Free Search exitoso: ${resultados.length} resultados`);
+      return { exito: true, cseUsado: "freesearch", resultados };
+    }
+    
+    return { exito: false, error: "Free Search no devolvió resultados" };
+  } catch (e) {
+    console.error(`[web-search] Error Free Search: ${e.message}`);
+    return { exito: false, error: "Free Search fallo: " + e.message };
   }
 }
 
