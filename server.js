@@ -290,7 +290,7 @@ const GPT4FREE_MODELS = {
   'deepseek-v4-pro': process.env.GPT4FREE_MODEL4 || 'deepseek-v4-pro',
 };
 const GPT4FREE_ENABLED = (process.env.GPT4FREE_ENABLED_PRO || 'false').toLowerCase() === 'true';
-const GPT4FREE_TIMEOUT = parseInt(process.env.GPT4FREE_TIMEOUT || '60000', 10);
+const GPT4FREE_TIMEOUT = parseInt(process.env.GPT4FREE_TIMEOUT || '300000', 10); // Aumentado a 5 minutos para evitar timeouts
 // API keys de GPT4FREE (múltiples para rotación)
 const GPT4FREE_API_KEYS = (process.env.GPT4FREE_API_KEYS || '')
   .split(',')
@@ -4145,12 +4145,12 @@ function inferirConsultaInvestigacionVerboCode(mensaje, proyecto) {
 
 function inferirComandoVerificacionVerboCode(proyecto) {
   const archivos = Object.keys(proyecto?.archivos || {});
-  if (!archivos.length) return 'ls';
+  if (!archivos.length) return 'dir';
   const htmlEntrada = resolverArchivoEntradaPreviewServidor(proyecto);
-  if (htmlEntrada) return `ls && wc "${htmlEntrada}"`;
+  if (htmlEntrada) return `dir && (Get-Content "${htmlEntrada}" | Measure-Object -Character -Line -Word).ToString()`;
   const primerJs = archivos.find((n) => n.toLowerCase().endsWith('.js'));
-  if (primerJs) return `ls && wc "${primerJs}"`;
-  return 'ls';
+  if (primerJs) return `dir && (Get-Content "${primerJs}" | Measure-Object -Character -Line -Word).ToString()`;
+  return 'dir';
 }
 
 function construirProblemasAuditoriaWeb(auditoria) {
@@ -6749,6 +6749,13 @@ REGLAS CRÍTICAS:
 2. CÓDIGO LIMPIO: NUNCA agregues comentarios. Sin // ni /* */ ni # ni <!-- -->.
 
 3. CÓDIGO COMPLETO: NUNCA cortes un archivo. Mandalo COMPLETO. Si es muy largo, dividilo en múltiples archivos más chicos.
+
+3.1. COMPLETITUD OBLIGATORIA DEL PROYECTO: Si creás un proyecto nuevo, DEBES crear TODOS los archivos necesarios para que funcione completamente. NO dejes archivos incompletos o faltantes. Por ejemplo:
+   - Si creás HTML con botones, DEBES crear el JS con los event listeners
+   - Si creás un juego, DEBES crear la lógica completa (no solo el HTML/CSS)
+   - Si creás una app, DEBES crear todos los archivos JS necesarios
+   - Si el usuario te pide "completar" o "añade lo que falta", DEBES completar TODO lo que falta, no solo una parte
+   - NUNCA digas "después lo completás" o "falta X" — COMPLETALO AHORA MISMO
 
 4. AUTOCORRECCIÓN OBLIGATORIA: Antes de entregar el código, HACÉ ESTO SIEMPRE:
    a) Revisá mentalmente cada archivo línea por línea
