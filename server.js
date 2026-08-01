@@ -4705,18 +4705,31 @@ async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE
 
   const procesarArchivos = (regex, tipo) => {
     let match;
+    let count = 0;
     while ((match = regex.exec(textoRespuesta)) !== null) {
       const nombre = match[1].trim();
       const contenido = match[2];
       proyecto.archivos[nombre] = contenido;
       proyectoActualizado = true;
+      count++;
+      console.log(`[verbocode] ${tipo.toUpperCase()}: ${nombre} (${contenido.length} chars)`);
       emitir({
         tipo,
         nombre,
         descripcion: `${tipo === 'file_create' ? 'Archivo creado' : 'Archivo editado'}: ${nombre} (${contenido.length} chars)`,
       });
     }
+    if (count > 0) {
+      console.log(`[verbocode] Procesados ${count} archivos tipo ${tipo}`);
+    } else {
+      console.log(`[verbocode] No se encontraron tags ${tipo} en la respuesta`);
+    }
   };
+  
+  // Logging para debugging: mostrar muestra de la respuesta
+  console.log(`[verbocode] Longitud de respuesta: ${textoRespuesta.length} chars`);
+  console.log(`[verbocode] Muestra de respuesta (primeros 500 chars): ${textoRespuesta.slice(0, 500)}`);
+  
   procesarArchivos(reFileCreate, 'file_create');
   procesarArchivos(reFileEdit, 'file_edit');
   
