@@ -1450,7 +1450,9 @@ async function enviarChat() {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutos (aumentado de 2 minutos)
+    // Aumentar timeout a 15 minutos para modo ultracode que puede tomar más tiempo
+    const timeoutMs = estado.profundidad === 'ultracode' ? 900000 : 600000; // 15 min para ultracode, 10 min normal
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     const bodyData = {
       mensaje: texto,
