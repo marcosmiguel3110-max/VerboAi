@@ -1527,13 +1527,18 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
 
     // Usar API key con rotación si hay disponibles
     let gpt4freeKeyIndex = null;
-    if (GPT4FREE_API_KEYS.length > 0) {
-      gpt4freeKeyIndex = selectBestGpt4FreeKey();
-      const key = GPT4FREE_API_KEYS[gpt4freeKeyIndex];
-      headers['Authorization'] = `Bearer ${key}`;
-      gpt4freeKeyStats[gpt4freeKeyIndex].requests++;
+    try {
+      if (GPT4FREE_API_KEYS.length > 0) {
+        gpt4freeKeyIndex = selectBestGpt4FreeKey();
+        const key = GPT4FREE_API_KEYS[gpt4freeKeyIndex];
+        headers['Authorization'] = `Bearer ${key}`;
+        gpt4freeKeyStats[gpt4freeKeyIndex].requests++;
+      }
+    } catch (e) {
+      console.warn('[g4f] Error seleccionando API key:', e.message);
     }
 
+    console.log(`[g4f] Timeout configurado: ${GPT4FREE_TIMEOUT}ms`);
     const resp = await axios.post(url, body, {
       headers,
       timeout: GPT4FREE_TIMEOUT,
@@ -1649,6 +1654,8 @@ async function llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones = {}) {
   if (!GPT4FREE_ENABLED) return { ok: false, error: 'GLM-4 deshabilitado (GPT4FREE_ENABLED_PRO=false)' };
   if (!GPT4FREE_URL) return { ok: false, error: 'GPT4FREE_URL no configurada' };
 
+  console.log(`[glm-4] GPT4FREE_TIMEOUT: ${GPT4FREE_TIMEOUT}ms`);
+
   // Construir URL: si GPT4FREE_URL ya incluye "/chat/completions", se usa tal cual.
   // Sino, se le appendea /v1/chat/completions.
   // Esto permite usar tanto puentes propios (https://bridge.onrender.com)
@@ -1661,11 +1668,15 @@ async function llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones = {}) {
   
   // Usar API key con rotación si hay disponibles
   let gpt4freeKeyIndex = null;
-  if (GPT4FREE_API_KEYS.length > 0) {
-    gpt4freeKeyIndex = selectBestGpt4FreeKey();
-    const key = GPT4FREE_API_KEYS[gpt4freeKeyIndex];
-    headers.Authorization = `Bearer ${key}`;
-    gpt4freeKeyStats[gpt4freeKeyIndex].requests++;
+  try {
+    if (GPT4FREE_API_KEYS.length > 0) {
+      gpt4freeKeyIndex = selectBestGpt4FreeKey();
+      const key = GPT4FREE_API_KEYS[gpt4freeKeyIndex];
+      headers.Authorization = `Bearer ${key}`;
+      gpt4freeKeyStats[gpt4freeKeyIndex].requests++;
+    }
+  } catch (e) {
+    console.warn('[glm-4] Error seleccionando API key:', e.message);
   }
 
   const body = {
