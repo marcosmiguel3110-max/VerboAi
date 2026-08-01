@@ -2253,9 +2253,14 @@ elForm.addEventListener('submit', async (ev) => {
 
   const controladorPausa = new AbortController();
   mostrarBotonPausar(controladorPausa);
+  
+  // Agregar timeout automático de 10 minutos para evitar que el request quede colgado
+  const timeoutId = setTimeout(() => controladorPausa.abort(), 600000); // 10 minutos
 
   try {
     const res = await fetch('/api/chat', { method: 'POST', body: formData, signal: controladorPausa.signal });
+    
+    clearTimeout(timeoutId);
 
     if (!res.ok || !res.body) {
       let msj = 'Ocurrio un error.';
