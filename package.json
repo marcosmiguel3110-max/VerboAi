@@ -5,7 +5,7 @@
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
-    "start": "pip install -r requirements.txt && node server.js",
+    "start": "python3 -m venv venv && venv/bin/pip install -r requirements.txt && node server.js",
     "install-python-deps": "pip install -r requirements.txt"
   },
   "dependencies": {

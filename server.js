@@ -1624,9 +1624,12 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
     };
 
     const scriptPath = path.join(__dirname, 'g4f_wrapper.py');
+    // Detectar si estamos en Windows o Linux/Render para usar la ruta correcta del venv
+    const isWindows = process.platform === 'win32';
+    const venvPython = path.join(__dirname, 'venv', isWindows ? 'Scripts' : 'bin', isWindows ? 'python.exe' : 'python3');
 
     return new Promise((resolve, reject) => {
-      const pythonProcess = spawn('python3', [scriptPath], {
+      const pythonProcess = spawn(venvPython, [scriptPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
