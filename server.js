@@ -4553,6 +4553,10 @@ async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE
 
   const reFileCreate = /\[\[FILE_CREATE::([^\]]+?)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
   const reFileEdit = /\[\[FILE_EDIT::([^\]]+?)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
+  
+  // Regex para tags FILE_CREATE incompletos (sin cierre ]])
+  const reFileCreateIncomplete = /\[\[FILE_CREATE::([^\]]+?)::([\s\S]*)$/g;
+  const reFileEditIncomplete = /\[\[FILE_EDIT::([^\]]+?)::([\s\S]*)$/g;
   const reLineEdit = /\[\[LINE_EDIT::([^\]]+?)::(\d+)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
   const reFileDelete = /\[\[FILE_DELETE::([^\]]+?)\]\]/g;
   const reImage = /\[\[IMAGE::([^\]]+?)\]\]/g;
@@ -4578,6 +4582,39 @@ async function procesarHerramientasVerboCode(textoRespuesta, proyecto, enviarSSE
   };
   procesarArchivos(reFileCreate, 'file_create');
   procesarArchivos(reFileEdit, 'file_edit');
+  
+  // Procesar tags FILE_CREATE incompletos (sin cierre ]])
+  let matchIncomplete;
+  while ((matchIncomplete = reFileCreateIncomplete.exec(textoRespuesta)) !== null) {
+    const nombre = matchIncomplete[1].trim();
+    const contenido = matchIncomplete[2];
+    if (contenido && contenido.trim()) {
+      proyecto.archivos[nombre] = contenido;
+      proyectoActualizado = true;
+      emitir({
+        tipo: 'file_create',
+        nombre,
+        descripcion: `Archivo creado (tag incompleto): ${nombre} (${contenido.length} chars)`,
+      });
+      console.warn(`[verbocode] Procesando tag FILE_CREATE incompleto: ${nombre}`);
+    }
+  }
+  
+  // Procesar tags FILE_EDIT incompletos (sin cierre ]])
+  while ((matchIncomplete = reFileEditIncomplete.exec(textoRespuesta)) !== null) {
+    const nombre = matchIncomplete[1].trim();
+    const contenido = matchIncomplete[2];
+    if (contenido && contenido.trim()) {
+      proyecto.archivos[nombre] = contenido;
+      proyectoActualizado = true;
+      emitir({
+        tipo: 'file_edit',
+        nombre,
+        descripcion: `Archivo editado (tag incompleto): ${nombre} (${contenido.length} chars)`,
+      });
+      console.warn(`[verbocode] Procesando tag FILE_EDIT incompleto: ${nombre}`);
+    }
+  }
 
   let matchLine;
   while ((matchLine = reLineEdit.exec(textoRespuesta)) !== null) {
