@@ -1708,6 +1708,7 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
 
     // Usar API key con rotación si hay disponibles
     let gpt4freeKeyIndex = null;
+    
     try {
       if (GPT4FREE_API_KEYS.length > 0) {
         gpt4freeKeyIndex = selectBestGpt4FreeKey();
