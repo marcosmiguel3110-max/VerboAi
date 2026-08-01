@@ -759,9 +759,9 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
       };
 
       let r;
-      // Si el modelo es 'g4f-bridge', usar la función de G4F
-      if (modelo === 'g4f-bridge') {
-        r = await llamarG4F(messages, systemPrompt, GPT4FREE_MODEL, opcionesConConfig);
+      // Si el modelo es un modelo de G4F (glm-5.2, g4f-bridge, etc), usar la función de G4F
+      if (modelo === 'g4f-bridge' || modelo === 'glm-5.2' || modelo.startsWith('glm-')) {
+        r = await llamarG4F(messages, systemPrompt, modelo, opcionesConConfig);
       } else if (modelo === 'anthropic-direct') {
         r = await llamarAnthropic(messages, systemPrompt, ANTHROPIC_MODEL, opcionesConConfig);
       } else {
@@ -786,8 +786,8 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
             { role: 'user', content: 'Continuá exactamente donde te quedaste. No repitas nada de lo ya escrito, no reinicies archivos ni agregues explicaciones nuevas, seguí el contenido tal cual iba.' },
           ];
           let rCont;
-          if (modelo === 'g4f-bridge') {
-            rCont = await llamarG4F(mensajesContinuar, systemPrompt, GPT4FREE_MODEL, opciones);
+          if (modelo === 'g4f-bridge' || modelo === 'glm-5.2' || modelo.startsWith('glm-')) {
+            rCont = await llamarG4F(mensajesContinuar, systemPrompt, modelo, opciones);
           } else if (modelo === 'anthropic-direct') {
             rCont = await llamarAnthropic(mensajesContinuar, systemPrompt, ANTHROPIC_MODEL, opciones);
           } else {
@@ -1401,9 +1401,9 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     continue;
   }
 
-  if (keyIndex !== null) updateKeyStats(keyIndex, true, false);
-  console.log(`[openrouter-free] OK - ${texto.length} chars por ${model} (finish_reason: ${finishReason})`);
-  return { ok: true, texto: texto.trim(), modelo: model, finishReason };
+  // Si llegamos aquí, todos los intentos fallaron
+  if (keyIndex !== null) updateKeyStats(keyIndex, false, false);
+  return { ok: false, error: ultimoError || 'Todos los intentos fallaron' };
 }
 
 // Llama a Anthropic directamente (Claude Opus, Sonnet, Haiku)
