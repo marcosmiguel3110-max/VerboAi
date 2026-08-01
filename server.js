@@ -280,7 +280,12 @@ const POLLINATIONS_PRO_HEIGHT = parseInt(process.env.POLLINATIONS_HEIGHT_PRO || 
 // Formato esperado del puente: compatible con OpenAI (POST /v1/chat/completions).
 // Ej: GPT4FREE_URL=https://tu-bridge.onrender.com  (NO usar https://onrender.com
 // que es la home de Render, no un puente real).
-const GPT4FREE_URL = (process.env.GPT4FREE_URL || '').trim();
+// Sistema de múltiples instancias de glm-bridge para distribuir requests y evitar límites
+const GPT4FREE_URLS = (process.env.GPT4FREE_URLS || process.env.GPT4FREE_URL || 'https://glm-bridge.onrender.com')
+  .split(',')
+  .map(u => u.trim())
+  .filter(u => u);
+const GPT4FREE_URL = GPT4FREE_URLS[0] || ''; // URL principal para compatibilidad
 const GPT4FREE_MODEL = process.env.GPT4FREE_MODEL || 'glm-4';
 // Sistema de múltiples modelos GPT4FREE (MODEL2, MODEL3, etc)
 const GPT4FREE_MODELS = {
@@ -1154,8 +1159,6 @@ OPENROUTER_API_KEYS.forEach((key, i) => {
   };
 });
 
-// Sistema de rotación para GPT4FREE
-const gpt4freeKeyStats = {};
 GPT4FREE_API_KEYS.forEach((key, i) => {
   gpt4freeKeyStats[i] = {
     requests: 0,
@@ -1167,6 +1170,55 @@ GPT4FREE_API_KEYS.forEach((key, i) => {
     lastUsed: 0
   };
 });
+
+// Sistema de tracking de estadísticas por instancia de glm-bridge
+const glmBridgeStats = new Map();
+let glmBridgeIndex = 0;
+
+function selectBestGlmBridge() {
+  // Rotación round-robin con tracking de errores
+  const urls = GPT4FREE_URLS;
+  if (urls.length === 0) return null;
+  
+  // Intentar encontrar una instancia que no esté en error
+  for (let i = 0; i < urls.length; i++) {
+    const idx = (glmBridgeIndex + i) % urls.length;
+    const url = urls[idx];
+    const stats = glmBridgeStats.get(url) || { errors: 0, lastError: 0, requests: 0 };
+    
+    // Si la instancia tiene muchos errores recientes, saltarla
+    const timeSinceLastError = Date.now() - stats.lastError;
+    if (stats.errors > 5 && timeSinceLastError < 5 * 60 * 1000) {
+      continue; // Saltar instancia con errores recientes
+    }
+    
+    glmBridgeIndex = (idx + 1) % urls.length;
+    return { url, index: idx };
+  }
+  
+  // Si todas están en error, usar round-robin normal
+  const idx = glmBridgeIndex % urls.length;
+  glmBridgeIndex = (idx + 1) % urls.length;
+  return { url: urls[idx], index: idx };
+}
+
+function updateGlmBridgeStats(url, success, isRateLimit = false) {
+  const stats = glmBridgeStats.get(url) || { errors: 0, lastError: 0, requests: 0 };
+  stats.requests++;
+  
+  if (success) {
+    stats.errors = Math.max(0, stats.errors - 1); // Reducir errores en éxito
+  } else {
+    stats.errors++;
+    stats.lastError = Date.now();
+    if (isRateLimit) {
+      console.warn(`[glm-bridge] Rate limit detectado en ${url}, marcando como temporalmente no disponible`);
+      stats.errors += 10; // Penalización fuerte por rate limit
+    }
+  }
+  
+  glmBridgeStats.set(url, stats);
+}
 
 function selectBestGpt4FreeKey() {
   if (GPT4FREE_API_KEYS.length === 0) return null;
@@ -1723,17 +1775,22 @@ async function llamarAnthropic(messages, systemPrompt, model = ANTHROPIC_MODEL, 
 
 // Llama a G4F Bridge (DeepSeek R1, V3, etc.) vía glm-bridge
 async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opciones = {}) {
-  if (!GPT4FREE_ENABLED || !GPT4FREE_URL) {
+  if (!GPT4FREE_ENABLED || GPT4FREE_URLS.length === 0) {
     return { ok: false, error: 'G4F deshabilitado o sin URL' };
   }
 
   console.log(`[g4f] Llamando con modelo solicitado: ${model}`);
 
   try {
-    // Determinar la URL completa
-    const url = GPT4FREE_URL.endsWith('/v1/chat/completions')
-      ? GPT4FREE_URL
-      : `${GPT4FREE_URL}/v1/chat/completions`;
+    // Seleccionar mejor instancia de glm-bridge
+    const bridgeSelection = selectBestGlmBridge();
+    if (!bridgeSelection) {
+      return { ok: false, error: 'No hay instancias de glm-bridge disponibles' };
+    }
+    
+    const url = bridgeSelection.url.endsWith('/v1/chat/completions')
+      ? bridgeSelection.url
+      : `${bridgeSelection.url}/v1/chat/completions`;
 
     console.log(`[g4f] URL: ${url}`);
 
@@ -1797,6 +1854,8 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
       const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
       console.error(`[g4f] HTTP ${resp.status}: ${detalle}`);
       
+      updateGlmBridgeStats(url, false, resp.status === 429);
+      
       if (gpt4freeKeyIndex !== null) {
         updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, resp.status === 429);
       }
@@ -1808,6 +1867,7 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
 
     if (!texto || !texto.trim()) {
       console.error('[g4f] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
+      updateGlmBridgeStats(url, false, false);
       if (gpt4freeKeyIndex !== null) {
         updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, false);
       }
@@ -1815,6 +1875,7 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
     }
 
     console.log(`[g4f] OK - ${texto.length} chars por ${model} (finish_reason: ${finishReason})`);
+    updateGlmBridgeStats(url, true, false);
     if (gpt4freeKeyIndex !== null) {
       updateGpt4FreeKeyStats(gpt4freeKeyIndex, true, false);
     }
@@ -1822,6 +1883,7 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
 
   } catch (error) {
     console.error('[g4f] Error:', error.message, error.stack);
+    updateGlmBridgeStats(url, false, false);
     if (gpt4freeKeyIndex !== null) {
       updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, false);
     }
@@ -1900,17 +1962,23 @@ async function llamarPollinationsTexto(messages, systemPrompt, opciones = {}) {
 // inmediatamente para que el caller haga fallback a GPT-OSS-120B.
 async function llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones = {}) {
   if (!GPT4FREE_ENABLED) return { ok: false, error: 'GLM-4 deshabilitado (GPT4FREE_ENABLED_PRO=false)' };
-  if (!GPT4FREE_URL) return { ok: false, error: 'GPT4FREE_URL no configurada' };
+  if (GPT4FREE_URLS.length === 0) return { ok: false, error: 'GPT4FREE_URL no configurada' };
 
   console.log(`[glm-4] GPT4FREE_TIMEOUT: ${GPT4FREE_TIMEOUT}ms`);
 
-  // Construir URL: si GPT4FREE_URL ya incluye "/chat/completions", se usa tal cual.
+  // Seleccionar mejor instancia de glm-bridge
+  const bridgeSelection = selectBestGlmBridge();
+  if (!bridgeSelection) {
+    return { ok: false, error: 'No hay instancias de glm-bridge disponibles' };
+  }
+  
+  // Construir URL: si la URL ya incluye "/chat/completions", se usa tal cual.
   // Sino, se le appendea /v1/chat/completions.
   // Esto permite usar tanto puentes propios (https://bridge.onrender.com)
   // como APIs oficiales (https://open.bigmodel.cn/api/paas/v4/chat/completions).
-  const url = GPT4FREE_URL.includes('/chat/completions')
-    ? GPT4FREE_URL
-    : GPT4FREE_URL.replace(/\/+$/, '') + '/v1/chat/completions';
+  const url = bridgeSelection.url.includes('/chat/completions')
+    ? bridgeSelection.url
+    : bridgeSelection.url.replace(/\/+$/, '') + '/v1/chat/completions';
 
   const headers = { 'Content-Type': 'application/json' };
   
@@ -1949,6 +2017,7 @@ async function llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones = {}) {
     if (resp.status < 200 || resp.status >= 300) {
       const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
       console.error(`[glm-4] puente devolvio HTTP ${resp.status}: ${detalle}`);
+      updateGlmBridgeStats(url, false, resp.status === 429);
       if (gpt4freeKeyIndex !== null) {
         updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, resp.status === 429);
       }
@@ -1957,6 +2026,7 @@ async function llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones = {}) {
     const texto = resp.data?.choices?.[0]?.message?.content || '';
     const finishReason = resp.data?.choices?.[0]?.finish_reason || null;
     if (!texto || !texto.trim()) {
+      updateGlmBridgeStats(url, false, false);
       if (gpt4freeKeyIndex !== null) {
         updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, false);
       }
@@ -1964,11 +2034,13 @@ async function llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones = {}) {
       return { ok: false, error: 'Respuesta vacia del puente GLM-4' };
     }
     console.log(`[glm-4] OK - ${texto.length} chars devueltos por ${GPT4FREE_MODEL} desde ${url.slice(0, 60)}... (finish_reason: ${finishReason})`);
+    updateGlmBridgeStats(url, true, false);
     if (gpt4freeKeyIndex !== null) {
       updateGpt4FreeKeyStats(gpt4freeKeyIndex, true, false);
     }
     return { ok: true, texto: texto.trim(), modelo: GPT4FREE_MODEL, finishReason };
   } catch (e) {
+    updateGlmBridgeStats(url, false, false);
     if (gpt4freeKeyIndex !== null) {
       updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, false);
     }
