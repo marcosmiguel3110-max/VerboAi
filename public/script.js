@@ -539,7 +539,9 @@ async function cargarCreditos() {
     }
     const d = await r.json();
     if (elNumero) {
-      const nuevoTexto = d.esAdmin ? '\u221e' : String(d.creditos);
+      // Detectar créditos infinitos: esAdmin O creditos === -1 O creditosIniciales === -1
+      const esInfinito = d.esAdmin || d.creditos === -1 || d.creditosIniciales === -1;
+      const nuevoTexto = esInfinito ? '\u221e' : String(d.creditos);
       if (ultimoCreditosNumero !== null && ultimoCreditosNumero !== nuevoTexto) {
         elNumero.classList.add('cambio');
         setTimeout(() => elNumero.classList.remove('cambio'), 300);
@@ -548,7 +550,8 @@ async function cargarCreditos() {
       ultimoCreditosNumero = nuevoTexto;
     }
     if (elSub) {
-      if (d.esAdmin) elSub.textContent = 'Cuenta admin (ilimitados)';
+      const esInfinito = d.esAdmin || d.creditos === -1 || d.creditosIniciales === -1;
+      if (esInfinito) elSub.textContent = 'Créditos ilimitados';
       else if (d.creditosIniciales > 0) elSub.textContent = d.creditos + ' de ' + d.creditosIniciales + ' (' + Math.round((d.creditos / d.creditosIniciales) * 100) + '% disponible)';
       else elSub.textContent = '';
     }
@@ -730,6 +733,7 @@ if (btnCerrarAnuncioCreditos) {
 btnAbrirSettings.addEventListener('click', () => {
   overlaySettings.classList.remove('oculto');
   if (!claveApiAccesoVerificado) verificarAccesoClaveApi();
+  verificarMostrarAdminPanel();
 });
 btnCerrarSettings.addEventListener('click', () => { overlaySettings.classList.add('oculto'); detenerPollingCreditos(); });
 overlaySettings.addEventListener('click', (ev) => { if (ev.target === overlaySettings) { overlaySettings.classList.add('oculto'); detenerPollingCreditos(); } });
@@ -2540,3 +2544,74 @@ document.getElementById('btnCerrarSesion').addEventListener('click', async () =>
   }
   pintarListaChats(chats.length ? chats : await cargarListaChats());
 })();
+
+// ---------- Admin Panel (solo PC, solo marcos.miguel.3110@gmail.com) ----------
+const settingsNavAdmin = document.getElementById('settingsNavAdmin');
+const adminTokenPrefix = document.getElementById('adminTokenPrefix');
+const btnGuardarTokenPrefix = document.getElementById('btnGuardarTokenPrefix');
+const adminTokenPrefixAyuda = document.getElementById('adminTokenPrefixAyuda');
+
+function esVistaPC() {
+  return !window.matchMedia('(max-width: 768px)').matches;
+}
+
+async function verificarMostrarAdminPanel() {
+  try {
+    const resp = await fetch('/api/usuario');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    
+    // Solo mostrar si es el admin específico y está en PC
+    if (data.usuario === 'marcos.miguel.3110@gmail.com' && esVistaPC()) {
+      if (settingsNavAdmin) settingsNavAdmin.style.display = '';
+      cargarTokenPrefixActual();
+    } else {
+      if (settingsNavAdmin) settingsNavAdmin.style.display = 'none';
+    }
+  } catch (e) {
+    console.error('Error verificando admin panel:', e);
+  }
+}
+
+async function cargarTokenPrefixActual() {
+  try {
+    const resp = await fetch('/api/admin/token-prefix');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.ok && adminTokenPrefix) {
+      adminTokenPrefix.value = data.tokenPrefix === 'verboai' ? '' : data.tokenPrefix;
+      if (adminTokenPrefixAyuda) {
+        adminTokenPrefixAyuda.textContent = `Prefijo actual: ${data.tokenPrefix}-`;
+      }
+    }
+  } catch (e) {
+    console.error('Error cargando prefijo:', e);
+  }
+}
+
+if (btnGuardarTokenPrefix && adminTokenPrefix) {
+  btnGuardarTokenPrefix.addEventListener('click', async () => {
+    const nuevoPrefijo = adminTokenPrefix.value.trim();
+    
+    try {
+      const resp = await fetch('/api/admin/token-prefix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tokenPrefix: nuevoPrefijo }),
+      });
+      
+      const data = await resp.json();
+      if (!data.ok) {
+        alert(data.error || 'Error al guardar el prefijo');
+        return;
+      }
+      
+      if (adminTokenPrefixAyuda) {
+        adminTokenPrefixAyuda.textContent = `Prefijo actual: ${data.tokenPrefix}-`;
+      }
+      alert('Prefijo guardado correctamente. Los nuevos tokens usarán este prefijo.');
+    } catch (e) {
+      alert('Error de conexión al guardar el prefijo');
+    }
+  });
+}

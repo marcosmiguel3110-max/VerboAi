@@ -2445,7 +2445,7 @@ function tieneAccesoApiTokens(usuario) {
   return !!usuario;
 }
 
-function generarTokenVerboai() {
+function generarTokenVerboai(usuarioPropietario = null) {
   const digitos = crypto.randomBytes(12).toString('hex');
 
   let soloDigitos = '';
@@ -2453,7 +2453,19 @@ function generarTokenVerboai() {
     const num = parseInt(digitos.slice(i, i + 2), 16);
     soloDigitos += String(num % 10);
   }
-  return 'verboai-' + soloDigitos;
+
+  // Verificar si la cuenta tiene un prefijo personalizado
+  let prefijo = 'verboai-';
+  if (usuarioPropietario && !usuarioPropietario.startsWith('local:')) {
+    const usuarios = leerUsuarios();
+    const cuenta = usuarios[usuarioPropietario];
+    if (cuenta && cuenta.tokenPrefix && typeof cuenta.tokenPrefix === 'string' && cuenta.tokenPrefix.trim()) {
+      prefijo = cuenta.tokenPrefix.trim();
+      if (!prefijo.endsWith('-')) prefijo += '-';
+    }
+  }
+
+  return prefijo + soloDigitos;
 }
 
 function buscarTokenPorValor(valor) {
@@ -3063,6 +3075,54 @@ app.post('/api/perfil/nombre', (req, res) => {
   res.json({ ok: true, nombre: nombreLimpio });
 });
 
+// Endpoint para actualizar el prefijo de token (solo admin y solo PC)
+app.post('/api/admin/token-prefix', (req, res) => {
+  const usuarioActual = obtenerUsuarioActual(req);
+  if (!usuarioActual) return res.status(401).json({ error: 'No autenticado.' });
+
+  // Verificar que sea el admin específico
+  if (usuarioActual !== 'marcos.miguel.3110@gmail.com') {
+    return res.status(403).json({ error: 'Solo disponible para el administrador principal.' });
+  }
+
+  const { tokenPrefix } = req.body || {};
+  const prefijoLimpio = (tokenPrefix || '').trim().slice(0, 30);
+  
+  // Validar prefijo: solo letras, números y guiones, debe terminar con letra o número
+  if (prefijoLimpio && !/^[a-zA-Z0-9-]+$/.test(prefijoLimpio)) {
+    return res.status(400).json({ error: 'El prefijo solo puede contener letras, números y guiones.' });
+  }
+
+  const usuarios = leerUsuarios();
+  if (!usuarios[usuarioActual]) usuarios[usuarioActual] = { creadoEn: new Date().toISOString() };
+  
+  if (prefijoLimpio) {
+    usuarios[usuarioActual].tokenPrefix = prefijoLimpio;
+  } else {
+    delete usuarios[usuarioActual].tokenPrefix;
+  }
+  
+  guardarUsuarios(usuarios);
+
+  res.json({ ok: true, tokenPrefix: prefijoLimpio || 'verboai' });
+});
+
+// Endpoint para obtener el prefijo actual (solo admin)
+app.get('/api/admin/token-prefix', (req, res) => {
+  const usuarioActual = obtenerUsuarioActual(req);
+  if (!usuarioActual) return res.status(401).json({ error: 'No autenticado.' });
+
+  if (usuarioActual !== 'marcos.miguel.3110@gmail.com') {
+    return res.status(403).json({ error: 'Solo disponible para el administrador principal.' });
+  }
+
+  const usuarios = leerUsuarios();
+  const cuenta = usuarios[usuarioActual] || {};
+  const prefijoActual = cuenta.tokenPrefix || 'verboai';
+
+  res.json({ ok: true, tokenPrefix: prefijoActual });
+});
+
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
@@ -3279,7 +3339,7 @@ app.post('/api/api-tokens/generar', (req, res) => {
 
   const nuevoToken = {
     id: generarId(),
-    token: generarTokenVerboai(),
+    token: generarTokenVerboai(usuario),
     nombre: nombreLimpio || 'Token sin nombre',
     propietario: usuario,
     creditos: TOKEN_CREDITOS_INICIALES,

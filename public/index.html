@@ -271,6 +271,11 @@
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M4.9 19.1l14.2-14.2" stroke-linecap="round"/></svg>
           Profundidad
         </button>
+        <button class="settings-nav-item" data-seccion="admin" id="settingsNavAdmin" style="display:none;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Admin
+          <span class="badge-prox" style="background:linear-gradient(135deg,#d4af37,#b8860b);color:#1a1a1a;">Solo PC</span>
+        </button>
       </nav>
 
       <div class="settings-contenido">
@@ -620,6 +625,30 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/info</cod
           </div>
           <p class="settings-descripcion" style="margin-top: 16px; font-size: 12px; color: var(--texto-suave);">
             Cuando está activo, verás el indicador "Profundidad extendida" en verde arriba del área de chat. Esto también afecta a VerboCode para ejecutar códigos más avanzados.
+          </p>
+        </section>
+
+        <section class="settings-seccion oculto" data-seccion-panel="admin">
+          <h3>Admin</h3>
+          <p class="settings-descripcion">Configuraciones avanzadas solo disponibles para el administrador principal en PC.</p>
+
+          <div class="admin-config-item">
+            <label class="admin-config-label">
+              <strong>Identificador de tokens</strong>
+              <small>Personaliza el prefijo de tus tokens API (ej: "miapp-" en lugar de "verboai-"). Solo afecta a tus tokens nuevos.</small>
+            </label>
+            <div class="admin-config-inputs">
+              <input type="text" id="adminTokenPrefix" maxlength="30" placeholder="verboai" />
+              <button id="btnGuardarTokenPrefix" class="btn-generar-token">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+                Guardar
+              </button>
+            </div>
+            <p class="admin-config-ayuda" id="adminTokenPrefixAyuda">Prefijo actual: verboai-</p>
+          </div>
+
+          <p class="settings-descripcion" style="margin-top: 20px; font-size: 12px; color: var(--texto-suave);">
+            Los tokens ya existentes mantienen su prefijo original. Solo los tokens nuevos usarán el prefijo personalizado.
           </p>
         </section>
       </div>
