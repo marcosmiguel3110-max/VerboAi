@@ -5,8 +5,7 @@
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
-    "start": "python3 -m venv venv && venv/bin/pip install -r requirements.txt && node server.js",
-    "install-python-deps": "pip install -r requirements.txt"
+    "start": "node server.js"
   },
   "dependencies": {
     "axios": "^1.7.7",
@@ -21,7 +20,6 @@
     "puppeteer": "^25.3.0"
   },
   "engines": {
-    "node": ">=18",
-    "python": ">=3.8"
+    "node": ">=18"
   }
 }
