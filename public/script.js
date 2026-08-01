@@ -2558,14 +2558,20 @@ function esVistaPC() {
 async function verificarMostrarAdminPanel() {
   try {
     const resp = await fetch('/api/usuario');
-    if (!resp.ok) return;
+    if (!resp.ok) {
+      console.error('[admin-panel] Error fetching /api/usuario:', resp.status);
+      return;
+    }
     const data = await resp.json();
+    console.log('[admin-panel] Usuario:', data.usuario, 'esAdmin:', data.esAdmin, 'esVistaPC:', esVistaPC());
     
     // Solo mostrar si es el admin específico y está en PC
     if (data.usuario === 'marcos.miguel.3110@gmail.com' && esVistaPC()) {
+      console.log('[admin-panel] Mostrando panel admin');
       if (settingsNavAdmin) settingsNavAdmin.style.display = '';
       cargarTokenPrefixActual();
     } else {
+      console.log('[admin-panel] Ocultando panel admin - usuario:', data.usuario, 'esPC:', esVistaPC());
       if (settingsNavAdmin) settingsNavAdmin.style.display = 'none';
     }
   } catch (e) {
