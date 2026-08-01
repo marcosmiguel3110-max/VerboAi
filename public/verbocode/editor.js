@@ -1450,7 +1450,7 @@ async function enviarChat() {
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutos (aumentado de 2 minutos)
 
     const bodyData = {
       mensaje: texto,
