@@ -1916,6 +1916,7 @@ async function llamarGlm4BridgeUnaVez(messages, systemPrompt, opciones = {}) {
   
   // Usar API key con rotación si hay disponibles
   let gpt4freeKeyIndex = null;
+  
   try {
     if (GPT4FREE_API_KEYS.length > 0) {
       gpt4freeKeyIndex = selectBestGpt4FreeKey();
