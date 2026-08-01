@@ -8608,15 +8608,41 @@ async function buscarWebGoogle(query) {
     const palabras = q.split(' ').slice(0, 8).join(' ');
     q = palabras;
   }
+  
+  console.log(`[web-search] Iniciando búsqueda con query: "${q}"`);
+  
+  // Intento 1: DuckDuckGo
   const ddg = await buscarWebDuckDuckGo(q);
-  if (ddg.exito) return ddg;
-  if (GOOGLE_CSE_API_KEY) { const g = await buscarWebGoogleReal(q); if (g.exito) return g; }
-  // Último intento: buscar con aún menos palabras
+  if (ddg.exito) {
+    console.log(`[web-search] DuckDuckGo exitoso`);
+    return ddg;
+  }
+  console.log(`[web-search] DuckDuckGo falló: ${ddg.error}`);
+  
+  // Intento 2: Google CSE (si hay API key)
+  if (GOOGLE_CSE_API_KEY) {
+    console.log(`[web-search] Intentando Google CSE`);
+    const g = await buscarWebGoogleReal(q);
+    if (g.exito) {
+      console.log(`[web-search] Google CSE exitoso`);
+      return g;
+    }
+    console.log(`[web-search] Google CSE falló: ${g.error}`);
+  }
+  
+  // Intento 3: DuckDuckGo con query más corta
   if (q.split(' ').length > 4) {
     const qCorta = q.split(' ').slice(0, 4).join(' ');
+    console.log(`[web-search] Intentando DuckDuckGo con query corta: "${qCorta}"`);
     const ddg2 = await buscarWebDuckDuckGo(qCorta);
-    if (ddg2.exito) return ddg2;
+    if (ddg2.exito) {
+      console.log(`[web-search] DuckDuckGo (corta) exitoso`);
+      return ddg2;
+    }
+    console.log(`[web-search] DuckDuckGo (corta) falló: ${ddg2.error}`);
   }
+  
+  console.log(`[web-search] Todos los intentos fallaron`);
   return ddg;
 }
 
@@ -8628,7 +8654,7 @@ async function buscarWebDuckDuckGo(query) {
     const url = "https://duckduckgo.com/html/?q=" + encodeURIComponent(q);
     const resp = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36", "Accept": "text/html", "Accept-Language": "es-AR,es;q=0.9" },
-      signal: AbortSignal.timeout(8000), redirect: "follow",
+      signal: AbortSignal.timeout(15000), redirect: "follow", // Aumentado a 15 segundos
     });
     if (!resp.ok) return { exito: false, error: "DuckDuckGo HTTP " + resp.status };
     const html = await resp.text();
