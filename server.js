@@ -7926,12 +7926,15 @@ de imagen tu mismo.
 
 HERRAMIENTA "WEB" (para buscar informacion actualizada en internet, mas alla de Wikipedia):
 Cuando necesites datos actuales (noticias, precios, eventos recientes, datos que cambian con el tiempo)
-que probablemente no esten en Wikipedia, o cuando el usuario te pida buscar en internet/web/google,
+que probablemente no esten en Wikipedia, o cuando el usuario te pide buscar en internet/web/google,
 agregas al FINAL de tu respuesta, en su propia linea, EXACTAMENTE este formato:
 [[WEB::consulta de busqueda corta, 2 a 6 palabras]]
 Ejemplo: "que paso hoy en el mundial" -> tu respuesta breve + [[WEB::resultados mundial hoy]]
 Esto dispara una busqueda REAL en Google Custom Search y los resultados se agregan despues de tu respuesta.
-No la uses para cosas que ya sabes o que cubre INVESTIGAR (Wikipedia/Biblia). Usala con moderacion.
+
+IMPORTANTE: SIEMPRE que el usuario te pida algo que requiera informacion actualizada (noticias, eventos recientes, datos que cambian con el tiempo, tecnologia nueva, frameworks actualizados, librerias modernas, etc.), DEBES usar [[WEB::...]] para buscar en internet. NO asumas que tu conocimiento es suficiente porque puede estar desactualizado.
+
+IMPORTANTE: SIEMPRE investiga en tus skills (documentacion especializada) cuando el pedido requiera conocimiento tecnico especifico. SIEMPRE examina todo el contexto disponible antes de responder. NO te limites a tu conocimiento base — usa todas las herramientas disponibles (WEB, INVESTIGAR, skills) para dar la mejor respuesta posible.
 
 HERRAMIENTA "CLIMA" (para consultar el clima ACTUAL de un lugar):
 Cuando el usuario te pregunte por el clima, temperatura, si va a llover, etc. de un lugar especifico,
@@ -8621,6 +8624,7 @@ async function buscarWebDuckDuckGo(query) {
   try {
     const q = (query || "").trim();
     if (!q) return { exito: false, error: "Query vacia" };
+    console.log(`[web-search] Buscando en DuckDuckGo: "${q}"`);
     const url = "https://duckduckgo.com/html/?q=" + encodeURIComponent(q);
     const resp = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36", "Accept": "text/html", "Accept-Language": "es-AR,es;q=0.9" },
@@ -8628,26 +8632,60 @@ async function buscarWebDuckDuckGo(query) {
     });
     if (!resp.ok) return { exito: false, error: "DuckDuckGo HTTP " + resp.status };
     const html = await resp.text();
+    console.log(`[web-search] HTML recibido: ${html.length} caracteres`);
     const resultados = [];
-    const bloques = html.split(/<div[^>]*class="[^"]*result[^"]*"/).slice(1);
-    for (const bloque of bloques) {
-      if (resultados.length >= 5) break;
-      const reA = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i;
-      const mA = bloque.match(reA);
-      if (!mA) continue;
-      let link = mA[1];
-      const mUddg = link.match(/uddg=([^&]+)/);
-      if (mUddg) { try { link = decodeURIComponent(mUddg[1]); } catch (e) { } }
-      const titulo = mA[2].replace(/<[^>]+>/g, "").trim();
-      if (!titulo) continue;
-      const reS = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i;
-      const mS = bloque.match(reS);
-      const snippet = mS ? mS[1].replace(/<[^>]+>/g, "").trim() : "";
-      resultados.push({ titulo, link, resumen: snippet });
+    
+    // Intentar múltiples patrones de regex para DuckDuckGo (puede cambiar el HTML)
+    const patronesResult = [
+      /<div[^>]*class="[^"]*result[^"]*"[^>]*>([\s\S]*?)<\/div>/gi,
+      /<div[^>]*class="web-result"[^>]*>([\s\S]*?)<\/div>/gi,
+      /<article[^>]*class="[^"]*result[^"]*"[^>]*>([\s\S]*?)<\/article>/gi,
+    ];
+    
+    for (const patron of patronesResult) {
+      const bloques = html.match(patron);
+      if (!bloques) continue;
+      
+      for (const bloque of bloques) {
+        if (resultados.length >= 5) break;
+        
+        // Extraer link
+        const reLink = /<a[^>]*href="([^"]+)"[^>]*>/i;
+        const mLink = bloque.match(reLink);
+        if (!mLink) continue;
+        let link = mLink[1];
+        const mUddg = link.match(/uddg=([^&]+)/);
+        if (mUddg) { try { link = decodeURIComponent(mUddg[1]); } catch (e) { } }
+        
+        // Extraer título
+        const reTitulo = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*>([\s\S]*?)<\/a>/i;
+        let mTitulo = bloque.match(reTitulo);
+        if (!mTitulo) {
+          // Fallback: usar el texto del link como título
+          mTitulo = bloque.match(/<a[^>]*>([^<]+)<\/a>/i);
+        }
+        if (!mTitulo) continue;
+        const titulo = mTitulo[1].replace(/<[^>]+>/g, "").trim();
+        if (!titulo) continue;
+        
+        // Extraer snippet
+        const reSnippet = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i;
+        const mSnippet = bloque.match(reSnippet);
+        const snippet = mSnippet ? mSnippet[1].replace(/<[^>]+>/g, "").trim() : "";
+        
+        resultados.push({ titulo, link, resumen: snippet });
+      }
+      
+      if (resultados.length > 0) break;
     }
-    if (!resultados.length) return { exito: false, error: "DuckDuckGo no devolvio resultados." };
+    
+    console.log(`[web-search] Resultados encontrados: ${resultados.length}`);
+    if (!resultados.length) return { exito: false, error: "DuckDuckGo no devolvio resultados (posible cambio en HTML)." };
     return { exito: true, cseUsado: "duckduckgo", resultados };
-  } catch (e) { return { exito: false, error: "DuckDuckGo fallo: " + e.message }; }
+  } catch (e) { 
+    console.error(`[web-search] Error: ${e.message}`);
+    return { exito: false, error: "DuckDuckGo fallo: " + e.message }; 
+  }
 }
 
 async function buscarWebGoogleReal(query) {
