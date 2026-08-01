@@ -2557,9 +2557,9 @@ function esVistaPC() {
 
 async function verificarMostrarAdminPanel() {
   try {
-    const resp = await fetch('/api/usuario');
+    const resp = await fetch('/api/whoami');
     if (!resp.ok) {
-      console.error('[admin-panel] Error fetching /api/usuario:', resp.status);
+      console.error('[admin-panel] Error fetching /api/whoami:', resp.status);
       return;
     }
     const data = await resp.json();
