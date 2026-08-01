@@ -8610,6 +8610,7 @@ const GOOGLE_CSE_IDS = [
   'a1c500707cbdc41a9',
 ];
 const GOOGLE_CSE_API_KEY = process.env.GOOGLE_CSE_API_KEY || '';
+const SEARCHX_API_KEY = process.env.SEARCHX_API_KEY || '';
 
 async function buscarWebGoogle(query) {
   // Si la query es muy larga (>80 chars), cortarla a las primeras palabras
@@ -8622,7 +8623,20 @@ async function buscarWebGoogle(query) {
   
   console.log(`[web-search] Iniciando búsqueda con query: "${q}"`);
   
-  // Intento 1: SearXNG (gratuito, no requiere tarjeta)
+  // Intento 1: SearchX API (3K queries/día gratis, requiere API key)
+  if (SEARCHX_API_KEY) {
+    console.log(`[web-search] Intentando SearchX API`);
+    const searchx = await buscarWebSearchX(q);
+    if (searchx.exito) {
+      console.log(`[web-search] SearchX exitoso`);
+      return searchx;
+    }
+    console.log(`[web-search] SearchX falló: ${searchx.error}`);
+  } else {
+    console.log(`[web-search] SearchX API key no configurada, saltando`);
+  }
+  
+  // Intento 2: SearXNG (gratuito, no requiere tarjeta)
   console.log(`[web-search] Intentando SearXNG`);
   const searx = await buscarWebSearXNG(q);
   if (searx.exito) {
@@ -8631,7 +8645,7 @@ async function buscarWebGoogle(query) {
   }
   console.log(`[web-search] SearXNG falló: ${searx.error}`);
   
-  // Intento 2: DuckDuckGo
+  // Intento 3: DuckDuckGo
   const ddg = await buscarWebDuckDuckGo(q);
   if (ddg.exito) {
     console.log(`[web-search] DuckDuckGo exitoso`);
@@ -8639,7 +8653,7 @@ async function buscarWebGoogle(query) {
   }
   console.log(`[web-search] DuckDuckGo falló: ${ddg.error}`);
   
-  // Intento 3: DuckDuckGo con query más corta
+  // Intento 4: DuckDuckGo con query más corta
   if (q.split(' ').length > 4) {
     const qCorta = q.split(' ').slice(0, 4).join(' ');
     console.log(`[web-search] Intentando DuckDuckGo con query corta: "${qCorta}"`);
@@ -8651,7 +8665,7 @@ async function buscarWebGoogle(query) {
     console.log(`[web-search] DuckDuckGo (corta) falló: ${ddg2.error}`);
   }
   
-  // Intento 4: Google CSE (solo si hay API key configurada, requiere tarjeta)
+  // Intento 5: Google CSE (solo si hay API key configurada, requiere tarjeta)
   if (GOOGLE_CSE_API_KEY) {
     console.log(`[web-search] Intentando Google CSE (requiere tarjeta)`);
     const g = await buscarWebGoogleReal(q);
@@ -8740,16 +8754,18 @@ async function buscarWebSearXNG(query) {
     if (!q) return { exito: false, error: "Query vacia" };
     console.log(`[web-search] Buscando en SearXNG: "${q}"`);
     
-    // Usar instancias públicas de SearXNG (rotación automática)
+    // Usar instancias públicas de SearXNG que soportan JSON
     const instancias = [
       'https://searx.be',
       'https://searx.work',
       'https://searxng.org',
       'https://search.sapti.me',
+      'https://search.projectsegfau.lt',
     ];
     
     for (const instancia of instancias) {
       try {
+        // Intentar formato JSON primero
         const url = `${instancia}/search?q=${encodeURIComponent(q)}&format=json&language=es`;
         const resp = await fetch(url, {
           headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36", "Accept": "application/json" },
@@ -8758,18 +8774,29 @@ async function buscarWebSearXNG(query) {
         
         if (!resp.ok) continue;
         
-        const data = await resp.json();
-        if (!data.results || !Array.isArray(data.results)) continue;
-        
-        const resultados = data.results.slice(0, 5).map(r => ({
-          titulo: r.title || r.title || '',
-          link: r.url || r.url || '',
-          resumen: r.content || r.content || '',
-        })).filter(r => r.titulo && r.link);
-        
-        if (resultados.length > 0) {
-          console.log(`[web-search] SearXNG exitoso (${instancia}): ${resultados.length} resultados`);
-          return { exito: true, cseUsado: "searxng", resultados };
+        const contentType = resp.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await resp.json();
+          if (data.results && Array.isArray(data.results)) {
+            const resultados = data.results.slice(0, 5).map(r => ({
+              titulo: r.title || '',
+              link: r.url || '',
+              resumen: r.content || '',
+            })).filter(r => r.titulo && r.link);
+            
+            if (resultados.length > 0) {
+              console.log(`[web-search] SearXNG exitoso (${instancia}): ${resultados.length} resultados`);
+              return { exito: true, cseUsado: "searxng", resultados };
+            }
+          }
+        } else {
+          // Si no es JSON, intentar parsear HTML
+          const html = await resp.text();
+          const resultados = parsearSearXNGHTML(html);
+          if (resultados.length > 0) {
+            console.log(`[web-search] SearXNG HTML exitoso (${instancia}): ${resultados.length} resultados`);
+            return { exito: true, cseUsado: "searxng", resultados };
+          }
         }
       } catch (e) {
         console.log(`[web-search] Instancia ${instancia} falló: ${e.message}`);
@@ -8781,6 +8808,82 @@ async function buscarWebSearXNG(query) {
   } catch (e) {
     console.error(`[web-search] Error SearXNG: ${e.message}`);
     return { exito: false, error: "SearXNG fallo: " + e.message };
+  }
+}
+
+function parsearSearXNGHTML(html) {
+  const resultados = [];
+  try {
+    // Patrones para extraer resultados de HTML de SearXNG
+    const bloques = html.match(/<article[^>]*class="[^"]*result[^"]*"[^>]*>([\s\S]*?)<\/article>/gi) || [];
+    
+    for (const bloque of bloques) {
+      if (resultados.length >= 5) break;
+      
+      // Extraer título
+      const mTitulo = bloque.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i) || bloque.match(/<a[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
+      if (!mTitulo) continue;
+      const titulo = mTitulo[1].replace(/<[^>]+>/g, "").trim();
+      if (!titulo) continue;
+      
+      // Extraer link
+      const mLink = bloque.match(/<a[^>]*href="([^"]+)"[^>]*>/i);
+      if (!mLink) continue;
+      const link = mLink[1];
+      
+      // Extraer snippet
+      const mSnippet = bloque.match(/<p[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/p>/i) || bloque.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+      const resumen = mSnippet ? mSnippet[1].replace(/<[^>]+>/g, "").trim() : "";
+      
+      resultados.push({ titulo, link, resumen });
+    }
+  } catch (e) {
+    console.error('[web-search] Error parseando HTML SearXNG:', e.message);
+  }
+  return resultados;
+}
+
+async function buscarWebSearchX(query) {
+  try {
+    const q = (query || "").trim();
+    if (!q) return { exito: false, error: "Query vacia" };
+    if (!SEARCHX_API_KEY) return { exito: false, error: "SEARCHX_API_KEY no configurada" };
+    
+    console.log(`[web-search] Buscando en SearchX: "${q}"`);
+    const url = `https://searchx.dev/api/v1/search?q=${encodeURIComponent(q)}&mode=hybrid`;
+    
+    const resp = await fetch(url, {
+      headers: { 
+        "Authorization": `Bearer ${SEARCHX_API_KEY}`,
+        "Content-Type": "application/json" 
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    
+    if (!resp.ok) {
+      return { exito: false, error: `SearchX HTTP ${resp.status}` };
+    }
+    
+    const data = await resp.json();
+    if (!data.results || !Array.isArray(data.results)) {
+      return { exito: false, error: "SearchX no devolvió resultados válidos" };
+    }
+    
+    const resultados = data.results.slice(0, 5).map(r => ({
+      titulo: r.title || '',
+      link: r.url || r.link || '',
+      resumen: r.snippet || r.content || '',
+    })).filter(r => r.titulo && r.link);
+    
+    if (resultados.length > 0) {
+      console.log(`[web-search] SearchX exitoso: ${resultados.length} resultados`);
+      return { exito: true, cseUsado: "searchx", resultados };
+    }
+    
+    return { exito: false, error: "SearchX no devolvió resultados" };
+  } catch (e) {
+    console.error(`[web-search] Error SearchX: ${e.message}`);
+    return { exito: false, error: "SearchX fallo: " + e.message };
   }
 }
 
