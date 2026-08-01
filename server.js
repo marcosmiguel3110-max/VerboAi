@@ -486,11 +486,13 @@ const MODELOS_DISPONIBLES = {
     nombre: 'NewserPlus',
     descripcion: 'Ultra potente. Coding complejo y razonamiento avanzado.',
     // Usar G4F si está habilitado, sino Anthropic, sino el mejor modelo free
-    modeloOpenRouter: GPT4FREE_ENABLED ? 'g4f-bridge' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-ultra-550b-a55b:free'),
+    modeloOpenRouter: GPT4FREE_ENABLED ? 'glm-5.2' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-ultra-550b-a55b:free'),
     modelosOpenRouterTexto: [
-      // G4F Bridge (PRIMERO si está habilitado)
+      // GLM-5.2 (PRIMERO si está habilitado)
+      GPT4FREE_ENABLED ? 'glm-5.2' : null,
+      // G4F Bridge (segundo si está habilitado)
       GPT4FREE_ENABLED ? 'g4f-bridge' : null,
-      // Anthropic Direct (segundo si está habilitado)
+      // Anthropic Direct (tercero si está habilitado)
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Mejores modelos free (prioridad)
       'nvidia/nemotron-3-ultra-550b-a55b:free',
@@ -543,10 +545,10 @@ const MODELOS_DISPONIBLES = {
       'nvidia/nemotron-nano-12b-v2-vl:free',
       'nvidia/nemotron-3.5-content-safety:free',
     ].filter(Boolean),
-    costoCreditos: GPT4FREE_ENABLED ? 200 : (ANTHROPIC_ENABLED ? 500 : 250),
-    rateLimitMax: 4,  // Rate limit estricto por cuenta para NewserPlus
-    rateLimitMaxWeb: 6,
-    maxTokens: GPT4FREE_ENABLED ? 16000 : (ANTHROPIC_ENABLED ? 16000 : 8000),
+    costoCreditos: GPT4FREE_ENABLED ? 300 : (ANTHROPIC_ENABLED ? 500 : 250),
+    rateLimitMax: GPT4FREE_ENABLED ? 2 : 4,  // Rate limit más estricto con GLM-5.2
+    rateLimitMaxWeb: GPT4FREE_ENABLED ? 3 : 6,
+    maxTokens: GPT4FREE_ENABLED ? 12000 : (ANTHROPIC_ENABLED ? 16000 : 8000),
     badge: 'ULTRA/PRO/CODING',
     disponible: true,
     imagenModelo: POLLINATIONS_PRO_MODEL,
@@ -559,31 +561,6 @@ const MODELOS_DISPONIBLES = {
     soportaStructuredOutputs: GPT4FREE_ENABLED || ANTHROPIC_ENABLED,    // Disponible con G4F y Anthropic
     soportaPromptCaching: GPT4FREE_ENABLED || ANTHROPIC_ENABLED,        // Disponible con G4F y Anthropic
     contextWindow: GPT4FREE_ENABLED ? 200000 : (ANTHROPIC_ENABLED ? 200000 : 128000), // 200K con G4F/Anthropic, 128K free
-  },
-  GLM52: {
-    nombre: 'GLM-5.2',
-    descripcion: 'Modelo GLM-5.2 de alta capacidad. Razonamiento avanzado y contexto extendido.',
-    modeloOpenRouter: GPT4FREE_ENABLED ? 'glm-5.2' : 'nvidia/nemotron-3-ultra-550b-a55b:free',
-    modelosOpenRouterTexto: [
-      // GLM-5.2 (PRIMERO si está habilitado)
-      GPT4FREE_ENABLED ? 'glm-5.2' : null,
-      // Cascada de modelos free
-      'nvidia/nemotron-3-ultra-550b-a55b:free',
-      'nvidia/nemotron-3-super-120b-a12b:free',
-      'meta-llama/llama-3.3-70b-instruct:free',
-    ].filter(Boolean),
-    modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
-    modelosOpenRouterVision: [
-      'google/gemma-4-31b-it:free',
-      'nvidia/nemotron-nano-12b-v2-vl:free',
-    ],
-    costoCreditos: 300,
-    rateLimitMax: 2,  // Rate limit muy estricto por ser pesado
-    rateLimitMaxWeb: 3,
-    maxTokens: 12000,  // Más tokens que los otros modelos
-    badge: 'ULTRA',
-    disponible: true,
-    contextWindow: GPT4FREE_ENABLED ? 200000 : 128000,
   },
   CatAgent25: {
     nombre: 'CatAgent2.5',
