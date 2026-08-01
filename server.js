@@ -1582,34 +1582,26 @@ async function llamarAnthropic(messages, systemPrompt, model = ANTHROPIC_MODEL, 
   }
 }
 
-// Llama a G4F Bridge (DeepSeek R1, V3, etc.) vía glm-bridge
+// Llama a G4F directamente vía script Python con rotación de proveedores
 async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opciones = {}) {
-  if (!GPT4FREE_ENABLED || !GPT4FREE_URL) {
-    return { ok: false, error: 'G4F deshabilitado o sin URL' };
-  }
-  
-  // Verificar cooldown por modelo específico
-  const ahora = Date.now();
-  const modeloReal = GPT4FREE_MODELS[model] || model;
-  const cooldownFin = GPT4FREE_MODEL_COOLDOWN.get(modeloReal) || 0;
-  
-  if (ahora < cooldownFin) {
-    const tiempoRestante = Math.ceil((cooldownFin - ahora) / (60 * 60 * 1000));
-    console.log(`[g4f] Modelo ${modeloReal} en cooldown por límite de requests (${tiempoRestante}h restantes)`);
-    return { ok: false, error: `Modelo ${modeloReal} en cooldown (${tiempoRestante}h restantes)` };
+  if (!GPT4FREE_ENABLED) {
+    return { ok: false, error: 'G4F deshabilitado' };
   }
 
-  console.log(`[g4f] Llamando con modelo solicitado: ${model}, modelo real: ${modeloReal}`);
+  console.log(`[g4f] Llamando con modelo solicitado: ${model} vía script Python`);
 
   try {
-    // Determinar la URL completa
-    const url = GPT4FREE_URL.endsWith('/v1/chat/completions')
-      ? GPT4FREE_URL
-      : `${GPT4FREE_URL}/v1/chat/completions`;
+    const { spawn } = require('child_process');
+    const path = require('path');
 
-    console.log(`[g4f] URL: ${url}`);
+    // Mapear modelo al formato de g4f
+    const modeloG4F = {
+      'deepseek-r1': 'gpt-4o',
+      'deepseek-v3': 'gpt-4o-mini',
+      'deepseek-v4-pro': 'gpt-4o',
+    }[model] || 'gpt-4o-mini';
 
-    // Convertir mensajes al formato OpenAI (compatible con G4F)
+    // Convertir mensajes al formato de g4f
     const openaiMessages = messages.map(msg => ({
       role: msg.role,
       content: msg.content
@@ -1617,11 +1609,9 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
 
     // Agregar system prompt como primer mensaje si existe
     if (systemPrompt) {
-      // Si es DeepSeek V4 Pro, forzar que se identifique como NewserPlus
       let systemPromptModificado = systemPrompt;
-      if (modeloReal === 'deepseek-v4-pro' || modeloReal.includes('deepseek')) {
+      if (model.includes('deepseek')) {
         systemPromptModificado = systemPrompt.replace(/__NOMBRE_MODELO__/g, 'NewserPlus');
-        // Agregar instrucción explícita para DeepSeek
         systemPromptModificado += '\n\nIMPORTANTE: Tu nombre es NewserPlus. Si te preguntan qué modelo eres, responde siempre que eres NewserPlus.';
       }
       openaiMessages.unshift({
@@ -1630,77 +1620,71 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
       });
     }
 
-    const body = {
-      model: modeloReal,
-      messages: openaiMessages,
-      temperature: 0.7,
-      max_tokens: opciones.maxTokens || 4096,
+    const inputData = {
+      modelo: modeloG4F,
+      mensajes: openaiMessages,
     };
 
-    const headers = {
-      'Content-Type': 'application/json',
-    };
+    const scriptPath = path.join(__dirname, 'g4f_wrapper.py');
 
-    // Usar API key con rotación si hay disponibles
-    let gpt4freeKeyIndex = null;
-    try {
-      if (GPT4FREE_API_KEYS.length > 0) {
-        gpt4freeKeyIndex = selectBestGpt4FreeKey();
-        const key = GPT4FREE_API_KEYS[gpt4freeKeyIndex];
-        headers['Authorization'] = `Bearer ${key}`;
-        gpt4freeKeyStats[gpt4freeKeyIndex].requests++;
+    return new Promise((resolve, reject) => {
+      const pythonProcess = spawn('python3', [scriptPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code !== 0) {
+          console.error(`[g4f] Script Python falló con código ${code}:`, stderr);
+          resolve({ ok: false, error: `Script Python falló: ${stderr}` });
+          return;
+        }
+
+        try {
+          const resultado = JSON.parse(stdout);
+          if (resultado.ok) {
+            console.log(`[g4f] Éxito con proveedor: ${resultado.proveedor}`);
+            resolve({ ok: true, texto: resultado.respuesta });
+          } else {
+            console.error(`[g4f] Error del script:`, resultado.error);
+            resolve({ ok: false, error: resultado.error });
+          }
+        } catch (e) {
+          console.error(`[g4f] Error parseando respuesta:`, e.message);
+          resolve({ ok: false, error: `Error parseando respuesta: ${e.message}` });
+        }
+      });
+
+      pythonProcess.on('error', (error) => {
+        console.error(`[g4f] Error ejecutando script:`, error);
+        resolve({ ok: false, error: `Error ejecutando script: ${error.message}` });
+      });
+
+      // Enviar input por stdin
+      pythonProcess.stdin.write(JSON.stringify(inputData));
+      pythonProcess.stdin.end();
+
+      // Timeout
+      if (opciones.timeout) {
+        setTimeout(() => {
+          pythonProcess.kill();
+          resolve({ ok: false, error: 'Timeout del script Python' });
+        }, opciones.timeout);
       }
-    } catch (e) {
-      console.warn('[g4f] Error seleccionando API key:', e.message);
-    }
-
-    console.log(`[g4f] Timeout configurado: ${GPT4FREE_TIMEOUT}ms`);
-    const resp = await axios.post(url, body, {
-      headers,
-      timeout: GPT4FREE_TIMEOUT,
-      signal: opciones.signal,
-      validateStatus: () => true,
     });
-
-    if (resp.status < 200 || resp.status >= 300) {
-      const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
-      console.error(`[g4f] HTTP ${resp.status}: ${detalle}`);
-      
-      // Detectar límite de requests en modelo específico y activar cooldown por ese modelo
-      if (resp.status === 502 && detalle.includes('429') && detalle.includes('per day')) {
-        console.warn(`[g4f] Modelo ${modeloReal} alcanzó límite de requests, activando cooldown por 24 horas`);
-        GPT4FREE_MODEL_COOLDOWN.set(modeloReal, Date.now() + (24 * 60 * 60 * 1000)); // 24 horas
-      }
-      
-      if (gpt4freeKeyIndex !== null) {
-        updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, resp.status === 429);
-      }
-      return { ok: false, error: `HTTP ${resp.status}` };
-    }
-
-    const texto = resp.data?.choices?.[0]?.message?.content || '';
-    const finishReason = resp.data?.choices?.[0]?.finish_reason || null;
-
-    if (!texto || !texto.trim()) {
-      console.error('[g4f] respuesta vacia:', JSON.stringify(resp.data || {}).slice(0, 300));
-      if (gpt4freeKeyIndex !== null) {
-        updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, false);
-      }
-      return { ok: false, error: 'Respuesta vacia de G4F' };
-    }
-
-    console.log(`[g4f] OK - ${texto.length} chars por ${model} (finish_reason: ${finishReason})`);
-    if (gpt4freeKeyIndex !== null) {
-      updateGpt4FreeKeyStats(gpt4freeKeyIndex, true, false);
-    }
-    return { ok: true, tipo: 'g4f', texto: texto.trim(), modelo: model, finishReason };
-
-  } catch (error) {
-    console.error('[g4f] Error:', error.message, error.stack);
-    if (gpt4freeKeyIndex !== null) {
-      updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, false);
-    }
-    return { ok: false, error: error.message };
+  } catch (e) {
+    console.error('[g4f] Error:', e.message);
+    return { ok: false, error: e.message };
   }
 }
 
