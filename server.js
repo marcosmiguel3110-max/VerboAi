@@ -634,8 +634,14 @@ const WEB_SEARCH_LIMIT_POR_CUENTA = new Map();
 const WEB_SEARCH_VENTANA_MS = 60 * 1000; // 1 minuto
 const WEB_SEARCH_MAX_POR_MINUTO = 5; // 5 búsquedas por minuto por cuenta
 
-// Free Search API (wrapper sobre SearXNG, sin API key)
-const FREE_SEARCH_API_URL = 'https://freesearch.replit.app/search';
+// Instancias públicas de SearXNG (sin API key, formato JSON)
+const SEARXNG_INSTANCES = [
+  'https://searx.party',
+  'https://searx.tiekoetter.com',
+  'https://searx.ninja',
+  'https://searx.be',
+  'https://searx.work',
+];
 
 // Sistema de tracking de abusos por cuenta
 function registrarAbuso(clave, tipo) {
@@ -8741,14 +8747,14 @@ async function buscarWebGoogle(query, claveCuenta = null) {
   
   console.log(`[web-search] Iniciando búsqueda con query: "${q}"${claveCuenta ? ` (cuenta: ${claveCuenta})` : ''}`);
   
-  // Intento 1: Free Search API (sin API key, wrapper sobre SearXNG)
-  console.log(`[web-search] Intentando Free Search API (sin API key)`);
-  const freesearch = await buscarWebFreeSearch(q);
-  if (freesearch.exito) {
-    console.log(`[web-search] Free Search exitoso`);
-    return freesearch;
+  // Intento 1: SearXNG directo (sin API key, múltiples instancias)
+  console.log(`[web-search] Intentando SearXNG directo (sin API key)`);
+  const searxng = await buscarWebSearXNGDirecto(q);
+  if (searxng.exito) {
+    console.log(`[web-search] SearXNG directo exitoso`);
+    return searxng;
   }
-  console.log(`[web-search] Free Search falló: ${freesearch.error}`);
+  console.log(`[web-search] SearXNG directo falló: ${searxng.error}`);
   
   // Intento 2: SearchX API (3K queries/día gratis, requiere API key)
   if (SEARCHX_API_KEY) {
@@ -8767,8 +8773,8 @@ async function buscarWebGoogle(query, claveCuenta = null) {
     console.log(`[web-search] SearchX API key no configurada, saltando`);
   }
   
-  // Intento 3: SearXNG (gratuito, no requiere tarjeta)
-  console.log(`[web-search] Intentando SearXNG`);
+  // Intento 3: SearXNG (gratuito, no requiere tarjeta - método anterior)
+  console.log(`[web-search] Intentando SearXNG (método anterior)`);
   const searx = await buscarWebSearXNG(q);
   if (searx.exito) {
     console.log(`[web-search] SearXNG exitoso`);
@@ -9022,43 +9028,53 @@ async function buscarWebSearchX(query) {
   }
 }
 
-async function buscarWebFreeSearch(query) {
+async function buscarWebSearXNGDirecto(query) {
   try {
     const q = (query || "").trim();
     if (!q) return { exito: false, error: "Query vacia" };
     
-    console.log(`[web-search] Buscando en Free Search API: "${q}"`);
-    const url = `${FREE_SEARCH_API_URL}?query=${encodeURIComponent(q)}&max_results=5`;
-    
-    const resp = await fetch(url, {
-      headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(10000),
-    });
-    
-    if (!resp.ok) {
-      return { exito: false, error: `Free Search HTTP ${resp.status}` };
+    // Intentar cada instancia de SearXNG hasta que una funcione
+    for (const instancia of SEARXNG_INSTANCES) {
+      try {
+        console.log(`[web-search] Intentando SearXNG instancia: ${instancia}`);
+        const url = `${instancia}/search?q=${encodeURIComponent(q)}&format=json&language=auto`;
+        
+        const resp = await fetch(url, {
+          headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(8000),
+        });
+        
+        if (!resp.ok) {
+          console.log(`[web-search] SearXNG instancia ${instancia} falló: HTTP ${resp.status}`);
+          continue;
+        }
+        
+        const data = await resp.json();
+        if (!data.results || !Array.isArray(data.results)) {
+          console.log(`[web-search] SearXNG instancia ${instancia} no devolvió resultados válidos`);
+          continue;
+        }
+        
+        const resultados = data.results.slice(0, 5).map(r => ({
+          titulo: r.title || '',
+          link: r.url || '',
+          resumen: r.content || r.snippet || '',
+        })).filter(r => r.titulo && r.link);
+        
+        if (resultados.length > 0) {
+          console.log(`[web-search] SearXNG exitoso con ${instancia}: ${resultados.length} resultados`);
+          return { exito: true, cseUsado: "searxng", resultados };
+        }
+      } catch (e) {
+        console.log(`[web-search] Error en instancia ${instancia}: ${e.message}`);
+        continue;
+      }
     }
     
-    const data = await resp.json();
-    if (!data.results || !Array.isArray(data.results)) {
-      return { exito: false, error: "Free Search no devolvió resultados válidos" };
-    }
-    
-    const resultados = data.results.slice(0, 5).map(r => ({
-      titulo: r.title || '',
-      link: r.url || r.link || '',
-      resumen: r.snippet || r.content || r.description || '',
-    })).filter(r => r.titulo && r.link);
-    
-    if (resultados.length > 0) {
-      console.log(`[web-search] Free Search exitoso: ${resultados.length} resultados`);
-      return { exito: true, cseUsado: "freesearch", resultados };
-    }
-    
-    return { exito: false, error: "Free Search no devolvió resultados" };
+    return { exito: false, error: "SearXNG no devolvió resultados (todas las instancias fallaron)" };
   } catch (e) {
-    console.error(`[web-search] Error Free Search: ${e.message}`);
-    return { exito: false, error: "Free Search fallo: " + e.message };
+    console.error(`[web-search] Error SearXNG directo: ${e.message}`);
+    return { exito: false, error: "SearXNG fallo: " + e.message };
   }
 }
 
