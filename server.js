@@ -1764,6 +1764,8 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
       temperature: 0.7,
       max_tokens: opciones.maxTokens || 4096,
     };
+    
+    console.log(`[g4f] max_tokens configurado: ${body.max_tokens}`);
 
     const headers = {
       'Content-Type': 'application/json',
@@ -7449,6 +7451,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
           },
           {
             ...opcionesGeneracion,
+            maxTokens: configModelo.maxTokens || 4096, // Usar maxTokens del modelo configurado
             // Streaming REAL: cada pedacito de texto se manda al cliente apenas
             // OpenRouter lo genera, no una vez que ya está todo listo. Antes acá
             // no había onDelta: se esperaba la respuesta completa y RECIÉN
