@@ -631,6 +631,40 @@ const LIMITE_USO_NEWERPLUS = 10; // 10 mensajes de NewserPlus por hora
 const LIMITE_USO_ADVANCED15 = 10; // 10 mensajes de NewserAdvanced1.5 por hora
 const LIMITE_USO_ADVANCED = 999; // Sin límite para NewserAdvanced
 
+// Límite de concurrencia de modelos para NewserPlus (máximo 2 modelos trabajando en paralelo)
+const MAX_MODELOS_CONCURRENTES_NEWERPLUS = 2;
+
+// Tracking de modelos activos por cuenta para NewserPlus
+const MODELOS_ACTIVOS_POR_CUENTA = new Map();
+
+function agregarModeloActivo(clave, modeloId) {
+  if (!clave) return;
+  const activos = MODELOS_ACTIVOS_POR_CUENTA.get(clave) || [];
+  activos.push({ id: modeloId, inicio: Date.now() });
+  MODELOS_ACTIVOS_POR_CUENTA.set(clave, activos);
+}
+
+function removerModeloActivo(clave, modeloId) {
+  if (!clave) return;
+  const activos = MODELOS_ACTIVOS_POR_CUENTA.get(clave) || [];
+  const filtrados = activos.filter(m => m.id !== modeloId);
+  MODELOS_ACTIVOS_POR_CUENTA.set(clave, filtrados);
+}
+
+function contarModelosActivos(clave) {
+  if (!clave) return 0;
+  const activos = MODELOS_ACTIVOS_POR_CUENTA.get(clave) || [];
+  // Limpiar modelos viejos (más de 5 minutos)
+  const ahora = Date.now();
+  const validos = activos.filter(m => ahora - m.inicio < 5 * 60 * 1000);
+  MODELOS_ACTIVOS_POR_CUENTA.set(clave, validos);
+  return validos.length;
+}
+
+function puedeIniciarModelo(clave) {
+  return contarModelosActivos(clave) < MAX_MODELOS_CONCURRENTES_NEWERPLUS;
+}
+
 // Limite especial para imagenes en alta calidad de NewserAdvanced1.5: usa 2 modelos de IA
 // (uno mejora el prompt, el otro renderiza), asi que solo se permiten 2 imagenes por hora.
 const IMG_LIMIT_15 = new Map();
@@ -3287,6 +3321,8 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_ADVANCED_15_EXTRA;
   } else if (configModelo.nombre === 'NewserPlus') {
     systemPrompt = systemPrompt + SYSTEM_PROMPT_ADMIN_EXTRA;
+    // Agregar instrucción sobre concurrencia de modelos
+    systemPrompt += `\n\n[CONCURRENCIA DE MODELOS]: Cuando el pedido sea complejo o requiera múltiples tareas (ej: investigación web + código + análisis), podés poner a trabajar hasta 2 modelos en paralelo. Optimiza la distribución de tareas: un modelo puede investigar mientras otro escribe código, o uno puede analizar mientras otro genera. Esto SOLO aplica para NewserPlus.`;
   }
 
   let razonamientoPrevioApi = '';
