@@ -282,6 +282,13 @@ const POLLINATIONS_PRO_HEIGHT = parseInt(process.env.POLLINATIONS_HEIGHT_PRO || 
 // que es la home de Render, no un puente real).
 const GPT4FREE_URL = (process.env.GPT4FREE_URL || '').trim();
 const GPT4FREE_MODEL = process.env.GPT4FREE_MODEL || 'glm-4';
+// Sistema de múltiples modelos GPT4FREE (MODEL2, MODEL3, etc)
+const GPT4FREE_MODELS = {
+  'glm-4': GPT4FREE_MODEL,
+  'glm-5.2': process.env.GPT4FREE_MODEL2 || 'glm-5.2',
+  'glm-5.3': process.env.GPT4FREE_MODEL3 || 'glm-5.3',
+  'deepseek-v4-pro': process.env.GPT4FREE_MODEL4 || 'deepseek-v4-pro',
+};
 const GPT4FREE_ENABLED = (process.env.GPT4FREE_ENABLED_PRO || 'false').toLowerCase() === 'true';
 const GPT4FREE_TIMEOUT = parseInt(process.env.GPT4FREE_TIMEOUT || '60000', 10);
 // API keys de GPT4FREE (múltiples para rotación)
@@ -552,6 +559,51 @@ const MODELOS_DISPONIBLES = {
     soportaStructuredOutputs: GPT4FREE_ENABLED || ANTHROPIC_ENABLED,    // Disponible con G4F y Anthropic
     soportaPromptCaching: GPT4FREE_ENABLED || ANTHROPIC_ENABLED,        // Disponible con G4F y Anthropic
     contextWindow: GPT4FREE_ENABLED ? 200000 : (ANTHROPIC_ENABLED ? 200000 : 128000), // 200K con G4F/Anthropic, 128K free
+  },
+  GLM52: {
+    nombre: 'GLM-5.2',
+    descripcion: 'Modelo GLM-5.2 de alta capacidad. Razonamiento avanzado y contexto extendido.',
+    modeloOpenRouter: GPT4FREE_ENABLED ? 'glm-5.2' : 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    modelosOpenRouterTexto: [
+      // GLM-5.2 (PRIMERO si está habilitado)
+      GPT4FREE_ENABLED ? 'glm-5.2' : null,
+      // Cascada de modelos free
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'meta-llama/llama-3.3-70b-instruct:free',
+    ].filter(Boolean),
+    modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
+    modelosOpenRouterVision: [
+      'google/gemma-4-31b-it:free',
+      'nvidia/nemotron-nano-12b-v2-vl:free',
+    ],
+    costoCreditos: 300,
+    rateLimitMax: 2,  // Rate limit muy estricto por ser pesado
+    rateLimitMaxWeb: 3,
+    maxTokens: 12000,  // Más tokens que los otros modelos
+    badge: 'ULTRA',
+    disponible: true,
+    contextWindow: GPT4FREE_ENABLED ? 200000 : 128000,
+  },
+  CatAgent25: {
+    nombre: 'CatAgent2.5',
+    descripcion: 'Próximamente. Nuevo modelo en desarrollo.',
+    modeloOpenRouter: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    modelosOpenRouterTexto: [
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'nvidia/nemotron-3-super-120b-a12b:free',
+    ],
+    modeloOpenRouterVision: 'google/gemma-4-31b-it:free',
+    modelosOpenRouterVision: [
+      'google/gemma-4-31b-it:free',
+    ],
+    costoCreditos: 500,
+    rateLimitMax: 1,
+    rateLimitMaxWeb: 1,
+    maxTokens: 8000,
+    badge: 'proximamente',
+    disponible: true,
+    soloAdmin: true,  // Solo visible para admins
   },
 };
 const MODELO_DEFAULT = 'NewserLite';
@@ -1452,6 +1504,9 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
     return { ok: false, error: 'G4F deshabilitado o sin URL' };
   }
 
+  // Resolver el modelo real usando el sistema de múltiples modelos
+  const modeloReal = GPT4FREE_MODELS[model] || model;
+
   try {
     // Determinar la URL completa
     const url = GPT4FREE_URL.endsWith('/v1/chat/completions')
@@ -1468,7 +1523,7 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
     if (systemPrompt) {
       // Si es DeepSeek V4 Pro, forzar que se identifique como NewserPlus
       let systemPromptModificado = systemPrompt;
-      if (model === 'deepseek-v4-pro' || model.includes('deepseek')) {
+      if (modeloReal === 'deepseek-v4-pro' || modeloReal.includes('deepseek')) {
         systemPromptModificado = systemPrompt.replace(/__NOMBRE_MODELO__/g, 'NewserPlus');
         // Agregar instrucción explícita para DeepSeek
         systemPromptModificado += '\n\nIMPORTANTE: Tu nombre es NewserPlus. Si te preguntan qué modelo eres, responde siempre que eres NewserPlus.';
@@ -1480,7 +1535,7 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
     }
 
     const body = {
-      model: model,
+      model: modeloReal,
       messages: openaiMessages,
       temperature: 0.7,
       max_tokens: opciones.maxTokens || 4096,
