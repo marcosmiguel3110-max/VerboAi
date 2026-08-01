@@ -4713,7 +4713,7 @@ function guardarProyectoVerboCode(proyecto) {
 const webIdeSessions = new Map();
 const WEBIDE_ONLINE_WINDOW_MS = 15000;
 const WEBIDE_POLL_INTERVAL_MS = 2200;
-const WEBIDE_COMMAND_TIMEOUT_MS = 120000;
+const WEBIDE_COMMAND_TIMEOUT_MS = 300000; // Aumentado a 5 minutos para comandos largos
 
 function limpiarTextoPlanoWebIde(valor, max = 280) {
   return String(valor || '').replace(/\0/g, '').trim().slice(0, max);
@@ -5069,10 +5069,17 @@ app.post('/api/verbocode/projects', requiereAdminVerboCode, (req, res) => {
     usuario: req.usuarioVerboCode,
     creadoEn: new Date().toISOString(),
     actualizadoEn: new Date().toISOString(),
-    archivos: {},
+    archivos: {},  // Proyecto vacío al crear
     chat: [],
+    webIde: {
+      syncId: null,
+      revision: 1,
+      clientSecret: crypto.randomBytes(32).toString('hex'),
+    },
   };
+  asegurarMetadatosWebIdeProyecto(proyecto, {});
   guardarProyectoVerboCode(proyecto);
+  console.log(`[verbocode] Proyecto creado: ${id} - ${nombre} (archivos: ${Object.keys(proyecto.archivos).length})`);
   res.json({ ok: true, proyecto: construirProyectoVerboCodePublico(proyecto) });
 });
 
@@ -6628,6 +6635,8 @@ app.post('/api/verbocode/chat/:id', ultracodeRateLimit, requiereAdminVerboCode, 
   const modoDesign = !!req.body?.modoDesign; // activado con el botón "Design (Canvas 3D)" del chat
   const NIVELES_PROFUNDIDAD = ['medium', 'avanzado', 'extendido', 'ultracode'];
   const profundidad = NIVELES_PROFUNDIDAD.includes(req.body?.profundidad) ? req.body.profundidad : 'medium';
+
+  console.log(`[verbocode] Chat request - modoDesign: ${modoDesign}, profundidad: ${profundidad}`);
 
   if (!mensaje && !imagen) return res.status(400).json({ error: 'Falta el mensaje o imagen.' });
 
