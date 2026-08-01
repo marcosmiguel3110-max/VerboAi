@@ -8,14 +8,14 @@ import sys
 import json
 import asyncio
 from g4f import ChatCompletion
-from g4f.Provider import DuckDuckGo, Blackbox, Bing
+from g4f.Provider import Copilot, PollinationsAI, OpenRouterFree
 from g4f.models import gpt_4o, gpt_4o_mini, gpt_3_5_turbo
 
-# Lista de proveedores con prioridad
+# Lista de proveedores con prioridad (según documentación de g4f)
 PROVIDERS = [
-    DuckDuckGo,
-    Blackbox,
-    Bing,
+    Copilot,
+    PollinationsAI,
+    OpenRouterFree,
 ]
 
 # Mapeo de modelos
