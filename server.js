@@ -290,6 +290,8 @@ const GPT4FREE_MODELS = {
   'deepseek-v4-pro': process.env.GPT4FREE_MODEL4 || 'deepseek-v4-pro',
 };
 const GPT4FREE_ENABLED = (process.env.GPT4FREE_ENABLED_PRO || 'false').toLowerCase() === 'true';
+// Sistema de cooldown por modelo específico cuando un modelo llega al límite de requests
+const GPT4FREE_MODEL_COOLDOWN = new Map(); // Map: modelo -> timestamp fin cooldown
 const GPT4FREE_TIMEOUT = parseInt(process.env.GPT4FREE_TIMEOUT || '300000', 10); // Aumentado a 5 minutos para evitar timeouts
 // API keys de GPT4FREE (múltiples para rotación)
 const GPT4FREE_API_KEYS = (process.env.GPT4FREE_API_KEYS || '')
@@ -1585,9 +1587,18 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
   if (!GPT4FREE_ENABLED || !GPT4FREE_URL) {
     return { ok: false, error: 'G4F deshabilitado o sin URL' };
   }
-
-  // Resolver el modelo real usando el sistema de múltiples modelos
+  
+  // Verificar cooldown por modelo específico
+  const ahora = Date.now();
   const modeloReal = GPT4FREE_MODELS[model] || model;
+  const cooldownFin = GPT4FREE_MODEL_COOLDOWN.get(modeloReal) || 0;
+  
+  if (ahora < cooldownFin) {
+    const tiempoRestante = Math.ceil((cooldownFin - ahora) / (60 * 60 * 1000));
+    console.log(`[g4f] Modelo ${modeloReal} en cooldown por límite de requests (${tiempoRestante}h restantes)`);
+    return { ok: false, error: `Modelo ${modeloReal} en cooldown (${tiempoRestante}h restantes)` };
+  }
+
   console.log(`[g4f] Llamando con modelo solicitado: ${model}, modelo real: ${modeloReal}`);
 
   try {
@@ -1654,6 +1665,13 @@ async function llamarG4F(messages, systemPrompt, model = GPT4FREE_MODEL, opcione
     if (resp.status < 200 || resp.status >= 300) {
       const detalle = typeof resp.data === 'string' ? resp.data.slice(0, 300) : JSON.stringify(resp.data || {}).slice(0, 300);
       console.error(`[g4f] HTTP ${resp.status}: ${detalle}`);
+      
+      // Detectar límite de requests en modelo específico y activar cooldown por ese modelo
+      if (resp.status === 502 && detalle.includes('429') && detalle.includes('per day')) {
+        console.warn(`[g4f] Modelo ${modeloReal} alcanzó límite de requests, activando cooldown por 24 horas`);
+        GPT4FREE_MODEL_COOLDOWN.set(modeloReal, Date.now() + (24 * 60 * 60 * 1000)); // 24 horas
+      }
+      
       if (gpt4freeKeyIndex !== null) {
         updateGpt4FreeKeyStats(gpt4freeKeyIndex, false, resp.status === 429);
       }
