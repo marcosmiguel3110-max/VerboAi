@@ -2544,9 +2544,12 @@ app.use((req, res, next) => {
   return res.redirect('/login');
 });
 
-// Sirve login.html en la URL limpia /login (sin extension).
+// Sirve el chat de invitados en la URL limpia /login (sin extension). Ya no es
+// una pagina de login aparte: es la misma demo.html, que trae embebidos los
+// formularios reales de login/registro (ver login.js) dentro de un modal, asi
+// que el flujo de auth entero (incluido el callback de Google) funciona igual.
 app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+  res.sendFile(path.join(__dirname, 'public', 'demo.html'));
 });
 
 // URL de chat con UUID: /c/<uuid> muestra el UUID del chat en la barra de direcciones.
