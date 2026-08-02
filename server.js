@@ -8341,6 +8341,17 @@ app.use(express.static(path.join(__dirname, 'public'), {
   },
 }));
 
+// Endpoint para ads.txt (Google AdSense)
+app.get('/ads.txt', (req, res) => {
+  const adsPath = path.join(__dirname, 'public', 'ads.txt');
+  if (fs.existsSync(adsPath)) {
+    res.setHeader('Content-Type', 'text/plain');
+    res.sendFile(adsPath);
+  } else {
+    res.status(404).send('ads.txt not found');
+  }
+});
+
 const SYSTEM_PROMPT = `Eres "Verbo AI", un asistente conversacional con tematica biblica.
 Hablas con calidez, sabiduria y respeto, como un consejero que conoce las Escrituras,
 pero ayudas con cualquier tema (no solo religioso): programacion, tareas, dudas generales, etc.
