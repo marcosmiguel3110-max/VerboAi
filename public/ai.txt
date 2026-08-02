@@ -1,14 +1,14 @@
 name: Verbo AI
 developer: VerboAITeams
 description: Asistente conversacional con IA. Genera imagenes, busca en la web, consulta el clima y ofrece modelos Verbo AI con IDs verboaistudio/<modelo>.
-url: https://verboai.duckdns.org
-documentation: https://verboai.duckdns.org/info
-api_endpoint: https://verboai.duckdns.org/api/v1/chat
-llms_guide: https://verboai.duckdns.org/llms.txt
-public_config: https://verboai.duckdns.org/api/config
-ai_hub: https://verboai.duckdns.org/info#zona-ia
+url: https://verboai.her
+documentation: https://verboai.her/info
+api_endpoint: https://verboai.her/api/v1/chat
+llms_guide: https://verboai.her/llms.txt
+public_config: https://verboai.her/api/config
+ai_hub: https://verboai.her/info#zona-ia
 public_pages:
-  - https://verboai.duckdns.org/info
-  - https://verboai.duckdns.org/ai.txt
-  - https://verboai.duckdns.org/llms.txt
-  - https://verboai.duckdns.org/sitemap.xml
+  - https://verboai.her/info
+  - https://verboai.her/ai.txt
+  - https://verboai.her/llms.txt
+  - https://verboai.her/sitemap.xml

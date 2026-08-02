@@ -111,7 +111,7 @@ Si querés usar Verbo AI desde otra web o app (sin el CLI), seguí los pasos que
 Ahí te muestra los ejemplos de `curl` para llamar directamente a la API:
 
 ```bash
-curl -X POST https://verboai.duckdns.org/api/v1/chat \
+curl -X POST https://verboai.her/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
   -d '{"mensaje":"Hola","modelo":"NewserLite"}'
@@ -126,7 +126,7 @@ curl -X POST https://verboai.duckdns.org/api/v1/chat \
 
 ## Cambiar la URL del servidor
 
-Si estás hosteando Verbo AI en otro lado (no en `verboai.duckdns.org`), seteá la variable de entorno antes de ejecutar:
+Si estás hosteando Verbo AI en otro lado (no en `verboai.her`), seteá la variable de entorno antes de ejecutar:
 
 ```bash
 export VERBOAI_URL=https://tu-servidor.com

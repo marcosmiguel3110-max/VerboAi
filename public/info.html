@@ -11,9 +11,9 @@
   <meta property="og:description"
     content="Tokens, endpoints, modelos Newser, NewserPlus, tablas comparativas y guía rápida para usar la API de Verbo AI." />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://verboai.duckdns.org/info" />
-  <meta property="og:image" content="https://verboai.duckdns.org/logo.png" />
-  <link rel="canonical" href="https://verboai.duckdns.org/info" />
+  <meta property="og:url" content="https://verboai.her/info" />
+  <meta property="og:image" content="https://verboai.her/logo.png" />
+  <link rel="canonical" href="https://verboai.her/info" />
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2832971109540830"
     crossorigin="anonymous"></script>
   <style>
@@ -841,7 +841,7 @@
         <div class="card">
           <h3><code>POST /api/v1/chat</code> <span class="badge public">principal</span></h3>
           <p>Envía un mensaje al modelo elegido. Soporta texto, imágenes y herramientas según el modelo.</p>
-          <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
+          <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.her/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
   -d '{
@@ -855,19 +855,19 @@
             <code>id</code> por modelo.
           </p>
           <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
-  https://verboai.duckdns.org/api/v1/info</code></pre>
+  https://verboai.her/api/v1/info</code></pre>
         </div>
         <div class="card">
           <h3><code>GET /api/v1/chats</code> <span class="badge public">gratis</span></h3>
           <p>Lista tus conversaciones guardadas de la app web. Útil para paneles, sincronización o clientes propios.</p>
           <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
-  https://verboai.duckdns.org/api/v1/chats</code></pre>
+  https://verboai.her/api/v1/chats</code></pre>
         </div>
         <div class="card">
           <h3><code>GET /api/v1/creditos</code> <span class="badge public">gratis</span></h3>
           <p>Devuelve solo créditos restantes. Es la opción más liviana si no necesitás toda la metadata del token.</p>
           <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -H "Authorization: Bearer verboai-XXXX" \
-  https://verboai.duckdns.org/api/v1/creditos</code></pre>
+  https://verboai.her/api/v1/creditos</code></pre>
         </div>
       </div>
 
@@ -1314,22 +1314,22 @@
         <div class="ai-link-card">
           <strong><a href="/info">/info</a></strong>
           <p>La página pública principal. Resume producto, modelos, endpoints, comparativas y guía de integración.</p>
-          <code>https://verboai.duckdns.org/info</code>
+          <code>https://verboai.her/info</code>
         </div>
         <div class="ai-link-card">
           <strong><a href="/ai.txt">/ai.txt</a></strong>
           <p>Ficha corta para agentes: nombre, desarrollador, documentación, endpoint principal y enlaces clave.</p>
-          <code>https://verboai.duckdns.org/ai.txt</code>
+          <code>https://verboai.her/ai.txt</code>
         </div>
         <div class="ai-link-card">
           <strong><a href="/llms.txt">/llms.txt</a></strong>
           <p>Guía extensa para modelos de lenguaje con contexto del producto, URLs públicas y notas de acceso.</p>
-          <code>https://verboai.duckdns.org/llms.txt</code>
+          <code>https://verboai.her/llms.txt</code>
         </div>
         <div class="ai-link-card">
           <strong><a href="/api/config">/api/config</a></strong>
           <p>Config pública de la app: modelo default, catálogo visible y metadatos del producto para integraciones.</p>
-          <code>https://verboai.duckdns.org/api/config</code>
+          <code>https://verboai.her/api/config</code>
         </div>
       </div>
 
@@ -1442,7 +1442,7 @@
         </li>
         <li>La imagen vuelve en <code>imagen.url</code>; si la URL es relativa, prependé el dominio.</li>
       </ul>
-      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
+      <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.her/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1457,7 +1457,7 @@
         <summary>JavaScript</summary>
         <div>
           <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>const TOKEN = "verboai-XXXX";
-const URL = "https://verboai.duckdns.org/api/v1/chat";
+const URL = "https://verboai.her/api/v1/chat";
 
 async function preguntar(mensaje, modelo = "verboaistudio/NewserLite") {
   const resp = await fetch(URL, {
@@ -1482,7 +1482,7 @@ async function preguntar(mensaje, modelo = "verboaistudio/NewserLite") {
 import urllib.request
 
 TOKEN = "verboai-XXXX"
-URL = "https://verboai.duckdns.org/api/v1/chat"
+URL = "https://verboai.her/api/v1/chat"
 
 def preguntar(mensaje, modelo="verboaistudio/NewserLite"):
     body = json.dumps({"mensaje": mensaje, "modelo": modelo}).encode()
@@ -1500,7 +1500,7 @@ def preguntar(mensaje, modelo="verboaistudio/NewserLite"):
       <details>
         <summary>cURL</summary>
         <div>
-          <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.duckdns.org/api/v1/chat \
+          <pre><button class="copy-btn" onclick="copiar(this)">Copiar</button><code>curl -X POST https://verboai.her/api/v1/chat \
   -H "Authorization: Bearer verboai-XXXX" \
   -H "Content-Type: application/json" \
   -d '{"mensaje":"Explicame Romanos 8","modelo":"verboaistudio/NewserAdvanced"}'</code></pre>

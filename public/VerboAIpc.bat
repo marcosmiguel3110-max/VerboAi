@@ -15,7 +15,7 @@ echo   Este programa te permite usar Verbo AI desde
 echo   la terminal de Windows con tu token de API.
 echo.
 echo   Si no tenes un token, entra a:
-echo   https://verboai.duckdns.org
+echo   https://verboai.her
 echo   Settings ^> Clave API ^> Generar API token
 echo.
 echo ================================================================
@@ -34,7 +34,7 @@ if not exist "%USERPROFILE%\.verboai" mkdir "%USERPROFILE%\.verboai"
 
 if not exist "%USERPROFILE%\.verboai\verboai.py" (
     echo Descargando cliente de Verbo AI...
-    powershell -Command "try { Invoke-WebRequest -Uri 'https://verboai.duckdns.org/verboai-cli.py' -OutFile '%USERPROFILE%\.verboai\verboai.py' } catch { Write-Host 'Error al descargar'; exit 1 }"
+    powershell -Command "try { Invoke-WebRequest -Uri 'https://verboai.her/verboai-cli.py' -OutFile '%USERPROFILE%\.verboai\verboai.py' } catch { Write-Host 'Error al descargar'; exit 1 }"
     if errorlevel 1 (
         echo [ERROR] No se pudo descargar el cliente.
         echo Verifica tu conexion a internet.

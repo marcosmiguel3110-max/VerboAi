@@ -50,7 +50,7 @@ import platform
 import webbrowser
 from pathlib import Path
 
-API_URL_BASE = os.environ.get("VERBOAI_URL", "https://verboai.duckdns.org")
+API_URL_BASE = os.environ.get("VERBOAI_URL", "https://verboai.her")
 
 PROXY_PORT = int(os.environ.get("VERBOAI_PORT", "7788"))
 

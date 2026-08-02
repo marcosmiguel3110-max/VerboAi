@@ -9,7 +9,7 @@ echo "  Este programa te permite usar Verbo AI desde"
 echo "  la terminal con tu token de API."
 echo ""
 echo "  Si no tenes un token, entra a:"
-echo "  https://verboai.duckdns.org"
+echo "  https://verboai.her"
 echo "  Settings > Clave API > Generar API token"
 echo ""
 echo "════════════════════════════════════════════════"
@@ -25,7 +25,7 @@ mkdir -p ~/.verboai
 
 if [ ! -f ~/.verboai/verboai.py ]; then
     echo "Descargando cliente de Verbo AI..."
-    curl -sL "https://verboai.duckdns.org/verboai-cli.py" -o ~/.verboai/verboai.py
+    curl -sL "https://verboai.her/verboai-cli.py" -o ~/.verboai/verboai.py
     if [ $? -ne 0 ]; then
         echo "[ERROR] No se pudo descargar el cliente."
         exit 1
