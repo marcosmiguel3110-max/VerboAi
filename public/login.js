@@ -71,6 +71,14 @@ if (parametrosURL.get('paso') === 'google_codigo') {
   mostrarVista(formCodigo);
 }
 
+if (parametrosURL.get('paso') === 'registro') {
+  mostrarVista(formRegistro);
+  const correoPrellenado = parametrosURL.get('correo');
+  if (correoPrellenado) document.getElementById('regEmail').value = correoPrellenado;
+} else if (parametrosURL.get('paso') === 'login') {
+  mostrarVista(formLogin);
+}
+
 if (parametrosURL.get('error')) {
   const mensajes = {
     google_denegado: 'Cancelaste el inicio de sesion con Google.',

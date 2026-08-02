@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+<title>Verbo AI · Probalo gratis</title>
+<meta name="description" content="Probá Verbo AI sin crear cuenta: chat de prueba con Newser-turbo-eco." />
+<link rel="icon" href="logo.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="demo.css" />
+</head>
+<body>
+
+  <div class="cielo">
+    <div class="resplandor"></div>
+  </div>
+
+  <div class="demo-app">
+
+    <!-- Sidebar -->
+    <aside class="demo-sidebar" id="demoSidebar">
+      <div class="demo-marca">
+        <img src="logo.png" alt="Verbo AI" class="demo-marca-logo" />
+        <span class="demo-marca-texto">Verbo AI</span>
+        <span class="demo-pill-beta">Invitado</span>
+      </div>
+
+      <nav class="demo-nav">
+        <button id="btnNuevaConversacion" class="demo-nav-item demo-nav-activo">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+          Nueva conversacion
+        </button>
+
+        <button id="btnBibliaCompleta" class="demo-nav-item demo-nav-activo">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+          La Biblia completa
+        </button>
+
+        <button class="demo-nav-item demo-nav-bloqueado" data-bloqueado="true">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+          Settings
+          <svg class="demo-candado" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        </button>
+
+        <button class="demo-nav-item demo-nav-bloqueado" data-bloqueado="true">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10v4M17 10v4M11 9v6M14 9v6" stroke-linecap="round"/></svg>
+          Codes
+          <svg class="demo-candado" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        </button>
+      </nav>
+
+      <p class="demo-sidebar-etiqueta">Chats</p>
+      <div class="demo-lista-chats-vacia" id="btnHistorialBloqueado" data-bloqueado="true">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        Registrate para guardar tu historial
+      </div>
+
+      <div class="demo-pie-sidebar">VerboAI Studios</div>
+    </aside>
+
+    <!-- Chat principal -->
+    <main class="demo-chat">
+      <svg class="demo-chat-fondo" viewBox="0 0 1440 400" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <path class="demo-cresta demo-cresta-1" d="M0,220 C160,180 260,240 420,200 C580,160 640,120 800,150 C940,172 1020,130 1160,145 C1300,160 1360,190 1440,170 L1440,400 L0,400 Z" />
+        <path class="demo-cresta demo-cresta-2" d="M0,280 C200,255 340,290 520,270 C700,250 820,285 1000,270 C1140,258 1280,285 1440,272 L1440,400 L0,400 Z" />
+      </svg>
+
+      <header class="demo-header">
+        <button id="btnAbrirSidebarMovil" class="demo-btn-menu-movil" title="Menu">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg>
+        </button>
+        <img src="logo.png" alt="Verbo AI" class="demo-header-icono" />
+        <div class="demo-header-titulos">
+          <p class="demo-header-titulo">Verbo AI</p>
+          <p class="demo-header-sub">Modelo: Newser-turbo-eco · modo invitado</p>
+        </div>
+
+        <div class="demo-auth-botones">
+          <button id="btnIniciarSesion" class="demo-btn-login">Iniciar sesion</button>
+          <button id="btnRegistrarse" class="demo-btn-registro">Registrate gratis</button>
+        </div>
+      </header>
+
+      <div class="demo-aviso-invitado">
+        Estas probando Verbo AI sin cuenta con <strong>Newser-turbo-eco</strong>, un modelo liviano de demostracion.
+        Si recargas la pagina, esta conversacion se borra. <a href="#" id="linkRegistrateAviso">Registrate gratis</a> para guardar tu historial y usar el resto de los modelos.
+      </div>
+
+      <div class="demo-mensajes" id="demoMensajes">
+        <div class="demo-msg demo-msg-ia">
+          <div class="demo-burbuja">¡Hola! Soy Verbo AI, en modo de prueba. Preguntame lo que quieras — tené en cuenta que en este modo las respuestas son mas cortas y el historial no se guarda. ¿En que te ayudo hoy?</div>
+        </div>
+      </div>
+
+      <form id="demoForm" class="demo-form-mensaje" autocomplete="off">
+        <textarea id="demoInput" rows="1" placeholder="Escribi tu mensaje..." maxlength="600"></textarea>
+        <button type="submit" id="demoBtnEnviar" title="Enviar">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </form>
+    </main>
+  </div>
+
+  <!-- Modal de login/registro -->
+  <div class="demo-modal-fondo oculto" id="demoModalFondo">
+    <div class="demo-modal">
+      <button class="demo-modal-cerrar" id="demoModalCerrar">✕</button>
+      <h2 id="demoModalTitulo">Iniciar sesion<br />o registrate</h2>
+      <p class="demo-modal-sub">Vas a obtener respuestas mas completas, memoria de tus conversaciones y acceso a todos los modelos.</p>
+
+      <a href="/auth/google" class="demo-btn-google">
+        <svg viewBox="0 0 48 48" width="18" height="18">
+          <path fill="#FFC107" d="M43.6 20.5h-1.9V20.4H24v7.2h11.3c-1.6 4.6-6 7.9-11.3 7.9-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.1-5.1C33.6 6 29 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5Z"/>
+          <path fill="#FF3D00" d="M6.3 14.7l6 4.4C13.9 15.6 18.6 12.9 24 12.9c3.1 0 5.8 1.1 8 3l5.1-5.1C33.6 6 29 4 24 4c-7.4 0-13.8 4.2-17 10.4Z"/>
+          <path fill="#4CAF50" d="M24 44c5.1 0 9.6-1.7 13.1-4.6l-6-5.1c-2 1.4-4.7 2.4-7.1 2.4-5.3 0-9.7-3.3-11.3-7.9l-6 4.6C10.1 39.7 16.5 44 24 44Z"/>
+          <path fill="#1976D2" d="M43.6 20.5H24v7.2h11.3c-.8 2.2-2.2 4-4.1 5.3l6 5.1C40.5 34.9 44 30 44 24c0-1.2-.1-2.4-.4-3.5Z"/>
+        </svg>
+        Continuar con Google
+      </a>
+
+      <div class="demo-separador"><span>o</span></div>
+
+      <label class="demo-campo">
+        <span>Correo</span>
+        <input type="email" id="demoModalEmail" placeholder="vos@ejemplo.com" />
+      </label>
+      <button id="demoModalContinuar" class="demo-btn-continuar">Continuar</button>
+
+      <p class="demo-modal-alterna">
+        <a href="#" id="demoModalAlternar">Ya tengo cuenta, quiero iniciar sesion</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Modal simple para "La Biblia completa" -->
+  <div class="demo-modal-fondo oculto" id="demoBibliaFondo">
+    <div class="demo-modal demo-modal-biblia">
+      <button class="demo-modal-cerrar" id="demoBibliaCerrar">✕</button>
+      <h2>La Biblia completa</h2>
+      <div class="demo-biblia-nav">
+        <select id="demoBibliaLibro"></select>
+        <select id="demoBibliaCapitulo"></select>
+      </div>
+      <div class="demo-biblia-cuerpo" id="demoBibliaCuerpo">
+        <p class="demo-biblia-cargando">Elegi un libro para empezar a leer.</p>
+      </div>
+    </div>
+  </div>
+
+<script src="demo.js"></script>
+</body>
+</html>

@@ -189,6 +189,16 @@ const chatRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limit para el chat de prueba sin cuenta (invitados en "/"). Por IP,
+// bastante mas estricto que el resto porque no hay cuenta ni token detras.
+const demoRateLimit = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutos
+  max: 20, // Maximo 20 mensajes de prueba cada 5 minutos por IP
+  message: { ok: false, error: 'Probaste bastante el modo invitado. Registrate gratis para seguir chateando sin limite.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Rate limit para generación de imágenes
 const imageRateLimit = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutos
@@ -441,6 +451,26 @@ const MODELOS_DISPONIBLES = {
     maxTokens: 1100,
     badge: 'eco',
     disponible: true,
+  },
+  // Modelo exclusivo del chat de prueba sin cuenta (para visitantes no logueados).
+  // Deliberadamente el mas chico y economico de todos: sin imagenes, sin busqueda web,
+  // sin herramientas, tokens bajos. Es solo para que alguien pruebe la conversacion
+  // antes de registrarse, no un modelo mas del selector para cuentas reales.
+  NewserTurboEco: {
+    nombre: 'Newser-turbo-eco',
+    descripcion: 'Modelo de prueba para el chat de invitados (sin cuenta). Rapido y muy liviano.',
+    modeloOpenRouter: 'nvidia/nemotron-nano-9b-v2:free',
+    modelosOpenRouterTexto: [
+      'nvidia/nemotron-nano-9b-v2:free',
+      'openai/gpt-oss-20b:free',
+    ],
+    costoCreditos: 0,
+    rateLimitMax: 999,
+    rateLimitMaxWeb: 999,
+    maxTokens: 500,
+    badge: 'demo',
+    disponible: true,
+    soloDemo: true,
   },
   NewserAdvanced: {
     nombre: 'NewserAdvanced',
@@ -2497,15 +2527,20 @@ function obtenerUsuarioActual(req) {
   return verificarValorFirmado(leerCookie(req, 'verbo_auth'));
 }
 
-const RUTAS_PUBLICAS = new Set(['/login', '/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/api/v1/chats', '/api/v1/creditos', '/api/v1/pro-hybrid', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/WebIDE.bat', '/web-ide-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/ads.txt', '/api/config']);
+const RUTAS_PUBLICAS = new Set(['/login', '/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/api/v1/chats', '/api/v1/creditos', '/api/v1/pro-hybrid', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/WebIDE.bat', '/web-ide-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/ads.txt', '/api/config',
+  // Chat de prueba sin cuenta para visitantes no logueados (pagina y sus assets).
+  '/demo.html', '/demo.css', '/demo.js', '/api/demo/chat', '/api/biblia/libros']);
 app.use((req, res, next) => {
 
   if (req.path === '/info') return res.redirect(301, '/info.html');
   // URL limpia: /login.html pasa a /login (sin extension) via redireccion permanente.
   if (req.path === '/login.html') return res.redirect(301, '/login');
-  if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/') || req.path.startsWith('/api/v1/verbocode/link/')) return next();
+  if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/') || req.path.startsWith('/api/v1/verbocode/link/') || req.path.startsWith('/api/biblia/capitulo/')) return next();
   if (estaAutenticado(req)) return next();
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
+  // Un visitante sin cuenta que entra a la raiz ve el chat de prueba (invitado)
+  // en vez de ser mandado directo al formulario de login.
+  if (req.path === '/') return res.sendFile(path.join(__dirname, 'public', 'demo.html'));
   return res.redirect('/login');
 });
 
@@ -4139,6 +4174,65 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
   } catch (e) {
     console.error('[api/v1/chat] Error:', e.message);
     res.status(500).json({ ok: false, error: 'Error al conectar con el modelo. Intenta de nuevo en unos minutos.' });
+  }
+});
+
+// Chat de prueba sin cuenta: lo usa /demo.html (lo que ve un visitante que
+// todavia no inicio sesion). Sin token, sin cookie, sin memoria en disco —
+// el historial vive solo en la memoria del navegador (variable JS), asi que
+// si recarga la pagina arranca de cero. Siempre fuerza NewserTurboEco, sin
+// importar lo que mande el cliente.
+app.post('/api/demo/chat', demoRateLimit, async (req, res) => {
+  try {
+    if (req.body == null || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      return res.status(400).json({ ok: false, error: 'El cuerpo debe ser un objeto JSON.' });
+    }
+    const historialCliente = Array.isArray(req.body.mensajes) ? req.body.mensajes : null;
+    const mensajeSuelto = typeof req.body.mensaje === 'string' ? req.body.mensaje.trim() : '';
+
+    // Acepta o bien {mensajes:[{role,content},...]} (con historial de la sesion
+    // del navegador) o el formato simple {mensaje:"..."}. Nunca confia en el
+    // rol "system" que mande el cliente.
+    let turnos = [];
+    if (historialCliente) {
+      turnos = historialCliente
+        .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+        .slice(-16) // maximo 8 idas y vueltas de contexto
+        .map((m) => ({ role: m.role, content: m.content.slice(0, 1500) }));
+    } else if (mensajeSuelto) {
+      turnos = [{ role: 'user', content: mensajeSuelto }];
+    }
+
+    if (!turnos.length || turnos[turnos.length - 1].role !== 'user') {
+      return res.status(400).json({ ok: false, error: 'Falta un mensaje del usuario.' });
+    }
+    const ultimoMensaje = turnos[turnos.length - 1].content;
+    if (!ultimoMensaje || !ultimoMensaje.trim()) {
+      return res.status(400).json({ ok: false, error: 'El mensaje no puede estar vacio.' });
+    }
+    if (ultimoMensaje.length > 600) {
+      return res.status(400).json({ ok: false, error: 'En el modo de prueba los mensajes son cortos (max 600 caracteres). Registrate gratis para escribir sin ese limite.' });
+    }
+
+    const configModelo = MODELOS_DISPONIBLES.NewserTurboEco;
+    const systemPromptDemo = SYSTEM_PROMPT + `\n\n[MODO INVITADO]: Estas en el chat de prueba sin cuenta, con el modelo mas liviano (Newser-turbo-eco). No podes generar imagenes ni buscar en la web. Si el usuario pide algo que necesite eso, o si la charla se pone larga, sugerile amablemente (una sola vez, sin insistir en cada respuesta) que se registre gratis para acceder a los demas modelos, guardar su historial y usar todas las funciones.`;
+
+    const respuesta = await llamarModeloGratisConReintentos(
+      turnos,
+      systemPromptDemo,
+      configModelo.modelosOpenRouterTexto,
+      () => { },
+      { configModelo, maxTokens: configModelo.maxTokens, maxContinuaciones: 0 },
+    );
+
+    if (!respuesta.ok) {
+      return res.status(503).json({ ok: false, error: 'El modelo de prueba esta ocupado ahora mismo. Intenta de nuevo en un momento.' });
+    }
+
+    return res.json({ ok: true, texto: stripThinkTags(respuesta.texto), modelo: configModelo.nombre });
+  } catch (e) {
+    console.error('[api/demo/chat] Error:', e.message);
+    return res.status(500).json({ ok: false, error: 'Error al conectar con el modelo de prueba. Intenta de nuevo.' });
   }
 });
 
