@@ -1,16 +1,39 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const helmet = require('helmet');
+const cors = require('cors');
 const rateLimit = require('express-rate-limit');
-const multer = require('multer');
-const fs = require('fs');
+const { createHash, randomBytes, timingSafeEqual } = require('crypto');
+
+// Sanitización básica para prevenir XSS
+function sanitizeInput(input) {
+  if (typeof input !== 'string') return input;
+  return input
+    .replace(/[<>]/g, '') // Remove < and >
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '')
+    .trim();
+}
+
+function sanitizeObject(obj) {
+  if (typeof obj !== 'object' || obj === null) return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeObject);
+  const sanitized = {};
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      sanitized[key] = sanitizeObject(obj[key]);
+    }
+  }
+  return sanitized;
+}
 const os = require('os');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
+const multer = require('multer');
 let puppeteer = null;
 try { puppeteer = require('puppeteer'); } catch (e) { console.warn('[verbocode] Puppeteer no disponible:', e.message); }
 
@@ -158,8 +181,47 @@ async function processQueue(queueName) {
 }
 
 // ============================================================
-// RATE LIMITING A NIVEL DE APLICACIÓN
+// LOGGING DE SEGURIDAD
 // ============================================================
+const securityLog = [];
+const MAX_SECURITY_LOGS = 1000;
+
+function logSecurityEvent(event, details) {
+  const entry = {
+    timestamp: new Date().toISOString(),
+    event,
+    details,
+    ip: details.ip || 'unknown',
+  };
+  securityLog.push(entry);
+  if (securityLog.length > MAX_SECURITY_LOGS) {
+    securityLog.shift();
+  }
+  console.log(`[SECURITY] ${event}:`, details);
+}
+
+// Lista negra de IPs sospechosas
+const blacklistedIPs = new Set();
+const IP_BLACKLIST_DURATION = 30 * 60 * 1000; // 30 minutos
+
+function blacklistIP(ip, reason) {
+  blacklistedIPs.add(ip);
+  logSecurityEvent('IP_BLACKLISTED', { ip, reason });
+  setTimeout(() => {
+    blacklistedIPs.delete(ip);
+    logSecurityEvent('IP_UNBLACKLISTED', { ip });
+  }, IP_BLACKLIST_DURATION);
+}
+
+// Middleware para verificar IPs blacklisted
+app.use((req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  if (blacklistedIPs.has(ip)) {
+    logSecurityEvent('BLOCKED_REQUEST', { ip, path: req.path });
+    return res.status(403).json({ error: 'Tu IP ha sido temporalmente bloqueada por actividad sospechosa.' });
+  }
+  next();
+});
 // Rate limiting global para prevenir abuse y proteger la aplicación
 const globalRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
@@ -180,13 +242,20 @@ const globalRateLimit = rateLimit({
   },
 });
 
-// Rate limit más estricto para endpoints de chat
+// ============================================================
+// RATE LIMITING A NIVEL DE APLICACIÓN
+// ============================================================
 const chatRateLimit = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minuto
   max: 30, // Máximo 30 mensajes por minuto
   message: { error: 'Demasiados mensajes. Esperá un momento antes de enviar otro.' },
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    logSecurityEvent('RATE_LIMIT_EXCEEDED', { ip, path: req.path });
+    res.status(429).json({ error: 'Demasiados mensajes. Esperá un momento antes de enviar otro.' });
+  },
 });
 
 // Rate limit para el chat de prueba sin cuenta (invitados en "/"). Por IP,
@@ -197,6 +266,12 @@ const demoRateLimit = rateLimit({
   message: { ok: false, error: 'Probaste bastante el modo invitado. Registrate gratis para seguir chateando sin limite.' },
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    logSecurityEvent('DEMO_RATE_LIMIT_EXCEEDED', { ip });
+    blacklistIP(ip, 'Exceeded demo rate limit');
+    res.status(429).json({ ok: false, error: 'Probaste bastante el modo invitado. Registrate gratis para seguir chateando sin limite.' });
+  },
 });
 
 // Rate limit para generación de imágenes
@@ -206,6 +281,11 @@ const imageRateLimit = rateLimit({
   message: { error: 'Alcanzaste el límite de generación de imágenes. Intentá de nuevo más tarde.' },
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    logSecurityEvent('IMAGE_RATE_LIMIT_EXCEEDED', { ip });
+    res.status(429).json({ error: 'Alcanzaste el límite de generación de imágenes. Intentá de nuevo más tarde.' });
+  },
 });
 
 // Rate limit para investigación web
@@ -215,6 +295,11 @@ const researchRateLimit = rateLimit({
   message: { error: 'Demasiadas investigaciones web. Esperá un momento.' },
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    logSecurityEvent('RESEARCH_RATE_LIMIT_EXCEEDED', { ip });
+    res.status(429).json({ error: 'Demasiadas investigaciones web. Esperá un momento.' });
+  },
 });
 
 // Rate limit para ejecución de código
@@ -224,6 +309,11 @@ const codeRateLimit = rateLimit({
   message: { error: 'Demasiadas ejecuciones de código. Esperá un momento.' },
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    logSecurityEvent('CODE_RATE_LIMIT_EXCEEDED', { ip });
+    res.status(429).json({ error: 'Demasiadas ejecuciones de código. Esperá un momento.' });
+  },
 });
 
 // Rate limit específico para el modo "ultracode" de Verbo Code: usa más
@@ -234,11 +324,17 @@ const codeRateLimit = rateLimit({
 // a los mensajes que no piden ultracode (la gran mayoría).
 const ultracodeRateLimit = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutos
-  max: 6, // Máximo 6 mensajes en modo ultracode cada 10 minutos
-  message: { error: 'Alcanzaste el límite de mensajes en modo Ultracode (consume mucho más). Esperá unos minutos o probá con Extendido/Medium.' },
+  max: 5, // Máximo 5 ejecuciones ultracode cada 10 minutos
+  message: { error: 'Alcanzaste el límite de ejecuciones ultracode. Esperá un momento.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.body?.profundidad !== 'ultracode',
+  skip: (req) => !req.body || !req.body.mensaje || !req.body.mensaje.includes('[[CODE::'),
+  handler: (req, res) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    logSecurityEvent('ULTRACODE_RATE_LIMIT_EXCEEDED', { ip });
+    blacklistIP(ip, 'Exceeded ultracode rate limit');
+    res.status(429).json({ error: 'Alcanzaste el límite de ejecuciones ultracode. Esperá un momento.' });
+  },
 });
 
 // Aplicar rate limiting global
@@ -291,7 +387,7 @@ const POLLINATIONS_PRO_HEIGHT = parseInt(process.env.POLLINATIONS_HEIGHT_PRO || 
 // Ej: GPT4FREE_URL=https://tu-bridge.onrender.com  (NO usar https://onrender.com
 // que es la home de Render, no un puente real).
 // Sistema de múltiples instancias de glm-bridge para distribuir requests y evitar límites
-const GPT4FREE_URLS = (process.env.GPT4FREE_URLS || process.env.GPT4FREE_URL || 'https://glm-bridge.onrender.com')
+const GPT4FREE_URLS = (process.env.GPT4FREE_URLS || process.env.GPT4FREE_URL || 'https://verboai.duckdns.org')
   .split(',')
   .map(u => u.trim())
   .filter(u => u);
@@ -301,7 +397,7 @@ const GPT4FREE_MODEL = process.env.GPT4FREE_MODEL || 'glm-4';
 const GPT4FREE_MODELS = {
   'glm-4': GPT4FREE_MODEL,
   'glm-5.2': process.env.GPT4FREE_MODEL2 || 'glm-5.2',
-  'glm-5.3': process.env.GPT4FREE_MODEL3 || 'glm-5.3',
+  'kimi-k2.7-code': process.env.GPT4FREE_MODEL3 || 'kimi-k2.7-code',
   'deepseek-v4-pro': process.env.GPT4FREE_MODEL4 || 'deepseek-v4-pro',
 };
 const GPT4FREE_ENABLED = (process.env.GPT4FREE_ENABLED_PRO || 'false').toLowerCase() === 'true';
@@ -351,7 +447,7 @@ const POLLINATIONS_TEXT_ENABLED = (process.env.POLLINATIONS_TEXT_ENABLED_PRO || 
 const POLLINATIONS_TEXT_MODEL = process.env.POLLINATIONS_TEXT_MODEL || 'openai-fast';
 const POLLINATIONS_TEXT_URL = process.env.POLLINATIONS_TEXT_URL || 'https://text.pollinations.ai/openai';
 const POLLINATIONS_TEXT_TIMEOUT = parseInt(process.env.POLLINATIONS_TEXT_TIMEOUT || '60000', 10);
-const POLLINATIONS_TEXT_REFERER = process.env.POLLINATIONS_TEXT_REFERER || 'https://verboai.duckdns.org';
+const POLLINATIONS_TEXT_REFERER = process.env.POLLINATIONS_TEXT_REFERER || 'https://verboai.her';
 // Token OPCIONAL de Pollinations (registrarse gratis en https://enter.pollinations.ai).
 // Si esta seteado, se envia como Authorization: Bearer <token> y desbloquea los
 // modelos "nectar" (glm-5.2, etc). Sin token, solo openai-fast (anonimo).
@@ -392,15 +488,13 @@ const MODELOS_DISPONIBLES = {
   NewserLite: {
     nombre: 'NewserLite',
     descripcion: 'Rapido y ligero. Perfecto para consultas cotidianas.',
-    // Usar G4F si está habilitado, sino cascada de modelos free
-    modeloOpenRouter: GPT4FREE_ENABLED ? 'g4f-bridge' : 'nvidia/nemotron-nano-9b-v2:free',
+    // NO usar G4F para modelos rápidos - solo OpenRouter free directo
+    modeloOpenRouter: 'nvidia/nemotron-nano-9b-v2:free',
     modelosOpenRouterTexto: [
-      // G4F Bridge (PRIMERO si está habilitado)
-      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
-      // Cascada de modelos free (menor a mayor tamaño)
+      // Cascada de modelos free (menor a mayor tamaño) - SIN G4F para velocidad
       'nvidia/nemotron-nano-9b-v2:free',
       'openai/gpt-oss-20b:free',
-    ].filter(Boolean),
+    ],
     modeloOpenRouterVision: 'nvidia/nemotron-nano-12b-v2-vl:free',
     modelosOpenRouterVision: [
       'nvidia/nemotron-nano-12b-v2-vl:free',
@@ -419,6 +513,7 @@ const MODELOS_DISPONIBLES = {
   NewserLiteUltra: {
     nombre: 'NewserLiteUltra',
     descripcion: 'Ultra liviano para respuestas simples (saludos, preguntas cortas).',
+    // NO usar G4F para velocidad máxima
     modeloOpenRouter: 'nvidia/nemotron-nano-9b-v2:free',
     modelosOpenRouterTexto: [
       'nvidia/nemotron-nano-9b-v2:free',
@@ -434,6 +529,7 @@ const MODELOS_DISPONIBLES = {
   NewserLiteCompact: {
     nombre: 'NewserLiteCompact',
     descripcion: 'Ultra ligero. Ideal para consultas rapidas y frecuentes.',
+    // NO usar G4F para velocidad máxima
     modeloOpenRouter: 'nvidia/nemotron-nano-9b-v2:free',
     modelosOpenRouterTexto: [
       'nvidia/nemotron-nano-9b-v2:free',
@@ -1519,7 +1615,7 @@ async function llamarOpenRouterFree(messages, systemPrompt, model, opciones = {}
     }  
 
     // HTTP-Referer y X-Title ayudan a OpenRouter a identificar la app (opcional)
-    headers['HTTP-Referer'] = 'https://verboai.duckdns.org';
+    headers['HTTP-Referer'] = 'https://verboai.her';
     headers['X-Title'] = 'Verbo AI';
 
     // Si nos pasan onDelta, pedimos streaming real (stream:true) y vamos
@@ -2386,7 +2482,43 @@ const cacheCapitulosBiblia = new Map();
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 5 } });
 
-// ---------- Seguridad: headers HTTP (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy) ----------
+// Endpoint para ver logs de seguridad (solo admin)
+app.get('/api/admin/security-logs', (req, res) => {
+  const token = leerBearerToken(req);
+  if (!token) return res.status(401).json({ error: 'No autorizado.' });
+  
+  const tokenData = buscarTokenPorValor(token);
+  if (!tokenData || tokenData.propietario !== 'admin') {
+    return res.status(403).json({ error: 'Solo administradores pueden ver logs de seguridad.' });
+  }
+  
+  res.json({ logs: securityLog });
+});
+
+// Endpoint para remover IP de blacklist (solo admin)
+app.post('/api/admin/unblacklist', (req, res) => {
+  const token = leerBearerToken(req);
+  if (!token) return res.status(401).json({ error: 'No autorizado.' });
+  
+  const tokenData = buscarTokenPorValor(token);
+  if (!tokenData || tokenData.propietario !== 'admin') {
+    return res.status(403).json({ error: 'Solo administradores pueden desbloquear IPs.' });
+  }
+  
+  const { ip } = req.body;
+  if (!ip) return res.status(400).json({ error: 'Falta IP.' });
+  
+  if (blacklistedIPs.has(ip)) {
+    blacklistedIPs.delete(ip);
+    logSecurityEvent('MANUAL_IP_UNBLACKLIST', { ip, admin: tokenData.propietario });
+    res.json({ ok: true, message: 'IP removida de blacklist.' });
+  } else {
+    res.status(404).json({ error: 'IP no está en blacklist.' });
+  }
+});
+
+// ============================================================
+// SEGURIDAD: headers HTTP (CSP, HSTS, X-Frame-Options, Referrer-Policy, Permissions-Policy)
 // Calibrado para no romper lo que ya esta en produccion: AdSense (googlesyndication/doubleclick),
 // Google Fonts, y los <script>/<style> inline que ya usan index.html e info.html.
 app.use(helmet({
@@ -2460,8 +2592,18 @@ const limitadorApiGlobal = rateLimit({
 });
 app.use('/api', limitadorApiGlobal);
 
-app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// Middleware de sanitización para todos los requests
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'object') {
+    req.body = sanitizeObject(req.body);
+  }
+  if (req.query && typeof req.query === 'object') {
+    req.query = sanitizeObject(req.query);
+  }
+  next();
+});
 
 app.use((err, req, res, next) => {
   if (err && (err.type === 'entity.parse.failed' || err.type === 'entity.too.large' || err.type === 'request.size.invalid')) {
@@ -2529,7 +2671,10 @@ function obtenerUsuarioActual(req) {
 
 const RUTAS_PUBLICAS = new Set(['/login', '/login.html', '/login.css', '/login.js', '/api/login', '/api/registro/solicitar', '/api/registro/confirmar', '/style.css', '/script.js', '/logo.png', '/auth/google', '/auth/google/callback', '/api/google/confirmar', '/api/google/reenviar', '/api/v1/chat', '/api/v1/info', '/api/v1/chats', '/api/v1/creditos', '/api/v1/pro-hybrid', '/info.html', '/info', '/VerboAIpc.bat', '/VerboAIpc.sh', '/verboai-cli.py', '/WebIDE.bat', '/web-ide-cli.py', '/creditos-bg.png', '/favicon.ico', '/robots.txt', '/sitemap.xml', '/ai.txt', '/llms.txt', '/ads.txt', '/api/config',
   // Chat de prueba sin cuenta para visitantes no logueados (pagina y sus assets).
-  '/demo.html', '/demo.css', '/demo.js', '/api/demo/chat', '/api/biblia/libros']);
+  '/demo.html', '/demo.css', '/demo.js', '/api/demo/chat', '/api/biblia/libros',
+  // VerboCode y VerboDesign assets (CSS/JS compartidos)
+  '/verbocode/shared.css', '/verbocode/home.css', '/verbocode/editor.css', '/verbocode/home.html', '/verbocode/editor.html', '/verbocode/editor.js',
+  '/verbodesign/shared.css', '/verbodesign/home.css', '/verbodesign/editor.css', '/verbodesign/home.html', '/verbodesign/editor.html', '/verbodesign/editor.js']);
 app.use((req, res, next) => {
 
   if (req.path === '/info') return res.redirect(301, '/info.html');
@@ -4012,8 +4157,8 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
     const reInvestigarApi = /\[\[INVESTIGAR::([^\]]+)\]\]/g;
     const investigarsApi = [...textoLimpio.matchAll(reInvestigarApi)];
     if (investigarsApi.length) {
-      if (textoExtraidoEtiquetas) textoExtraidoEtiquetas += '\n\n';
-      textoExtraidoEtiquetas += investigarsApi.map((m) => `[Investigacion solicitada: ${m[1].trim()}]`).join('\n');
+      // NO agregar texto visible - el tag es completamente invisible
+      // Solo procesar internamente
     }
     textoLimpio = textoLimpio.replace(reInvestigarApi, '');
 
@@ -4064,6 +4209,11 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
     if (webSearchQueryApi) {
       try {
         const claveCuenta = token ? `token:${token.id}` : (usuario || null);
+        // Enviar evento thinking_start antes de buscar
+        res.write(`data: ${JSON.stringify({ type: 'thinking_start', message: 'Investigando fuentes en la web...' })}\n\n`);
+        // Enviar query de búsqueda
+        res.write(`data: ${JSON.stringify({ type: 'thinking_query', query: webSearchQueryApi })}\n\n`);
+        
         const resultado = await buscarWebGoogle(webSearchQueryApi, claveCuenta);
         if (resultado.exito) {
           costoRealHerramientas += 1;
@@ -4073,11 +4223,19 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
             cseUsado: resultado.cseUsado,
             resultados: resultado.resultados,
           });
+          // Enviar cada fuente encontrada en tiempo real
+          resultado.resultados.slice(0, 3).forEach(r => {
+            res.write(`data: ${JSON.stringify({ type: 'thinking_source', source: r.titulo || r.title, url: r.link || r.url, snippet: r.resumen || r.snippet || r.body })}\n\n`);
+          });
+          // Enviar evento thinking_end
+          res.write(`data: ${JSON.stringify({ type: 'thinking_end', message: 'Investigación completada' })}\n\n`);
+          
           const textoResultados = '\n\nResultados de la web:\n' +
-            resultado.resultados.map((r, i) => `${i + 1}. ${r.titulo} — ${r.resumen} (${r.link})`).join('\n');
+            resultado.resultados.map((r, i) => `${i + 1}. ${r.titulo}: ${r.resumen} (${r.link})`).join('\n');
           textoLimpio = `${textoLimpio}${textoResultados}`;
         } else {
           console.error('[api/v1/chat] web search falló:', resultado.error);
+          res.write(`data: ${JSON.stringify({ type: 'thinking_error', error: resultado.error || 'No se pudo buscar en la web.' })}\n\n`);
           if (resultado.rateLimit) {
             // Si es rate limit por cuenta, registrar abuso
             registrarAbuso(claveCuenta, 'web_search_rate_limit');
@@ -4086,6 +4244,7 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
         }
       } catch (e) {
         console.error('[api/v1/chat] error en web search:', e.message);
+        res.write(`data: ${JSON.stringify({ type: 'thinking_error', error: `Error interno: ${e.message}` })}\n\n`);
         herramientasResultado.push({ herramienta: 'web', error: `Error interno: ${e.message}` });
       }
     }
@@ -4218,7 +4377,8 @@ app.post('/api/demo/chat', demoRateLimit, async (req, res) => {
     }
 
     const configModelo = MODELOS_DISPONIBLES.NewserTurboEco;
-    const systemPromptDemo = SYSTEM_PROMPT + `\n\n[MODO INVITADO]: Estas en el chat de prueba sin cuenta, con el modelo mas liviano (Newser-turbo-eco). No podes generar imagenes ni buscar en la web. Si el usuario pide algo que necesite eso, o si la charla se pone larga, sugerile amablemente (una sola vez, sin insistir en cada respuesta) que se registre gratis para acceder a los demas modelos, guardar su historial y usar todas las funciones.`;
+    let systemPromptDemo = SYSTEM_PROMPT + `\n\n[MODO INVITADO]: Estas en el chat de prueba (demo) de Verbo AI, sin cuenta creada, con el modelo mas liviano (Newser-turbo-eco). No podes generar imagenes ni usar herramientas avanzadas como [[INVESTIGAR::...]]. Si el usuario pregunta si esto es una demo, una version de prueba, gratis, limitada, o algo similar, respondele que si con naturalidad: es la demo de Verbo AI para probar sin registrarte, con respuestas mas cortas y sin guardar historial, y que registrandose gratis se accede a los demas modelos y funciones completas. No lo niegues ni evadas la pregunta. Si el usuario pide algo que necesite herramientas que no tenes en este modo, o si la charla se pone larga, sugerile amablemente (una sola vez, sin insistir en cada respuesta) que se registre gratis para acceder a los demas modelos, guardar su historial y usar todas las funciones.`;
+    systemPromptDemo = systemPromptDemo.replace(/__NOMBRE_MODELO__/g, configModelo.nombre);
 
     const respuesta = await llamarModeloGratisConReintentos(
       turnos,
@@ -4232,7 +4392,20 @@ app.post('/api/demo/chat', demoRateLimit, async (req, res) => {
       return res.status(503).json({ ok: false, error: 'El modelo de prueba esta ocupado ahora mismo. Intenta de nuevo en un momento.' });
     }
 
-    return res.json({ ok: true, texto: stripThinkTags(respuesta.texto), modelo: configModelo.nombre });
+    // Procesar etiquetas para removerlas del texto (como en el endpoint principal)
+    let textoProcesado = respuesta.texto;
+    textoProcesado = textoProcesado.replace(/\[\[INVESTIGAR::[^\]]+\]\]/g, '');
+    textoProcesado = textoProcesado.replace(/\[\[WEB::[^\]]+\]\]/g, '');
+    textoProcesado = textoProcesado.replace(/\[\[CLIMA::[^\]]+\]\]/g, '');
+    textoProcesado = textoProcesado.replace(/\[\[CODE::[^:\]]+::[\s\S]*?\]\]/g, '');
+    textoProcesado = textoProcesado.replace(/\[\[APIDATA::[^\]]+\]\]/g, '');
+    textoProcesado = textoProcesado.replace(/\[\[CUADERNO::(.+?)::([\s\S]*?)\]\]/g, '');
+    textoProcesado = textoProcesado.replace(/\[\[BUSCAR::[^\]]+\]\]/g, '');
+    textoProcesado = textoProcesado.replace(/\[\[DESCARGAR::([^:\]]+?)(?:::\s*(\d+))?\s*\]\]/g, '');
+    textoProcesado = textoProcesado.replace(/\[\[IMAGEN::[^\]]*\]\]/g, '');
+    textoProcesado = textoProcesado.replace(/\n{3,}/g, '\n\n').trim();
+
+    return res.json({ ok: true, texto: stripThinkTags(textoProcesado), modelo: configModelo.nombre });
   } catch (e) {
     console.error('[api/demo/chat] Error:', e.message);
     return res.status(500).json({ ok: false, error: 'Error al conectar con el modelo de prueba. Intenta de nuevo.' });
@@ -6941,7 +7114,7 @@ function ejecutarComandoProyecto(comando, proyecto) {
     const contenido = proyecto.archivos[nombre] || '';
     const lineas = contenido.split('\n').length;
     const palabras = contenido.split(/\s+/).filter(Boolean).length;
-    return { manejado: true, salida: `${lineas} líneas, ${palabras} palabras, ${contenido.length} caracteres — ${nombre}` };
+    return { manejado: true, salida: `${lineas} líneas, ${palabras} palabras, ${contenido.length} caracteres (${nombre})` };
   }
 
   if (cmd === 'head' || cmd === 'tail') {
@@ -7506,21 +7679,30 @@ Proyecto: ${proyecto.nombre}`;
     // Si el proyecto requiere información actual o específica, investigar primero
     // ============================================================
     enviarSSE({ type: 'status', text: 'Investigando en la web...' });
+    enviarSSE({ type: 'thinking_start', message: 'Investigando fuentes en la web...' });
     let contextoWeb = '';
 
     try {
       const queryInvestigacion = inferirConsultaInvestigacionVerboCode(mensajeParaModelo || mensaje, proyecto);
+      enviarSSE({ type: 'thinking_query', query: queryInvestigacion });
       const resultadoInvestigacion = await buscarWebGoogle(queryInvestigacion);
       if (resultadoInvestigacion.exito && resultadoInvestigacion.resultados?.length) {
         contextoWeb = '\n\nINVESTIGACIÓN WEB REAL:\n' + resultadoInvestigacion.resultados.slice(0, 3).map(r =>
           `- ${r.titulo || r.title}: ${r.resumen || r.snippet || r.body}\n  URL: ${r.link || r.url}`
         ).join('\n');
+        // Enviar cada fuente encontrada en tiempo real
+        resultadoInvestigacion.resultados.slice(0, 3).forEach((r, i) => {
+          enviarSSE({ type: 'thinking_source', source: r.titulo || r.title, url: r.link || r.url, snippet: r.resumen || r.snippet || r.body });
+        });
+        enviarSSE({ type: 'thinking_end', message: 'Investigación completada' });
         enviarSSE({ type: 'status', text: 'Investigación completada. Creando plan...' });
       } else {
+        enviarSSE({ type: 'thinking_end', message: 'No se encontraron fuentes' });
         enviarSSE({ type: 'status', text: 'No encontré mucho en la web, sigo igual con el plan...' });
       }
     } catch (e) {
       console.warn('[verbocode] Investigación web falló:', e.message);
+      enviarSSE({ type: 'thinking_error', error: e.message });
     }
 
     // ============================================================
@@ -8226,7 +8408,7 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
             tipo: 'run',
             comando: comandoRun,
             resultado: resultadoRun,
-            descripcion: `Re-probó (auto-fix ${rondaAutofix}/${MAX_RONDAS_AUTOFIX}): ${comandoRun}${resultadoRun.exito ? ' — OK' : ' — todavía con errores'}`,
+            descripcion: `Re-probó (auto-fix ${rondaAutofix}/${MAX_RONDAS_AUTOFIX}): ${comandoRun}${resultadoRun.exito ? ' (OK)' : ' (todavía con errores)'}`,
           });
         }
       } catch (e) {
@@ -8324,7 +8506,7 @@ ${construirContextoArchivosProyecto(proyecto.archivos)}`;
           tipo: 'run',
           comando: comandoRun,
           resultado: resultadoRun,
-          descripcion: `Re-validó: ${comandoRun}${resultadoRun.exito ? ' — OK' : ' — con errores'}`,
+          descripcion: `Re-validó: ${comandoRun}${resultadoRun.exito ? ' (OK)' : ' (con errores)'}`,
         });
       }
       if (!corrioAlgo) {
@@ -8379,7 +8561,7 @@ ${construirContextoArchivosProyecto(proyecto.archivos)}`;
       textoLimpio = textoLimpio.replace(/\[\[[A-Z_]+::[\s\S]*?\]\]/g, '[archivo generado]').trim();
       // Si después de la limpieza de emergencia no quedó nada, mejor un
       // mensaje explícito que una burbuja vacía.
-      if (!textoLimpio) textoLimpio = 'Listo — revisá los archivos del proyecto, algo salió raro mostrando el resumen del cambio.';
+      if (!textoLimpio) textoLimpio = 'Listo, revisá los archivos del proyecto, algo salió raro mostrando el resumen del cambio.';
     }
 
     textoLimpio = limpiarResumenVisibleVerboCode(textoLimpio, acciones);
@@ -9084,7 +9266,7 @@ async function investigarWikipedia(query) {
       return result;
     });
   } catch (e) {
-    console.error('[investigar] Error consultando Wikipedia:', e.message);
+    console.error('[investigar] Error consultando Wikipedia:', e?.message || e);
     return null;
   }
 }
@@ -9128,7 +9310,7 @@ async function investigarBiblia(query) {
       return versos;
     });
   } catch (e) {
-    console.error('[investigar] Error consultando busqueda biblica:', e.message);
+    console.error('[investigar] Error consultando busqueda biblica:', e?.message || e);
     return [];
   }
 }
@@ -10803,7 +10985,7 @@ app.get('/api/config', (req, res) => {
   res.json({
     app: "Verbo AI",
     desarrollador: "VerboAITeams",
-    url: "https://verboai.duckdns.org",
+    url: "https://verboai.her",
     documentacion: "/info",
     modelo: MODELO_DEFAULT,
     modeloId: construirIdModelo(MODELO_DEFAULT),
@@ -11613,11 +11795,10 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       const versiculos = await esperarMinimo(investigarBiblia(investigarQuery), 1000);
 
       let webInvestigacion = null;
-      if (configModelo.nombre === 'NewserAdvanced1.5' || configModelo.nombre === 'NewserPlus' || configModelo.nombre === 'NewserPlus') {
-        enviar({ type: 'investigando_sitio', sitio: 'Busqueda web adicional (investigacion profunda)' });
-        const resWeb = await esperarMinimo(buscarWebGoogle(investigarQuery), 1000);
-        if (resWeb && resWeb.exito && resWeb.resultados.length) webInvestigacion = resWeb.resultados;
-      }
+      // Habilitar búsqueda web adicional para TODOS los modelos (no solo avanzados)
+      enviar({ type: 'investigando_sitio', sitio: 'Busqueda web adicional (investigacion profunda)' });
+      const resWeb = await esperarMinimo(buscarWebGoogle(investigarQuery), 1000);
+      if (resWeb && resWeb.exito && resWeb.resultados.length) webInvestigacion = resWeb.resultados;
 
       const fuentes = [];
       if (wiki) {
@@ -11679,7 +11860,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
         const fuentesWeb = resultado.resultados.map((r) => ({ titulo: r.titulo, url: r.link }));
         const textoResultados = '\n\n**Resultados de la web:**\n' +
-          resultado.resultados.map((r, i) => `${i + 1}. **${r.titulo}** — ${r.resumen}`).join('\n');
+          resultado.resultados.map((r, i) => `${i + 1}. **${r.titulo}**: ${r.resumen}`).join('\n');
         enviar({ type: 'chunk', text: textoResultados });
         enviar({ type: 'fuentes', items: fuentesWeb });
         textoVisible = `${textoVisible}${textoResultados}`.trim();
