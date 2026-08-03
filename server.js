@@ -665,11 +665,13 @@ const MODELOS_DISPONIBLES = {
       'cohere/north-mini-code:free',                          // Code reasoning
       'nousresearch/hermes-3-llama-3.1-405b:free',           // Long context reasoning
     ].filter(Boolean),
-    // Cascada optimizada para coding
+    // Cascada optimizada para coding (con glm-5.2 como especialista en programación)
     modelosOpenRouterCodigo: [
-      // G4F Bridge (PRIMERO si está habilitado)
+      // GLM-5.2 (ESPECIALISTA en programación - PRIMERO si está habilitado)
+      GPT4FREE_ENABLED ? 'glm-5.2' : null,
+      // G4F Bridge (segundo si está habilitado)
       GPT4FREE_ENABLED ? 'g4f-bridge' : null,
-      // Anthropic Direct (segundo si está habilitado)
+      // Anthropic Direct (tercero si está habilitado)
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Mejores modelos free para código
       'cohere/north-mini-code:free',                    // #1 free coding model
@@ -679,6 +681,25 @@ const MODELOS_DISPONIBLES = {
       'nvidia/nemotron-3-nano-30b-a3b:free',           // Fast coding
       'meta-llama/llama-3.3-70b-instruct:free',         // General coding
       'nousresearch/hermes-3-llama-3.1-405b:free',      // Complex coding
+    ].filter(Boolean),
+    // Cascada para canvas/visuales/juegos/Modo Design (qwen/qwen3.6-27b primero)
+    modelosOpenRouterCanvas: [
+      // qwen/qwen3.6-27b (ESPECIALISTA en canvas/visuales - PRIMERO si está habilitado)
+      GPT4FREE_ENABLED ? 'qwen/qwen3.6-27b' : null,
+      // gpt-4o (multimodal, bueno para diseño - SEGUNDO si está habilitado)
+      GPT4FREE_ENABLED ? 'gpt-4o' : null,
+      // Cascada de código normal (TERCERO)
+      GPT4FREE_ENABLED ? 'glm-5.2' : null,
+      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
+      ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
+      // Modelos de diseño adicionales
+      'cohere/north-mini-code:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'poolside/laguna-m.1:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
+      // Fallback a modelos generales
+      'nvidia/nemotron-3-super-120b-a12b:free',
+      'meta-llama/llama-3.3-70b-instruct:free',
     ].filter(Boolean),
     modeloOpenRouterVision: GPT4FREE_ENABLED ? 'g4f-bridge' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'google/gemma-4-31b-it:free'),
     modelosOpenRouterVision: [
@@ -7751,16 +7772,28 @@ Sea conciso. Máximo 5 pasos.${contextoWeb ? '\n\nUsa la información de investi
     // motor, mundo, física, render) y son donde más se corta la respuesta. Les damos más
     // margen de auto-continuación que a un pedido normal.
     const esPedidoDeJuego = /juego|game|minecraft|terraria|motor.{0,15}(3d|2d)|voxel|canvas.*(juego|game)|three\.js|webgl/i.test(mensaje);
+    
+    // Detectar pedidos visuales/canvas/juegos/Modo Design (versión mejorada)
+    const esPedidoVisual = /canvas|juego|game|diseño|design|animación|animation|sprite|tile|voxel|minecraft|terraria|three\.js|webgl|gráfico|graphic|render|shader|texture|modelo 3d|3d model|motor de juego|game engine|physics|colisión|collision|visual|imagen|image|dibujar|draw|pintar|paint|interfaz|interface|ui|ux|layout|estilo|style|color|forma|shape|animar|animate|efecto|effect/i.test(mensaje);
+    
     const opcionesGeneracion = { maxContinuaciones: esPedidoDeJuego ? 4 : 3 };
     if (profundidad === 'extendido') opcionesGeneracion.maxContinuaciones = Math.max(opcionesGeneracion.maxContinuaciones, 5);
     if (profundidad === 'ultracode') opcionesGeneracion.maxContinuaciones = Math.max(opcionesGeneracion.maxContinuaciones, 7);
 
     // 1. Cascada de OpenRouter free — TODOS los modelos la usan primero
     // Todo lo que pasa por Verbo Code ES codigo, asi que si el tier tiene una
-    // cascada especializada (modelosOpenRouterCodigo) la usamos en vez de la
-    // generalista: esto es lo que activa los modelos de codigo/diseño mas
-    // fuertes en Pro y Admin, y solo dentro de este flujo (nunca en el chat normal).
-    const modelosParaGenerar = configModelo.modelosOpenRouterCodigo || configModelo.modelosOpenRouterTexto;
+    // cascada especializada la usamos en vez de la generalista:
+    // - modelosOpenRouterCanvas: para pedidos visuales/canvas/juegos/Modo Design
+    // - modelosOpenRouterCodigo: para código general
+    // - modelosOpenRouterTexto: para texto general
+    let modelosParaGenerar;
+    if (esPedidoVisual && configModelo.modelosOpenRouterCanvas) {
+      // Usar cascada de canvas para pedidos visuales
+      modelosParaGenerar = configModelo.modelosOpenRouterCanvas;
+    } else {
+      // Usar cascada de código o texto general
+      modelosParaGenerar = configModelo.modelosOpenRouterCodigo || configModelo.modelosOpenRouterTexto;
+    }
     if (OPENROUTER_FREE_ENABLED) {
       // La llamada al modelo es bloqueante (no hay streaming token a token) y en
       // pedidos grandes (juegos, varios archivos) puede tardar 30-60s+. Antes el

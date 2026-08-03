@@ -931,6 +931,12 @@ function configurarEventos() {
       localStorage.setItem('vc_modo_design', estado.modoDesign ? '1' : '0');
       btnDesign.classList.toggle('activo', estado.modoDesign);
       actualizarTagsComposer();
+      // Mostrar toast informativo
+      if (estado.modoDesign) {
+        mostrarToast('Modo Design activado: prioriza canvas/three.js y estética visual', 'info');
+      } else {
+        mostrarToast('Modo Design desactivado', 'info');
+      }
     });
   }
 
@@ -1315,6 +1321,57 @@ let accionesGroupEl = null;
 function configurarChatInput() {
   const input = document.getElementById('vcChatInput');
   input.addEventListener('keydown', (e) => {
+    // Atajos de teclado para modos especiales
+    if (e.altKey) {
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        // Activar/desactivar modo Design (Canvas)
+        const btnDesign = document.getElementById('btnDesign');
+        if (btnDesign) btnDesign.click();
+      } else if (e.key === 'u' || e.key === 'U') {
+        e.preventDefault();
+        // Activar modo Ultracode
+        const slider = document.getElementById('vcProfundidadSlider');
+        if (slider) {
+          slider.value = 100; // Ultracode
+          slider.dispatchEvent(new Event('input'));
+          mostrarToast('Modo Ultracode activado: máximo nivel de profundidad', 'info');
+        }
+      } else if (e.key === '1') {
+        e.preventDefault();
+        // Medium
+        const slider = document.getElementById('vcProfundidadSlider');
+        if (slider) {
+          slider.value = 0;
+          slider.dispatchEvent(new Event('input'));
+        }
+      } else if (e.key === '2') {
+        e.preventDefault();
+        // Avanzado
+        const slider = document.getElementById('vcProfundidadSlider');
+        if (slider) {
+          slider.value = 25;
+          slider.dispatchEvent(new Event('input'));
+        }
+      } else if (e.key === '3') {
+        e.preventDefault();
+        // Extendido
+        const slider = document.getElementById('vcProfundidadSlider');
+        if (slider) {
+          slider.value = 50;
+          slider.dispatchEvent(new Event('input'));
+        }
+      } else if (e.key === '4') {
+        e.preventDefault();
+        // Ultracode
+        const slider = document.getElementById('vcProfundidadSlider');
+        if (slider) {
+          slider.value = 100;
+          slider.dispatchEvent(new Event('input'));
+        }
+      }
+    }
+    
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       enviarChat();
@@ -1491,6 +1548,7 @@ async function enviarChat() {
     // Ver detectarBloqueEnCurso() / crearCardCompactando(): progreso REAL
     // (no simulado) de un archivo grande que la IA está escribiendo ahora.
     let bloqueActivo = null;
+    let thinkingPanel = null;
 
     msgDiv = document.createElement('div');
     msgDiv.className = 'vc-msg assistant';
@@ -1512,6 +1570,51 @@ async function enviarChat() {
         if (evt.type === 'status') {
           if (thinkingEl && thinkingEl.parentNode) {
             thinkingEl.innerHTML = '<div class="vc-spinner" style="width:14px;height:14px;border-width:2px;"></div> ' + evt.text;
+          }
+        } else if (evt.type === 'thinking_start') {
+          // Iniciar panel de thinking
+          if (!thinkingPanel) {
+            thinkingPanel = document.createElement('div');
+            thinkingPanel.className = 'vc-msg-thinking-panel';
+            thinkingPanel.innerHTML = '<div class="vc-thinking-header"><div class="vc-spinner" style="width:12px;height:12px;border-width:2px;"></div> <span class="vc-thinking-title">Thinking</span></div><div class="vc-thinking-content"></div>';
+            document.getElementById('vcChatMensajes').appendChild(thinkingPanel);
+            scrollChatAbajo();
+          }
+          const content = thinkingPanel.querySelector('.vc-thinking-content');
+          content.innerHTML = `<div class="vc-thinking-status">${evt.message}</div>`;
+        } else if (evt.type === 'thinking_query') {
+          if (thinkingPanel) {
+            const content = thinkingPanel.querySelector('.vc-thinking-content');
+            content.innerHTML += `<div class="vc-thinking-query">🔍 Buscando: <em>${evt.query}</em></div>`;
+            scrollChatAbajo();
+          }
+        } else if (evt.type === 'thinking_source') {
+          if (thinkingPanel) {
+            const content = thinkingPanel.querySelector('.vc-thinking-content');
+            content.innerHTML += `<div class="vc-thinking-source">📄 <a href="${evt.url}" target="_blank">${evt.source}</a><div class="vc-thinking-snippet">${evt.snippet?.slice(0, 100)}...</div></div>`;
+            scrollChatAbajo();
+          }
+        } else if (evt.type === 'thinking_end') {
+          if (thinkingPanel) {
+            const content = thinkingPanel.querySelector('.vc-thinking-content');
+            content.innerHTML += `<div class="vc-thinking-status">${evt.message}</div>`;
+            // Colapsar panel después de un momento
+            setTimeout(() => {
+              if (thinkingPanel) {
+                thinkingPanel.classList.add('vc-thinking-collapsed');
+                const header = thinkingPanel.querySelector('.vc-thinking-header');
+                header.innerHTML = '<span class="vc-thinking-title">Thinking</span> <span class="vc-thinking-count">' + (thinkingPanel.querySelectorAll('.vc-thinking-source').length) + ' fuentes</span>';
+                header.style.cursor = 'pointer';
+                header.onclick = () => {
+                  thinkingPanel.classList.toggle('vc-thinking-collapsed');
+                };
+              }
+            }, 1000);
+          }
+        } else if (evt.type === 'thinking_error') {
+          if (thinkingPanel) {
+            const content = thinkingPanel.querySelector('.vc-thinking-content');
+            content.innerHTML += `<div class="vc-thinking-error">❌ Error: ${evt.error}</div>`;
           }
         } else if (evt.type === 'plan') {
           planRecibido = evt.plan;
