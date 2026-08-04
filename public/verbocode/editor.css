@@ -2234,3 +2234,111 @@ body.vc-resizing-activo iframe {
     transform: translateY(0);
   }
 }
+
+/* ============================================================
+   Thinking Panel — muestra investigación web en tiempo real
+   ============================================================ */
+.vc-msg-thinking-panel {
+  align-self: flex-start;
+  background: rgba(13, 18, 29, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  margin: 8px 0;
+  max-width: 100%;
+  overflow: hidden;
+  animation: vc-aparecer 0.25s ease;
+}
+
+.vc-thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  user-select: none;
+}
+
+.vc-thinking-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vc-text);
+}
+
+.vc-thinking-count {
+  font-size: 11px;
+  color: var(--vc-text-muted);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.vc-thinking-content {
+  padding: 10px 12px;
+  max-height: 300px;
+  overflow-y: auto;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+}
+
+.vc-thinking-panel.vc-thinking-collapsed .vc-thinking-content {
+  max-height: 0;
+  opacity: 0;
+  padding: 0 12px;
+}
+
+.vc-thinking-status {
+  font-size: 11px;
+  color: var(--vc-text-muted);
+  margin-bottom: 8px;
+}
+
+.vc-thinking-query {
+  font-size: 11px;
+  color: var(--vc-text);
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.vc-thinking-query em {
+  color: var(--vc-accent);
+  font-style: normal;
+}
+
+.vc-thinking-source {
+  font-size: 11px;
+  color: var(--vc-text);
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  border-left: 2px solid var(--vc-accent);
+}
+
+.vc-thinking-source a {
+  color: var(--vc-accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.vc-thinking-source a:hover {
+  text-decoration: underline;
+}
+
+.vc-thinking-snippet {
+  font-size: 10px;
+  color: var(--vc-text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.vc-thinking-error {
+  font-size: 11px;
+  color: #ff6b6b;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 4px;
+}

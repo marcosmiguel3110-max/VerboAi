@@ -1,0 +1,9 @@
+{
+  "model": "kimi-k2.7-code",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hola, escribe una funcion simple en Python"
+    }
+  ]
+}

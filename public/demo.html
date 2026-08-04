@@ -89,8 +89,10 @@
       </div>
 
       <div class="demo-mensajes" id="demoMensajes">
-        <div class="demo-msg demo-msg-ia">
-          <div class="demo-burbuja">¡Hola! Soy Verbo AI, en modo de prueba. Preguntame lo que quieras — tené en cuenta que en este modo las respuestas son mas cortas y el historial no se guarda. ¿En que te ayudo hoy?</div>
+        <div class="demo-estado-vacio">
+          <img src="/logo.png" alt="Verbo AI" class="demo-estado-vacio-logo" />
+          <p class="demo-estado-vacio-titulo">Listo cuando tu lo estes.</p>
+          <p class="demo-estado-vacio-sub">Estas probando Verbo AI sin cuenta. Preguntame lo que quieras, en este modo las respuestas son mas cortas y el historial no se guarda.</p>
         </div>
       </div>
 
@@ -103,34 +105,99 @@
     </main>
   </div>
 
-  <!-- Modal de login/registro -->
+  <!-- Modal de login/registro: mismos formularios y misma logica que la pagina de login real (login.js), asi que funciona igual haya venido de "/" o de "/login". -->
   <div class="demo-modal-fondo oculto" id="demoModalFondo">
     <div class="demo-modal">
       <button class="demo-modal-cerrar" id="demoModalCerrar">✕</button>
-      <h2 id="demoModalTitulo">Iniciar sesion<br />o registrate</h2>
-      <p class="demo-modal-sub">Vas a obtener respuestas mas completas, memoria de tus conversaciones y acceso a todos los modelos.</p>
 
-      <a href="/auth/google" class="demo-btn-google">
-        <svg viewBox="0 0 48 48" width="18" height="18">
-          <path fill="#FFC107" d="M43.6 20.5h-1.9V20.4H24v7.2h11.3c-1.6 4.6-6 7.9-11.3 7.9-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.1-5.1C33.6 6 29 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5Z"/>
-          <path fill="#FF3D00" d="M6.3 14.7l6 4.4C13.9 15.6 18.6 12.9 24 12.9c3.1 0 5.8 1.1 8 3l5.1-5.1C33.6 6 29 4 24 4c-7.4 0-13.8 4.2-17 10.4Z"/>
-          <path fill="#4CAF50" d="M24 44c5.1 0 9.6-1.7 13.1-4.6l-6-5.1c-2 1.4-4.7 2.4-7.1 2.4-5.3 0-9.7-3.3-11.3-7.9l-6 4.6C10.1 39.7 16.5 44 24 44Z"/>
-          <path fill="#1976D2" d="M43.6 20.5H24v7.2h11.3c-.8 2.2-2.2 4-4.1 5.3l6 5.1C40.5 34.9 44 30 44 24c0-1.2-.1-2.4-.4-3.5Z"/>
-        </svg>
-        Continuar con Google
-      </a>
+      <form id="formLogin" class="vista-auth" autocomplete="on">
+        <h2>Iniciar sesion</h2>
+        <label class="campo">
+          <span>Usuario o correo</span>
+          <input type="text" name="usuario" id="usuario" autocomplete="username" required />
+        </label>
+        <label class="campo">
+          <span>Contrasena</span>
+          <input type="password" name="clave" id="clave" autocomplete="current-password" required />
+        </label>
+        <div class="fila-opciones">
+          <label class="recordarme">
+            <input type="checkbox" id="recordar" name="recordar" />
+            Recordarme
+          </label>
+        </div>
+        <button type="submit" id="btnIngresar">Iniciar sesion</button>
+        <p id="mensajeError" class="mensaje-error oculto"></p>
+        <p class="texto-alternar">¿No tenes cuenta? <a href="#" id="irARegistro">Crear una</a></p>
+        <div class="separador"><span>o</span></div>
+        <a href="/auth/google" class="btn-google">
+          <svg viewBox="0 0 48 48" width="18" height="18">
+            <path fill="#FFC107" d="M43.6 20.5h-1.9V20.4H24v7.2h11.3c-1.6 4.6-6 7.9-11.3 7.9-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l5.1-5.1C33.6 6 29 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5Z"/>
+            <path fill="#FF3D00" d="M6.3 14.7l6 4.4C13.9 15.6 18.6 12.9 24 12.9c3.1 0 5.8 1.1 8 3l5.1-5.1C33.6 6 29 4 24 4c-7.4 0-13.8 4.2-17 10.4Z"/>
+            <path fill="#4CAF50" d="M24 44c5.1 0 9.6-1.7 13.1-4.6l-6-5.1c-2 1.4-4.7 2.4-7.1 2.4-5.3 0-9.7-3.3-11.3-7.9l-6 4.6C10.1 39.7 16.5 44 24 44Z"/>
+            <path fill="#1976D2" d="M43.6 20.5H24v7.2h11.3c-.8 2.2-2.2 4-4.1 5.3l6 5.1C40.5 34.9 44 30 44 24c0-1.2-.1-2.4-.4-3.5Z"/>
+          </svg>
+          Continuar con Google
+        </a>
+      </form>
 
-      <div class="demo-separador"><span>o</span></div>
+      <form id="formRegistro" class="vista-auth oculto" autocomplete="on">
+        <h2>Crear cuenta</h2>
+        <label class="campo">
+          <span>Correo</span>
+          <input type="email" id="regEmail" autocomplete="email" required />
+        </label>
+        <label class="campo">
+          <span>Contrasena</span>
+          <input type="password" id="regClave" autocomplete="new-password" required minlength="6" />
+        </label>
+        <label class="campo">
+          <span>Repetir contrasena</span>
+          <input type="password" id="regClave2" autocomplete="new-password" required minlength="6" />
+        </label>
+        <button type="submit" id="btnPedirCodigo">Enviarme un codigo</button>
+        <p id="mensajeErrorRegistro" class="mensaje-error oculto"></p>
+        <p class="texto-alternar">¿Ya tenes cuenta? <a href="#" id="irALogin">Iniciar sesion</a></p>
+      </form>
 
-      <label class="demo-campo">
-        <span>Correo</span>
-        <input type="email" id="demoModalEmail" placeholder="vos@ejemplo.com" />
-      </label>
-      <button id="demoModalContinuar" class="demo-btn-continuar">Continuar</button>
+      <form id="formCodigo" class="vista-auth oculto" autocomplete="off">
+        <h2>Confirma tu correo</h2>
+        <p class="texto-codigo">Te mandamos un codigo de 6 digitos a <strong id="correoCodigoTexto"></strong>.</p>
+        <label class="campo">
+          <span>Codigo</span>
+          <input type="text" id="codigoInput" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required />
+        </label>
+        <button type="submit" id="btnConfirmarCodigo">Confirmar</button>
+        <p id="mensajeErrorCodigo" class="mensaje-error oculto"></p>
+        <p id="mensajeInfoCodigo" class="mensaje-error oculto" style="color:#2e7d32;"></p>
+        <p class="texto-alternar" id="lineaReenviar" style="display:none;">
+          <a href="#" id="reenviarCodigo">Reenviar codigo</a>
+        </p>
+        <p class="texto-alternar"><a href="#" id="volverDeRegistro">Volver</a></p>
+      </form>
 
-      <p class="demo-modal-alterna">
-        <a href="#" id="demoModalAlternar">Ya tengo cuenta, quiero iniciar sesion</a>
-      </p>
+      <form id="formNombre" class="vista-auth oculto" autocomplete="off">
+        <h2>Ya casi</h2>
+        <p class="texto-codigo">¿Como queres que te llamemos?</p>
+        <label class="campo">
+          <span>Tu nombre</span>
+          <input type="text" id="nombreInput" maxlength="40" autocomplete="given-name" required />
+        </label>
+        <div class="terminos-caja">
+          <p><strong>Antes de entrar:</strong></p>
+          <ul>
+            <li>No uses Verbo AI para generar contenido ilegal, violento o dañino.</li>
+            <li>No la uses para acosar, engañar o hacerle daño a otra persona.</li>
+            <li>Es una herramienta de apoyo, no reemplaza el consejo pastoral o profesional.</li>
+          </ul>
+          <label class="recordarme">
+            <input type="checkbox" id="aceptaTerminos" required />
+            Acepto usar Verbo AI de forma responsable.
+          </label>
+        </div>
+        <button type="submit" id="btnConfirmarNombre">Aceptar y continuar</button>
+        <p id="mensajeErrorNombre" class="mensaje-error oculto"></p>
+      </form>
     </div>
   </div>
 
@@ -149,6 +216,7 @@
     </div>
   </div>
 
+<script src="login.js"></script>
 <script src="demo.js"></script>
 </body>
 </html>

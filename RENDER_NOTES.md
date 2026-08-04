@@ -21,6 +21,7 @@ free-tier y Pollinations, ver https://github.com/ClawLabsAI/free-ai-models):
 - `APP_USER`: Usuario admin para login (ej: admin)
 - `APP_PASS`: Contraseña para el usuario admin
 - `AUTH_SECRET`: Secreto aleatorio largo para firmar cookies (genera uno con: openssl rand -base64 32)
+- `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`: (opcional) Habilitan la verificación anti-bot de Cloudflare Turnstile justo al crear un proyecto nuevo en Verbo Code. Sin estas variables, esa verificación queda desactivada y todo funciona igual que hoy. Conseguilas gratis creando un "widget" en https://dash.cloudflare.com/?to=/:account/turnstile (tipo "Managed" o "Invisible", dominio de tu deploy en Render).
 - `JUDGE0_API_URL`: (opcional) URL base de Judge0 para la ejecución de código de Verbo Code y NewserAdvanced1.5. Default: `https://ce.judge0.com`, la instancia pública gratuita de Judge0 CE — **no requiere ninguna API key**. No hace falta tocar esta variable para que la ejecución de código funcione.
 - `JUDGE0_API_KEY`: (opcional) Solo hace falta si decidís cambiar `JUDGE0_API_URL` a la versión hosteada de RapidAPI (`https://judge0-ce.p.rapidapi.com`), que tiene más límite de peticiones pero es de pago fuera del tier gratis. Conseguila en https://rapidapi.com/judge0-official/api/judge0-ce. Si dejás la URL de RapidAPI puesta pero sin key, el servidor lo detecta y usa `ce.judge0.com` automáticamente en su lugar.
 

@@ -1,3 +1,20 @@
+// ============================================================
+// RENDER DEBUG - Logs para probar renderizado al 100%
+// ============================================================
+console.log('[RENDER DEBUG] Script cargado - Inicializando Verbo AI');
+console.log('[RENDER DEBUG] Window size:', window.innerWidth, 'x', window.innerHeight);
+console.log('[RENDER DEBUG] Screen size:', screen.width, 'x', screen.height);
+console.log('[RENDER DEBUG] Device pixel ratio:', window.devicePixelRatio);
+
+// Detectar si es móvil
+const esMovil = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+console.log('[RENDER DEBUG] Es móvil:', esMovil);
+console.log('[RENDER DEBUG] Viewport width:', document.documentElement.clientWidth);
+console.log('[RENDER DEBUG] Viewport height:', document.documentElement.clientHeight);
+
+// ============================================================
+// ELEMENTOS DOM
+// ============================================================
 const elMensajes = document.getElementById('mensajes');
 const elForm = document.getElementById('formChat');
 const elInputTexto = document.getElementById('inputTexto');
@@ -349,7 +366,23 @@ function convertirEnlaces(htmlEscapado) {
   });
 }
 
+function mostrarEstadoVacio() {
+  if (elMensajes.querySelector('.mensaje')) return;
+  elMensajes.innerHTML = `
+    <div class="estado-vacio">
+      <img src="/logo.png" alt="Verbo AI" class="estado-vacio-logo" />
+      <p class="estado-vacio-titulo">Listo cuando tu lo estes.</p>
+      <p class="estado-vacio-sub">Pregunta lo que quieras, pedi una lectura biblica o segui una conversacion anterior.</p>
+    </div>`;
+}
+
+function quitarEstadoVacio() {
+  const vacio = elMensajes.querySelector('.estado-vacio');
+  if (vacio) vacio.remove();
+}
+
 function crearBurbuja(rol, esError = false) {
+  quitarEstadoVacio();
   const div = document.createElement('div');
   div.className = `mensaje ${esError ? 'error' : rol === 'user' ? 'usuario' : 'ia'}`;
   elMensajes.appendChild(div);
@@ -391,13 +424,15 @@ function pintarMensajeCompleto(rol, texto, imagenesUrls = null, esError = false)
 
 async function cargarMemoria(chatId) {
   elMensajes.innerHTML = '';
-  if (!chatId) return;
+  if (!chatId) { mostrarEstadoVacio(); return; }
   try {
     const res = await fetch(`/api/memoria?chatId=${encodeURIComponent(chatId)}`);
     const historial = await res.json();
     historial.forEach((h) => pintarMensajeCompleto(h.role, h.contenidoTexto));
+    if (!historial.length) mostrarEstadoVacio();
   } catch (e) {
     console.error('No se pudo cargar la memoria', e);
+    mostrarEstadoVacio();
   }
 }
 
@@ -890,7 +925,7 @@ async function cargarListaCodigosAdmin() {
     if (!r.ok || !Array.isArray(d.codigos)) { listaCodigosAdmin.innerHTML = ''; return; }
     listaCodigosAdmin.innerHTML = d.codigos.map((c) => (
       '<div class="codigo-admin-item">' +
-        '<span>' + escapeHtml(c.codigo) + ' — ' + c.creditos + ' cr — ' + c.usados + '/' + (c.usosMax === -1 ? '∞' : c.usosMax) + ' usos</span>' +
+        '<span>' + escapeHtml(c.codigo) + ' · ' + c.creditos + ' cr · ' + c.usados + '/' + (c.usosMax === -1 ? '∞' : c.usosMax) + ' usos</span>' +
         '<button class="codigo-admin-item-borrar" data-codigo="' + escapeHtml(c.codigo) + '">Borrar</button>' +
       '</div>'
     )).join('');
@@ -947,7 +982,7 @@ async function cargarListaAdmins() {
     if (!r.ok || !Array.isArray(d.admins)) { listaAdmins.innerHTML = ''; return; }
     listaAdmins.innerHTML = d.admins.map((a) => (
       '<div class="codigo-admin-item">' +
-        '<span>' + escapeHtml(a.email) + (a.esOwner ? ' — dueño' : '') + '</span>' +
+        '<span>' + escapeHtml(a.email) + (a.esOwner ? ' (dueño)' : '') + '</span>' +
         (a.esOwner ? '' : '<button class="codigo-admin-item-borrar" data-email="' + escapeHtml(a.email) + '">Quitar</button>') +
       '</div>'
     )).join('');
@@ -1456,6 +1491,7 @@ async function iniciarNuevoChat(actualizarLista = true) {
     fijarChatActual(null);
   }
   elMensajes.innerHTML = '';
+  mostrarEstadoVacio();
   limpiarCuaderno();
   if (actualizarLista) cargarListaChats();
   cerrarSidebarMovil();
@@ -2299,6 +2335,57 @@ elForm.addEventListener('submit', async (ev) => {
         if (evt.type === 'retry') {
           mostrarReintento(evt.intento, evt.maxIntentos, evt.espera);
         } else if (evt.type === 'ping') {
+        } else if (evt.type === 'thinking_start') {
+          // Iniciar panel de thinking para investigación web real
+          finalizarThinking(); // por si quedo uno anterior sin cerrar
+          thinkingDiv = document.createElement('div');
+          thinkingDiv.className = 'thinking-panel';
+          thinkingDiv.id = 'thinkingPanel';
+          thinkingDiv.innerHTML = `
+            <div class="thinking-header">
+              <div class="thinking-spinner"></div>
+              <span class="thinking-title">Thinking</span>
+            </div>
+            <div class="thinking-content"></div>
+          `;
+          document.getElementById('mensajes').appendChild(thinkingDiv);
+          elMensajes.scrollTop = elMensajes.scrollHeight;
+          const content = thinkingDiv.querySelector('.thinking-content');
+          content.innerHTML = `<div class="thinking-status">${evt.message}</div>`;
+        } else if (evt.type === 'thinking_query') {
+          if (thinkingDiv) {
+            const content = thinkingDiv.querySelector('.thinking-content');
+            content.innerHTML += `<div class="thinking-query">🔍 Buscando: <em>${evt.query}</em></div>`;
+            elMensajes.scrollTop = elMensajes.scrollHeight;
+          }
+        } else if (evt.type === 'thinking_source') {
+          if (thinkingDiv) {
+            const content = thinkingDiv.querySelector('.thinking-content');
+            content.innerHTML += `<div class="thinking-source">📄 <a href="${evt.url}" target="_blank">${evt.source}</a><div class="thinking-snippet">${evt.snippet?.slice(0, 100)}...</div></div>`;
+            elMensajes.scrollTop = elMensajes.scrollHeight;
+          }
+        } else if (evt.type === 'thinking_end') {
+          if (thinkingDiv) {
+            const content = thinkingDiv.querySelector('.thinking-content');
+            content.innerHTML += `<div class="thinking-status">${evt.message}</div>`;
+            // Colapsar panel después de un momento
+            setTimeout(() => {
+              if (thinkingDiv) {
+                thinkingDiv.classList.add('thinking-collapsed');
+                const header = thinkingDiv.querySelector('.thinking-header');
+                header.innerHTML = '<span class="thinking-title">Thinking</span> <span class="thinking-count">' + (thinkingDiv.querySelectorAll('.thinking-source').length) + ' fuentes</span>';
+                header.style.cursor = 'pointer';
+                header.onclick = () => {
+                  thinkingDiv.classList.toggle('thinking-collapsed');
+                };
+              }
+            }, 1000);
+          }
+        } else if (evt.type === 'thinking_error') {
+          if (thinkingDiv) {
+            const content = thinkingDiv.querySelector('.thinking-content');
+            content.innerHTML += `<div class="thinking-error">❌ Error: ${evt.error}</div>`;
+          }
         } else if (evt.type === 'thinking') {
           // Mostrar lista de tareas. Ojo: esto es solo un indicador visual de que
           // el trabajo esta en curso - las tareas se van marcando con el tiempo,
@@ -2481,6 +2568,7 @@ btnBorrarMemoria.addEventListener('click', async () => {
   if (!confirm('Esto borrara los mensajes de esta conversacion. ¿Continuar?')) return;
   await fetch(`/api/memoria?chatId=${encodeURIComponent(chatIdActual)}`, { method: 'DELETE' });
   elMensajes.innerHTML = '';
+  mostrarEstadoVacio();
   limpiarCuaderno();
   cargarListaChats();
 });

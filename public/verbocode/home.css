@@ -426,3 +426,10 @@
     font-size: 13px;
   }
 }
+
+/* Widget de Cloudflare Turnstile en el modal de "Nuevo proyecto" */
+.vc-turnstile {
+  margin: 4px 0 2px;
+  display: flex;
+  justify-content: center;
+}

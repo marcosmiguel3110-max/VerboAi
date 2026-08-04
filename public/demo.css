@@ -219,6 +219,37 @@ html, body {
 }
 @media (max-width: 900px) { .demo-mensajes { padding: 20px 6%; } }
 
+.demo-estado-vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 24px;
+  margin: auto;
+}
+.demo-estado-vacio-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+  opacity: 0.9;
+}
+.demo-estado-vacio-titulo {
+  margin: 0;
+  font-family: 'Fraunces', serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--texto);
+}
+.demo-estado-vacio-sub {
+  margin: 0;
+  max-width: 380px;
+  font-size: 14px;
+  color: var(--texto-suave);
+  line-height: 1.5;
+}
+
 .demo-msg { display: flex; }
 .demo-msg-usuario { justify-content: flex-end; }
 .demo-msg-ia { justify-content: flex-start; }
@@ -290,7 +321,9 @@ html, body {
 .demo-modal {
   position: relative;
   width: 100%;
-  max-width: 380px;
+  max-width: 400px;
+  max-height: 90vh;
+  overflow-y: auto;
   background: #fff;
   border-radius: 20px;
   padding: 32px 28px 26px;
@@ -311,74 +344,87 @@ html, body {
   font-family: 'Fraunces', serif;
   font-weight: 600;
   font-size: 22px;
-  margin: 0 0 8px;
+  margin: 0 0 18px;
 }
-.demo-modal-sub {
-  font-size: 13px;
+
+/* ---- Formularios reales de login/registro/codigo/nombre embebidos ---- */
+.vista-auth { width: 100%; display: flex; flex-direction: column; align-items: center; }
+.vista-auth.oculto { display: none; }
+.campo { width: 100%; display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; text-align: left; }
+.campo span { font-size: 12px; font-weight: 600; color: var(--texto-suave); text-transform: uppercase; letter-spacing: 0.4px; }
+.campo input {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--borde);
+  background: #fff;
+  font-size: 14.5px;
+  font-family: inherit;
+  color: var(--texto);
+  outline: none;
+}
+.campo input:focus { border-color: var(--acento); box-shadow: 0 0 0 3px rgba(201,102,58,0.15); }
+.fila-opciones { width: 100%; display: flex; justify-content: flex-start; margin: 2px 0 20px; }
+.recordarme { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--texto-suave); cursor: pointer; user-select: none; }
+.recordarme input { accent-color: var(--acento); width: 15px; height: 15px; cursor: pointer; }
+.terminos-caja {
+  width: 100%;
+  background: var(--crema-oscuro);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  font-size: 12.5px;
   color: var(--texto-suave);
-  margin: 0 0 22px;
+  text-align: left;
 }
-.demo-btn-google {
+.terminos-caja p { margin: 0 0 6px; color: var(--texto); }
+.terminos-caja ul { margin: 0 0 10px; padding-left: 18px; }
+.terminos-caja li { margin-bottom: 3px; line-height: 1.4; }
+.terminos-caja .recordarme { color: var(--texto); font-size: 12.5px; }
+#btnIngresar, #btnPedirCodigo, #btnConfirmarCodigo, #btnConfirmarNombre {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--texto);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+#btnIngresar:hover, #btnPedirCodigo:hover, #btnConfirmarCodigo:hover, #btnConfirmarNombre:hover { opacity: 0.9; }
+#btnIngresar:disabled, #btnPedirCodigo:disabled, #btnConfirmarCodigo:disabled, #btnConfirmarNombre:disabled { opacity: 0.6; cursor: default; }
+.mensaje-error { margin: 14px 0 0; font-size: 13px; color: #A93A2C; background: rgba(169,58,44,0.1); border-radius: 8px; padding: 9px 12px; text-align: center; width: 100%; }
+.mensaje-error.oculto { display: none; }
+.texto-alternar { font-size: 12.5px; color: var(--texto-suave); margin: 12px 0 0; text-align: center; }
+.texto-alternar a { color: var(--acento); font-weight: 600; text-decoration: none; }
+.texto-alternar a:hover { text-decoration: underline; }
+.texto-codigo { font-size: 13.5px; color: var(--texto-suave); text-align: center; margin: 0 0 18px; line-height: 1.5; }
+.texto-codigo strong { color: var(--texto); }
+#codigoInput { text-align: center; letter-spacing: 8px; font-size: 20px; font-weight: 600; }
+.separador { display: flex; align-items: center; width: 100%; margin: 18px 0 14px; color: var(--texto-suave); font-size: 12px; }
+.separador::before, .separador::after { content: ""; flex: 1; height: 1px; background: var(--borde); }
+.separador span { padding: 0 10px; }
+.btn-google {
+  width: 100%;
+  padding: 11px;
+  border-radius: 10px;
+  border: 1px solid var(--borde);
+  background: #fff;
+  color: var(--texto);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border: 1px solid var(--borde);
-  border-radius: 12px;
-  padding: 11px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--texto);
   text-decoration: none;
-  background: #fff;
+  box-sizing: border-box;
 }
-.demo-btn-google:hover { background: var(--crema-oscuro); }
-.demo-separador {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 16px 0;
-  color: var(--texto-suave);
-  font-size: 12px;
-}
-.demo-separador::before, .demo-separador::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--borde);
-}
-.demo-campo {
-  display: block;
-  text-align: left;
-  font-size: 12.5px;
-  color: var(--texto-suave);
-  margin-bottom: 14px;
-}
-.demo-campo input {
-  display: block;
-  width: 100%;
-  margin-top: 4px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--borde);
-  font-family: inherit;
-  font-size: 14px;
-}
-.demo-btn-continuar {
-  width: 100%;
-  border: none;
-  background: var(--texto);
-  color: #fff;
-  padding: 11px;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.demo-btn-continuar:hover { opacity: 0.9; }
-.demo-modal-alterna { margin: 16px 0 0; font-size: 12.5px; }
-.demo-modal-alterna a { color: var(--acento); text-decoration: none; font-weight: 600; }
-.demo-modal-alterna a:hover { text-decoration: underline; }
+.btn-google:hover { background: var(--crema-oscuro); }
 
 /* ---------- Modal Biblia ---------- */
 .demo-modal-biblia { max-width: 560px; text-align: left; }

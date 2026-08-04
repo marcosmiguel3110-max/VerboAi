@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   aplicarTema();
   await cargarUsuario();
   await cargarProyectos();
+  await cargarConfigTurnstile();
   configurarEventos();
 });
 
@@ -33,7 +34,88 @@ function aplicarTema() {
 }
 
 // ============================================================
-// Usuario (con doble check: API + localStorage)
+// Cloudflare Turnstile ("no soy un bot") al iniciar un proyecto nuevo
+// ============================================================
+let turnstileSiteKey = null;
+let turnstileWidgetId = null;
+let turnstileToken = null;
+
+async function cargarConfigTurnstile() {
+  try {
+    const r = await fetch('/api/config');
+    if (!r.ok) return;
+    const data = await r.json();
+    turnstileSiteKey = data.turnstileSiteKey || null;
+  } catch (e) {
+    // Si falla, simplemente no se muestra el widget (igual que si el server
+    // no tiene la key configurada).
+    console.warn('[verbocode] No se pudo cargar la config de Turnstile:', e);
+  }
+}
+
+// Espera a que el script de challenges.cloudflare.com/turnstile/v0/api.js
+// haya cargado `window.turnstile` (se carga con async/defer en el <head>).
+function esperarTurnstile(intentos = 20) {
+  return new Promise((resolve) => {
+    const check = (n) => {
+      if (window.turnstile) return resolve(true);
+      if (n <= 0) return resolve(false);
+      setTimeout(() => check(n - 1), 150);
+    };
+    check(intentos);
+  });
+}
+
+// Renderiza (o reinicia) el widget de Turnstile dentro del modal de "Nuevo
+// proyecto". Si no hay site key configurada en el server, no hace nada y el
+// flujo de creacion sigue funcionando sin verificacion (igual que hoy).
+async function configurarTurnstileModal() {
+  const contenedor = document.getElementById('turnstileNuevoProyecto');
+  const btnCrear = document.getElementById('btnCrearProyecto');
+  turnstileToken = null;
+
+  if (!turnstileSiteKey) {
+    contenedor.classList.add('oculto');
+    return;
+  }
+
+  contenedor.classList.remove('oculto');
+  const listo = await esperarTurnstile();
+  if (!listo) {
+    // El script no cargo (bloqueado, sin internet, etc.). No trabamos al
+    // usuario: dejamos que intente crear el proyecto igual; el server
+    // rechaza la creacion si de verdad exige el token.
+    console.warn('[verbocode] Turnstile no cargo a tiempo.');
+    return;
+  }
+
+  contenedor.innerHTML = '';
+  turnstileWidgetId = window.turnstile.render(contenedor, {
+    sitekey: turnstileSiteKey,
+    callback: (token) => {
+      turnstileToken = token;
+      actualizarEstadoBtnCrear();
+    },
+    'expired-callback': () => {
+      turnstileToken = null;
+      actualizarEstadoBtnCrear();
+    },
+    'error-callback': () => {
+      turnstileToken = null;
+      actualizarEstadoBtnCrear();
+    },
+  });
+  actualizarEstadoBtnCrear();
+}
+
+function actualizarEstadoBtnCrear() {
+  const input = document.getElementById('inputNombreProyecto');
+  const btnCrear = document.getElementById('btnCrearProyecto');
+  const nombreValido = input.value.trim().length >= 3;
+  const turnstileOk = !turnstileSiteKey || !!turnstileToken;
+  btnCrear.disabled = !(nombreValido && turnstileOk);
+}
+
 // ============================================================
 async function cargarUsuario() {
   try {
@@ -169,13 +251,14 @@ function configurarEventos() {
     input.value = '';
     btnCrear.disabled = true;
     setTimeout(() => input.focus(), 100);
+    configurarTurnstileModal();
   });
 
   btnCancel.addEventListener('click', cerrarModal);
   backdrop.addEventListener('click', cerrarModal);
 
   input.addEventListener('input', () => {
-    btnCrear.disabled = input.value.trim().length < 3;
+    actualizarEstadoBtnCrear();
   });
 
   input.addEventListener('keydown', (e) => {
@@ -247,20 +330,40 @@ function configurarEventos() {
 
 function cerrarModal() {
   document.getElementById('modalNuevoProyecto').classList.add('oculto');
+  // Resetea el widget para que la proxima vez que se abra el modal pida una
+  // verificacion nueva (los tokens de Turnstile son de un solo uso).
+  if (turnstileWidgetId !== null && window.turnstile) {
+    window.turnstile.reset(turnstileWidgetId);
+  }
+  turnstileToken = null;
 }
 
 async function crearProyecto() {
   const input = document.getElementById('inputNombreProyecto');
   const nombre = input.value.trim();
   if (nombre.length < 3) return;
+  if (turnstileSiteKey && !turnstileToken) {
+    mostrarToast('Completa la verificacion anti-bot para continuar.', 'error');
+    return;
+  }
 
   try {
     const r = await fetch('/api/verbocode/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre }),
+      body: JSON.stringify({ nombre, turnstileToken }),
     });
-    if (!r.ok) throw new Error('No se pudo crear el proyecto');
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      // Si Turnstile rechazo el token, reseteamos el widget para que pueda
+      // reintentar sin tener que cerrar y volver a abrir el modal.
+      if (err.turnstileFallido && turnstileWidgetId !== null && window.turnstile) {
+        window.turnstile.reset(turnstileWidgetId);
+        turnstileToken = null;
+        actualizarEstadoBtnCrear();
+      }
+      throw new Error(err.error || 'No se pudo crear el proyecto');
+    }
     const data = await r.json();
     mostrarToast('Proyecto creado', 'success');
     // Redirigir al editor con el nuevo proyecto

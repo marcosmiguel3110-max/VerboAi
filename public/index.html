@@ -16,7 +16,7 @@
 <body>
 
 <!-- Banner AdSense 728x90 -->
-<div style="text-align: center; padding: 10px 0; background: #0b0f17;">
+<div style="text-align: center; padding: 10px 0; background: var(--crema-oscuro);">
   <ins class="adsbygoogle"
        style="display:inline-block;width:728px;height:90px"
        data-ad-client="ca-pub-2832971109540830"
@@ -414,8 +414,8 @@ curl -H "Authorization: Bearer verboai-XXXX" https://TU-DOMINIO/api/v1/creditos<
                   <li>NewserAdvanced consume mas creditos y tiene rate limit mas estricto (mas potente, mas lento).</li>
                   <li><strong>NewserAdvanced</strong> tiene herramientas exclusivas:</li>
                   <li style="list-style: circle; margin-left: 20px;"><strong>Generar imagen</strong>: escribi <code>Generame [descripcion]</code> como mensaje (en web o API). Consume <strong>+1 credito</strong> adicional. Se abre en el visor en terminal.</li>
-                  <li style="list-style: circle; margin-left: 20px;"><code>[[WEB::consulta]]</code> busca en Google Custom Search — consume <strong>+1 credito</strong> adicional.</li>
-                  <li style="list-style: circle; margin-left: 20px;"><code>[[CLIMA::lugar]]</code> consulta open-meteo — <strong>gratis</strong>, no consume creditos extra.</li>
+                  <li style="list-style: circle; margin-left: 20px;"><code>[[WEB::consulta]]</code> busca en Google Custom Search, consume <strong>+1 credito</strong> adicional.</li>
+                  <li style="list-style: circle; margin-left: 20px;"><code>[[CLIMA::lugar]]</code> consulta open-meteo, <strong>gratis</strong>, no consume creditos extra.</li>
                   <li>Si mandas un <code>"modelo"</code> invalido o vacio, cae automaticamente a NewserLite (no rompe).</li>
                   <li>Cuando se acaban los creditos, el token devuelve <code>402</code>. Si queres mas, avisale al admin.</li>
                   <li>Borrar un token lo revoca de inmediato: cualquier peticion posterior con ese token devuelve <code>401</code>.</li>

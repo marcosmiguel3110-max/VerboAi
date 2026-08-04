@@ -8,7 +8,13 @@ const elForm = document.getElementById('demoForm');
 const elInput = document.getElementById('demoInput');
 const elBtnEnviar = document.getElementById('demoBtnEnviar');
 
+function quitarEstadoVacioDemo() {
+  const vacio = elMensajes.querySelector('.demo-estado-vacio');
+  if (vacio) vacio.remove();
+}
+
 function crearBurbuja(rol, texto, extraClase) {
+  quitarEstadoVacioDemo();
   const wrap = document.createElement('div');
   wrap.className = `demo-msg ${rol === 'user' ? 'demo-msg-usuario' : 'demo-msg-ia'}`;
   const burbuja = document.createElement('div');
@@ -75,8 +81,12 @@ elInput.addEventListener('input', () => {
 
 document.getElementById('btnNuevaConversacion').addEventListener('click', () => {
   historialDemo = [];
-  elMensajes.innerHTML = '';
-  crearBurbuja('assistant', '¡Listo, arrancamos de nuevo! ¿En que te ayudo?');
+  elMensajes.innerHTML = `
+    <div class="demo-estado-vacio">
+      <img src="/logo.png" alt="Verbo AI" class="demo-estado-vacio-logo" />
+      <p class="demo-estado-vacio-titulo">Listo cuando tu lo estes.</p>
+      <p class="demo-estado-vacio-sub">Estas probando Verbo AI sin cuenta. Preguntame lo que quieras, en este modo las respuestas son mas cortas y el historial no se guarda.</p>
+    </div>`;
 });
 
 // ---------- Sidebar movil ----------
@@ -86,19 +96,14 @@ document.getElementById('btnAbrirSidebarMovil').addEventListener('click', () => 
 });
 
 // ---------- Modal de login / registro ----------
+// Los 4 formularios (formLogin, formRegistro, formCodigo, formNombre) y su
+// logica (fetch a /api/login, /api/registro/*, etc.) vienen de login.js,
+// cargado antes que este script — reusamos sus mismas variables globales
+// (mostrarVista, formLogin, formRegistro) para no duplicar esa logica.
 const elModalFondo = document.getElementById('demoModalFondo');
-const elModalTitulo = document.getElementById('demoModalTitulo');
-const elModalEmail = document.getElementById('demoModalEmail');
-let pasoModalActual = 'registro';
 
 function abrirModalAuth(paso) {
-  pasoModalActual = paso;
-  elModalTitulo.innerHTML = paso === 'login'
-    ? 'Iniciar sesion'
-    : 'Iniciar sesion<br />o registrate';
-  document.getElementById('demoModalAlternar').textContent = paso === 'login'
-    ? 'No tengo cuenta, quiero registrarme'
-    : 'Ya tengo cuenta, quiero iniciar sesion';
+  mostrarVista(paso === 'login' ? formLogin : formRegistro);
   elModalFondo.classList.remove('oculto');
 }
 function cerrarModalAuth() { elModalFondo.classList.add('oculto'); }
@@ -112,18 +117,13 @@ document.getElementById('linkRegistrateAviso').addEventListener('click', (ev) =>
 document.getElementById('demoModalCerrar').addEventListener('click', cerrarModalAuth);
 elModalFondo.addEventListener('click', (ev) => { if (ev.target === elModalFondo) cerrarModalAuth(); });
 
-document.getElementById('demoModalAlternar').addEventListener('click', (ev) => {
-  ev.preventDefault();
-  abrirModalAuth(pasoModalActual === 'login' ? 'registro' : 'login');
-});
-
-document.getElementById('demoModalContinuar').addEventListener('click', () => {
-  const correo = elModalEmail.value.trim();
-  const params = new URLSearchParams();
-  params.set('paso', pasoModalActual);
-  if (correo) params.set('correo', correo);
-  window.location.href = `/login?${params.toString()}`;
-});
+// Si llegamos con parametros en la URL (?paso=registro, ?paso=google_codigo,
+// ?error=...), login.js ya eligio el formulario correcto — solo falta abrir
+// el modal para que se vea.
+const parametrosURLDemo = new URLSearchParams(window.location.search);
+if (parametrosURLDemo.get('paso') || parametrosURLDemo.get('error')) {
+  elModalFondo.classList.remove('oculto');
+}
 
 // Botones bloqueados de la sidebar (Settings, Codes, historial de chats):
 // cualquier click ahi pide registrarse, no hacen nada por su cuenta.

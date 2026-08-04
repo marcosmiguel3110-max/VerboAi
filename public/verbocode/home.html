@@ -9,6 +9,10 @@
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/verbocode/shared.css">
   <link rel="stylesheet" href="/verbocode/home.css">
+  <!-- Cloudflare Turnstile: solo se usa si el servidor tiene TURNSTILE_SITE_KEY
+       configurada (ver home.js -> configurarTurnstile). Cargar el script no hace
+       nada por si solo, asi que es seguro tenerlo siempre presente. -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body class="vc-page">
   <!-- Header -->
@@ -68,6 +72,9 @@
       <h2 class="vc-modal-title">Crear nuevo proyecto</h2>
       <p class="vc-modal-desc">Poné un nombre a tu proyecto. Después podés cambiarlo o eliminarlo.</p>
       <input type="text" id="inputNombreProyecto" class="vc-input" placeholder="Ej: Mi landing page, Addon Minecraft, App React..." maxlength="60" autocomplete="off">
+      <!-- Verificacion anti-bot (Cloudflare Turnstile). Se renderiza solo si el
+           servidor tiene TURNSTILE_SITE_KEY configurada (ver /api/config). -->
+      <div id="turnstileNuevoProyecto" class="vc-turnstile oculto"></div>
       <div class="vc-modal-actions">
         <button id="btnCancelarProyecto" class="vc-btn-ghost">Cancelar</button>
         <button id="btnCrearProyecto" class="vc-btn-primary" disabled>Crear proyecto</button>
