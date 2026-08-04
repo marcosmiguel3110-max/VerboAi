@@ -2683,7 +2683,12 @@ function leerCookie(req, nombre) {
   return null;
 }
 function estaAutenticado(req) {
-  return verificarValorFirmado(leerCookie(req, 'verbo_auth')) !== null;
+  const cookieValue = leerCookie(req, 'verbo_auth');
+  const isAuthenticated = verificarValorFirmado(cookieValue) !== null;
+  if (req.path === '/' || req.path === '/login') {
+    console.log('[estaAutenticado] Cookie verbo_auth:', cookieValue ? 'presente' : 'ausente', 'Autenticado:', isAuthenticated);
+  }
+  return isAuthenticated;
 }
 
 function obtenerUsuarioActual(req) {
@@ -3375,11 +3380,14 @@ app.post('/api/registro/confirmar', (req, res) => {
 
 app.post('/api/login', (req, res) => {
   const { usuario, clave, recordar } = req.body || {};
+  console.log('[api/login] Intento de login para:', usuario, 'Secure:', req.secure);
+  
   if (usuario === APP_USER && clave === APP_PASS) {
     let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER}`))}; HttpOnly; Path=/; SameSite=Lax`;
     if (req.secure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
+    console.log('[api/login] Login exitoso para APP_USER, cookie:', cookieStr);
     return res.json({ ok: true, redirect: '/' });
   }
 
@@ -3388,6 +3396,7 @@ app.post('/api/login', (req, res) => {
     if (req.secure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
+    console.log('[api/login] Login exitoso para APP_USER_2, cookie:', cookieStr);
     return res.json({ ok: true, redirect: '/' });
   }
 
@@ -3396,6 +3405,7 @@ app.post('/api/login', (req, res) => {
     if (req.secure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
+    console.log('[api/login] Login exitoso para APP_USER_3, cookie:', cookieStr);
     return res.json({ ok: true, redirect: '/' });
   }
 
@@ -3406,8 +3416,10 @@ app.post('/api/login', (req, res) => {
     if (req.secure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
+    console.log('[api/login] Login exitoso para usuario regular, cookie:', cookieStr);
     return res.json({ ok: true, redirect: '/' });
   }
+  console.log('[api/login] Login fallido para:', usuario);
   res.status(401).json({ error: 'Usuario o contrasena incorrectos.' });
 });
 
@@ -3770,12 +3782,13 @@ app.post('/api/google/confirmar', (req, res) => {
   const necesitaNombre = !usuarios[email].nombre;
 
   let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-  // En producción siempre agregar Secure para cookies HTTPS
-  if (req.secure || process.env.NODE_ENV === 'production') cookieStr += '; Secure';
+  // Solo agregar Secure si estamos realmente en HTTPS (no en producción general)
+  if (req.secure) cookieStr += '; Secure';
   res.setHeader('Set-Cookie', [cookieStr, 'verbo_google_pendiente=; HttpOnly; Path=/; Max-Age=0']);
   
   console.log('[google-confirmar] Login exitoso para:', email, 'necesitaNombre:', necesitaNombre);
   console.log('[google-confirmar] Cookie establecida:', cookieStr);
+  console.log('[google-confirmar] Request secure:', req.secure, 'NODE_ENV:', process.env.NODE_ENV);
   
   if (necesitaNombre) {
     res.json({ ok: true, necesitaNombre: true });
