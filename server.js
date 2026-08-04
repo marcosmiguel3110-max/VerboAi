@@ -2702,7 +2702,11 @@ app.use((req, res, next) => {
   // URL limpia: /login.html pasa a /login (sin extension) via redireccion permanente.
   if (req.path === '/login.html') return res.redirect(301, '/login');
   if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/') || req.path.startsWith('/api/v1/verbocode/link/') || req.path.startsWith('/api/biblia/capitulo/')) return next();
-  if (estaAutenticado(req)) return next();
+  if (estaAutenticado(req)) {
+    // Si el usuario está autenticado y va a la raiz, servir la app principal
+    if (req.path === '/') return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    return next();
+  }
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
   // Un visitante sin cuenta que entra a la raiz ve el chat de prueba (invitado)
   // en vez de ser mandado directo al formulario de login.
