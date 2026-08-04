@@ -2563,6 +2563,7 @@ app.use(helmet({
         'https://*.googlesyndication.com',
         'https://*.google.com',
         'https://*.adtrafficquality.google',
+        'https://challenges.cloudflare.com',
       ],
       scriptSrcElem: [
         "'self'",
@@ -2575,13 +2576,16 @@ app.use(helmet({
         'https://*.googlesyndication.com',
         'https://*.google.com',
         'https://*.adtrafficquality.google',
+        'https://challenges.cloudflare.com',
       ],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdn.jsdelivr.net'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
       connectSrc: ["'self'", 'https:'],
-      frameSrc: ['https://googleads.g.doubleclick.net', 'https://tpc.googlesyndication.com', 'https://*.google.com', 'https://*.adtrafficquality.google'],
+      // challenges.cloudflare.com: el widget de Turnstile (verificacion "no soy un bot")
+      // que se muestra al iniciar un proyecto nuevo en Verbo Code corre dentro de un iframe.
+      frameSrc: ['https://googleads.g.doubleclick.net', 'https://tpc.googlesyndication.com', 'https://*.google.com', 'https://*.adtrafficquality.google', 'https://challenges.cloudflare.com'],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       // Sin esto, el navegador usa script-src como fallback para los workers,
@@ -2657,6 +2661,44 @@ const APP_USER_3 = 'gogo@gmail.com';
 const APP_PASS_3 = '6767';
 const AUTH_SECRET = process.env.AUTH_SECRET || 'cambia-este-secreto-tambien';
 
+// ============================================================
+// Cloudflare Turnstile: verificacion "no soy un bot" al iniciar un
+// proyecto nuevo en Verbo Code (evita que scripts/bots automaticen la
+// creacion masiva de proyectos). Opcional: si no se configuran las
+// keys, la verificacion se salta (igual que el resto de integraciones
+// opcionales del proyecto) para no romper el flujo en desarrollo.
+const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || '';
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '';
+if (!TURNSTILE_SITE_KEY || !TURNSTILE_SECRET_KEY) {
+  console.warn('[turnstile] TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY no configuradas. La verificacion anti-bot al crear proyectos de Verbo Code queda desactivada.');
+}
+
+async function verificarTurnstile(token, ip) {
+  if (!TURNSTILE_SECRET_KEY) return { ok: true, saltado: true };
+  if (!token || typeof token !== 'string') return { ok: false, error: 'Falta la verificacion anti-bot (Turnstile).' };
+  try {
+    const params = new URLSearchParams();
+    params.append('secret', TURNSTILE_SECRET_KEY);
+    params.append('response', token);
+    if (ip) params.append('remoteip', ip);
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await r.json();
+    if (!data.success) {
+      console.warn('[turnstile] Verificacion fallida:', data['error-codes']);
+      return { ok: false, error: 'No se pudo confirmar que sos una persona. Intenta de nuevo.' };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error('[turnstile] Error verificando token:', e.message);
+    return { ok: false, error: 'No se pudo validar la verificacion anti-bot. Intenta de nuevo.' };
+  }
+}
+
 if (!process.env.APP_USER || !process.env.APP_PASS) {
   console.warn('[auth] ADVERTENCIA: estas usando el usuario/clave por defecto (admin / cambia-esta-clave).');
   console.warn('[auth] Define APP_USER, APP_PASS y AUTH_SECRET en tu archivo .env antes de exponer esta app a internet.');
@@ -2719,6 +2761,18 @@ app.use((req, res, next) => {
   // Logging para debug
   if (req.path === '/' || req.path === '/login') {
     console.log('[auth-middleware] Path:', req.path, 'Autenticado:', usuarioAutenticado, 'Query:', req.query);
+  }
+
+  // IMPORTANTE: '/' y '/login' devuelven contenido distinto (index.html vs demo.html)
+  // segun la cookie de sesion. Sin esto, un proxy/CDN delante del server (ej. Cloudflare)
+  // o el propio cache del navegador puede guardar la respuesta de demo.html vista como
+  // invitado y seguir sirviendola despues de iniciar sesion — el usuario ve que el login
+  // "funciona" (la cookie se guarda bien) pero al volver a "/" lo manda de nuevo a la demo
+  // en vez de a la app completa. Forzamos que esta respuesta nunca se cachee ni comparta.
+  if (req.path === '/' || req.path === '/login') {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Vary', 'Cookie');
   }
   
   if (usuarioAutenticado) {
@@ -3390,7 +3444,12 @@ app.post('/api/login', (req, res) => {
   
   // Usar SameSite=None con Secure para HTTPS, o no especificar SameSite para HTTP
   const useSecure = req.secure;
-  const sameSiteAttr = useSecure ? 'SameSite=None' : '';
+  // Siempre declaramos SameSite explicitamente (Lax en HTTP, None+Secure en HTTPS)
+  // en vez de dejarlo vacio: un atributo vacio en el header deja un "; ;" colgando
+  // y, mas importante, no declarar SameSite hace que cada navegador aplique su
+  // propio default, lo que puede terminar bloqueando la cookie justo despues del
+  // login segun el navegador/version.
+  const sameSiteAttr = useSecure ? 'SameSite=None' : 'SameSite=Lax';
   
   if (usuario === APP_USER && clave === APP_PASS) {
     let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER}`))}; HttpOnly; Path=/; ${sameSiteAttr}`;
@@ -5947,9 +6006,14 @@ app.get('/api/verbocode/projects', requiereAdminVerboCode, (req, res) => {
   });
 });
 
-app.post('/api/verbocode/projects', requiereAdminVerboCode, (req, res) => {
+app.post('/api/verbocode/projects', requiereAdminVerboCode, async (req, res) => {
   const nombre = (req.body?.nombre || '').trim().slice(0, 60);
   if (!nombre || nombre.length < 3) return res.status(400).json({ error: 'Nombre muy corto (min 3 caracteres).' });
+
+  // Verificacion anti-bot (Cloudflare Turnstile) justo al iniciar un proyecto nuevo.
+  const turnstile = await verificarTurnstile(req.body?.turnstileToken, req.ip);
+  if (!turnstile.ok) return res.status(400).json({ error: turnstile.error, turnstileFallido: true });
+
   const id = 'vc_' + crypto.randomUUID();
   const proyecto = {
     id,
@@ -11086,6 +11150,7 @@ app.get('/api/config', (req, res) => {
     modeloDefaultId: construirIdModelo(MODELO_DEFAULT),
     esAdmin: esAdminConfig,
     modelos,
+    turnstileSiteKey: TURNSTILE_SITE_KEY || null,
   });
 });
 
