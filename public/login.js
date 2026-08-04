@@ -109,6 +109,7 @@ formLogin.addEventListener('submit', async (ev) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usuario, clave, recordar }),
+      credentials: 'include',
     });
     const data = await res.json();
     if (res.ok && data.ok) {
@@ -150,6 +151,7 @@ formRegistro.addEventListener('submit', async (ev) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, clave }),
+      credentials: 'include',
     });
     const data = await res.json();
     if (res.ok && data.ok) {
@@ -189,6 +191,7 @@ formCodigo.addEventListener('submit', async (ev) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cuerpo),
+      credentials: 'include',
     });
     const data = await res.json();
     if (res.ok && data.ok) {
