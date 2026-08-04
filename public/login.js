@@ -112,7 +112,9 @@ formLogin.addEventListener('submit', async (ev) => {
     });
     const data = await res.json();
     if (res.ok && data.ok) {
-      window.location.href = '/';
+      const redirectUrl = data.redirect || '/';
+      console.log('[login] Redirigiendo a:', redirectUrl);
+      window.location.href = redirectUrl;
       return;
     }
     elError.textContent = data.error || 'No se pudo iniciar sesion.';
@@ -195,7 +197,10 @@ formCodigo.addEventListener('submit', async (ev) => {
         document.getElementById('nombreInput').focus();
         return;
       }
-      window.location.href = '/';
+      // Usar la redirección si está proporcionada por el servidor
+      const redirectUrl = data.redirect || '/';
+      console.log('[login] Redirigiendo a:', redirectUrl);
+      window.location.href = redirectUrl;
       return;
     }
     elErrorCodigo.textContent = data.error || 'El codigo no es correcto.';

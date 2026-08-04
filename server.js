@@ -3380,7 +3380,7 @@ app.post('/api/login', (req, res) => {
     if (req.secure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
-    return res.json({ ok: true });
+    return res.json({ ok: true, redirect: '/' });
   }
 
   if (usuario === APP_USER_2 && clave === APP_PASS_2) {
@@ -3388,7 +3388,7 @@ app.post('/api/login', (req, res) => {
     if (req.secure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
-    return res.json({ ok: true });
+    return res.json({ ok: true, redirect: '/' });
   }
 
   if (usuario === APP_USER_3 && clave === APP_PASS_3) {
@@ -3396,7 +3396,7 @@ app.post('/api/login', (req, res) => {
     if (req.secure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
-    return res.json({ ok: true });
+    return res.json({ ok: true, redirect: '/' });
   }
 
   const usuarios = leerUsuarios();
@@ -3406,7 +3406,7 @@ app.post('/api/login', (req, res) => {
     if (req.secure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
-    return res.json({ ok: true });
+    return res.json({ ok: true, redirect: '/' });
   }
   res.status(401).json({ error: 'Usuario o contrasena incorrectos.' });
 });
@@ -3777,7 +3777,12 @@ app.post('/api/google/confirmar', (req, res) => {
   console.log('[google-confirmar] Login exitoso para:', email, 'necesitaNombre:', necesitaNombre);
   console.log('[google-confirmar] Cookie establecida:', cookieStr);
   
-  res.json({ ok: true, necesitaNombre });
+  if (necesitaNombre) {
+    res.json({ ok: true, necesitaNombre: true });
+  } else {
+    // Redirigir directamente a la app principal en lugar de depender del frontend
+    res.json({ ok: true, necesitaNombre: false, redirect: '/' });
+  }
 });
 
 app.post('/api/google/reenviar', async (req, res) => {
