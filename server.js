@@ -56,6 +56,12 @@ process.on('unhandledRejection', (reason) => {
 
 const app = express();
 
+// Configurar CORS para permitir credenciales (cookies)
+app.use(cors({
+  origin: true, // Permitir cualquier origen (en producción deberías restringir esto)
+  credentials: true,
+}));
+
 // ============================================================
 // CACHING EN MEMORIA PARA APIs EXTERNAS
 // ============================================================
