@@ -3372,7 +3372,7 @@ app.post('/api/registro/confirmar', (req, res) => {
   guardarUsuarios(usuarios);
   codigosPendientes.delete(email);
 
-  let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(email))}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`;
+  let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(email))}; HttpOnly; Path=/; SameSite=None; Max-Age=${60 * 60 * 24 * 30}`;
   if (req.secure) cookieStr += '; Secure';
   res.setHeader('Set-Cookie', cookieStr);
   res.json({ ok: true, necesitaNombre: true });
@@ -3382,9 +3382,13 @@ app.post('/api/login', (req, res) => {
   const { usuario, clave, recordar } = req.body || {};
   console.log('[api/login] Intento de login para:', usuario, 'Secure:', req.secure);
   
+  // Usar SameSite=None con Secure para HTTPS, o no especificar SameSite para HTTP
+  const useSecure = req.secure;
+  const sameSiteAttr = useSecure ? 'SameSite=None' : '';
+  
   if (usuario === APP_USER && clave === APP_PASS) {
-    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER}`))}; HttpOnly; Path=/; SameSite=Lax`;
-    if (req.secure) cookieStr += '; Secure';
+    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER}`))}; HttpOnly; Path=/; ${sameSiteAttr}`;
+    if (useSecure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
     console.log('[api/login] Login exitoso para APP_USER, cookie:', cookieStr);
@@ -3392,8 +3396,8 @@ app.post('/api/login', (req, res) => {
   }
 
   if (usuario === APP_USER_2 && clave === APP_PASS_2) {
-    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER_2}`))}; HttpOnly; Path=/; SameSite=Lax`;
-    if (req.secure) cookieStr += '; Secure';
+    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER_2}`))}; HttpOnly; Path=/; ${sameSiteAttr}`;
+    if (useSecure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
     console.log('[api/login] Login exitoso para APP_USER_2, cookie:', cookieStr);
@@ -3401,8 +3405,8 @@ app.post('/api/login', (req, res) => {
   }
 
   if (usuario === APP_USER_3 && clave === APP_PASS_3) {
-    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER_3}`))}; HttpOnly; Path=/; SameSite=Lax`;
-    if (req.secure) cookieStr += '; Secure';
+    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER_3}`))}; HttpOnly; Path=/; ${sameSiteAttr}`;
+    if (useSecure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
     console.log('[api/login] Login exitoso para APP_USER_3, cookie:', cookieStr);
@@ -3412,8 +3416,8 @@ app.post('/api/login', (req, res) => {
   const usuarios = leerUsuarios();
   const cuenta = usuarios[usuario];
   if (cuenta && verificarClave(clave, cuenta.claveHash)) {
-    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(usuario))}; HttpOnly; Path=/; SameSite=Lax`;
-    if (req.secure) cookieStr += '; Secure';
+    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(usuario))}; HttpOnly; Path=/; ${sameSiteAttr}`;
+    if (useSecure) cookieStr += '; Secure';
     if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
     res.setHeader('Set-Cookie', cookieStr);
     console.log('[api/login] Login exitoso para usuario regular, cookie:', cookieStr);
@@ -3714,7 +3718,7 @@ app.get('/auth/google/callback', async (req, res) => {
 
     if (!transporterCorreo && !process.env.RESEND_API_KEY) {
       console.warn('[google-auth] No hay configuración de email: entrando sin pedir codigo extra.');
-      let cookieDirecta = `verbo_auth=${encodeURIComponent(firmarValor(userData.email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+      let cookieDirecta = `verbo_auth=${encodeURIComponent(firmarValor(userData.email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=None`;
       if (req.secure) cookieDirecta += '; Secure';
       res.setHeader('Set-Cookie', [cookieDirecta, 'verbo_oauth_state=; HttpOnly; Path=/; Max-Age=0']);
       return res.redirect('/');
@@ -3781,8 +3785,8 @@ app.post('/api/google/confirmar', (req, res) => {
   }
   const necesitaNombre = !usuarios[email].nombre;
 
-  let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-  // Solo agregar Secure si estamos realmente en HTTPS (no en producción general)
+  let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=None`;
+  // SameSite=None requiere Secure
   if (req.secure) cookieStr += '; Secure';
   res.setHeader('Set-Cookie', [cookieStr, 'verbo_google_pendiente=; HttpOnly; Path=/; Max-Age=0']);
   
