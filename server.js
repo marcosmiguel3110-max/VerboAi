@@ -2703,8 +2703,8 @@ app.use((req, res, next) => {
   if (req.path === '/login.html') return res.redirect(301, '/login');
   if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/') || req.path.startsWith('/api/v1/verbocode/link/') || req.path.startsWith('/api/biblia/capitulo/')) return next();
   if (estaAutenticado(req)) {
-    // Si el usuario está autenticado y va a la raiz, servir la app principal
-    if (req.path === '/') return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    // Si el usuario está autenticado y va a la raiz o /login, servir la app principal
+    if (req.path === '/' || req.path === '/login') return res.sendFile(path.join(__dirname, 'public', 'index.html'));
     return next();
   }
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
@@ -2718,6 +2718,7 @@ app.use((req, res, next) => {
 // una pagina de login aparte: es la misma demo.html, que trae embebidos los
 // formularios reales de login/registro (ver login.js) dentro de un modal, asi
 // que el flujo de auth entero (incluido el callback de Google) funciona igual.
+// Nota: usuarios autenticados son redirigidos a index.html por el middleware de arriba.
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'demo.html'));
 });
