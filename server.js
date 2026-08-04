@@ -2720,6 +2720,27 @@ function verificarValorFirmado(cookieValor) {
   if (bufFirma.length !== bufEsperada.length) return null;
   return crypto.timingSafeEqual(bufFirma, bufEsperada) ? valor : null;
 }
+
+// Arma el header Set-Cookie de la sesion (verbo_auth) de forma consistente en
+// TODOS los flujos de login (password, registro por email, Google OAuth).
+//
+// IMPORTANTE: un cookie con "SameSite=None" pero SIN "Secure" es invalido segun
+// el spec y los navegadores modernos (Chrome, Firefox, Safari) lo descartan en
+// silencio — no tira error, simplemente el navegador nunca lo guarda. Antes,
+// varios de estos endpoints declaraban "SameSite=None" a mano sin garantizar
+// "Secure" cuando `req.secure` daba false (por ejemplo si la app corre detras
+// de un proxy/Cloudflare que no reenvia bien "X-Forwarded-Proto"). Eso hacia
+// que el login "funcionara" del lado del server (200 OK, logs de exito) pero
+// el navegador tirara la cookie a la basura, y el usuario terminaba de nuevo
+// en la demo/login en la siguiente navegacion.
+function construirCookieAuth(valor, req, { maxAgeSegundos } = {}) {
+  const esSegura = !!req.secure;
+  let cookie = `verbo_auth=${encodeURIComponent(firmarValor(valor))}; HttpOnly; Path=/; SameSite=${esSegura ? 'None' : 'Lax'}`;
+  if (esSegura) cookie += '; Secure';
+  if (maxAgeSegundos) cookie += `; Max-Age=${maxAgeSegundos}`;
+  return cookie;
+}
+
 function leerCookie(req, nombre) {
   const raw = req.headers.cookie || '';
   for (const parte of raw.split(';')) {
@@ -3432,8 +3453,7 @@ app.post('/api/registro/confirmar', (req, res) => {
   guardarUsuarios(usuarios);
   codigosPendientes.delete(email);
 
-  let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(email))}; HttpOnly; Path=/; SameSite=None; Max-Age=${60 * 60 * 24 * 30}`;
-  if (req.secure) cookieStr += '; Secure';
+  let cookieStr = construirCookieAuth(email, req, { maxAgeSegundos: 60 * 60 * 24 * 30 });
   res.setHeader('Set-Cookie', cookieStr);
   res.json({ ok: true, necesitaNombre: true });
 });
@@ -3441,38 +3461,25 @@ app.post('/api/registro/confirmar', (req, res) => {
 app.post('/api/login', (req, res) => {
   const { usuario, clave, recordar } = req.body || {};
   console.log('[api/login] Intento de login para:', usuario, 'Secure:', req.secure);
-  
-  // Usar SameSite=None con Secure para HTTPS, o no especificar SameSite para HTTP
-  const useSecure = req.secure;
-  // Siempre declaramos SameSite explicitamente (Lax en HTTP, None+Secure en HTTPS)
-  // en vez de dejarlo vacio: un atributo vacio en el header deja un "; ;" colgando
-  // y, mas importante, no declarar SameSite hace que cada navegador aplique su
-  // propio default, lo que puede terminar bloqueando la cookie justo despues del
-  // login segun el navegador/version.
-  const sameSiteAttr = useSecure ? 'SameSite=None' : 'SameSite=Lax';
-  
+
+  const maxAge = recordar ? 60 * 60 * 24 * 30 : undefined;
+
   if (usuario === APP_USER && clave === APP_PASS) {
-    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER}`))}; HttpOnly; Path=/; ${sameSiteAttr}`;
-    if (useSecure) cookieStr += '; Secure';
-    if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
+    const cookieStr = construirCookieAuth(`local:${APP_USER}`, req, { maxAgeSegundos: maxAge });
     res.setHeader('Set-Cookie', cookieStr);
     console.log('[api/login] Login exitoso para APP_USER, cookie:', cookieStr);
     return res.json({ ok: true, redirect: '/' });
   }
 
   if (usuario === APP_USER_2 && clave === APP_PASS_2) {
-    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER_2}`))}; HttpOnly; Path=/; ${sameSiteAttr}`;
-    if (useSecure) cookieStr += '; Secure';
-    if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
+    const cookieStr = construirCookieAuth(`local:${APP_USER_2}`, req, { maxAgeSegundos: maxAge });
     res.setHeader('Set-Cookie', cookieStr);
     console.log('[api/login] Login exitoso para APP_USER_2, cookie:', cookieStr);
     return res.json({ ok: true, redirect: '/' });
   }
 
   if (usuario === APP_USER_3 && clave === APP_PASS_3) {
-    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(`local:${APP_USER_3}`))}; HttpOnly; Path=/; ${sameSiteAttr}`;
-    if (useSecure) cookieStr += '; Secure';
-    if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
+    const cookieStr = construirCookieAuth(`local:${APP_USER_3}`, req, { maxAgeSegundos: maxAge });
     res.setHeader('Set-Cookie', cookieStr);
     console.log('[api/login] Login exitoso para APP_USER_3, cookie:', cookieStr);
     return res.json({ ok: true, redirect: '/' });
@@ -3481,9 +3488,7 @@ app.post('/api/login', (req, res) => {
   const usuarios = leerUsuarios();
   const cuenta = usuarios[usuario];
   if (cuenta && verificarClave(clave, cuenta.claveHash)) {
-    let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(usuario))}; HttpOnly; Path=/; ${sameSiteAttr}`;
-    if (useSecure) cookieStr += '; Secure';
-    if (recordar) cookieStr += `; Max-Age=${60 * 60 * 24 * 30}`;
+    const cookieStr = construirCookieAuth(usuario, req, { maxAgeSegundos: maxAge });
     res.setHeader('Set-Cookie', cookieStr);
     console.log('[api/login] Login exitoso para usuario regular, cookie:', cookieStr);
     return res.json({ ok: true, redirect: '/' });
@@ -3781,10 +3786,15 @@ app.get('/auth/google/callback', async (req, res) => {
     const userData = await userResp.json();
     if (!userData.email) return res.redirect('/login?error=google_sin_email');
 
-    if (!transporterCorreo && !process.env.RESEND_API_KEY) {
+    // BUG: esta condicion no contemplaba BREVO_API_KEY, asi que si configurabas
+    // el email SOLO con Brevo (la opcion que las notas de deploy recomiendan
+    // para quien no tiene dominio propio), el server pensaba que "no hay
+    // configuracion de email" y te dejaba entrar directo, sin pedir nunca el
+    // codigo de verificacion — aunque Brevo estuviera perfectamente configurado
+    // y funcionando para el resto de los correos (registro, reenviar, etc).
+    if (!transporterCorreo && !process.env.RESEND_API_KEY && !process.env.BREVO_API_KEY) {
       console.warn('[google-auth] No hay configuración de email: entrando sin pedir codigo extra.');
-      let cookieDirecta = `verbo_auth=${encodeURIComponent(firmarValor(userData.email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=None`;
-      if (req.secure) cookieDirecta += '; Secure';
+      const cookieDirecta = construirCookieAuth(userData.email, req, { maxAgeSegundos: 60 * 60 * 24 * 30 });
       res.setHeader('Set-Cookie', [cookieDirecta, 'verbo_oauth_state=; HttpOnly; Path=/; Max-Age=0']);
       return res.redirect('/');
     }
@@ -3850,9 +3860,7 @@ app.post('/api/google/confirmar', (req, res) => {
   }
   const necesitaNombre = !usuarios[email].nombre;
 
-  let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=None`;
-  // SameSite=None requiere Secure
-  if (req.secure) cookieStr += '; Secure';
+  const cookieStr = construirCookieAuth(email, req, { maxAgeSegundos: 60 * 60 * 24 * 30 });
   res.setHeader('Set-Cookie', [cookieStr, 'verbo_google_pendiente=; HttpOnly; Path=/; Max-Age=0']);
   
   console.log('[google-confirmar] Login exitoso para:', email, 'necesitaNombre:', necesitaNombre);
