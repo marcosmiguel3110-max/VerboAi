@@ -2702,19 +2702,37 @@ app.use((req, res, next) => {
   // URL limpia: /login.html pasa a /login (sin extension) via redireccion permanente.
   if (req.path === '/login.html') return res.redirect(301, '/login');
   if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/') || req.path.startsWith('/api/v1/verbocode/link/') || req.path.startsWith('/api/biblia/capitulo/')) return next();
-  if (estaAutenticado(req)) {
+  
+  const usuarioAutenticado = estaAutenticado(req);
+  
+  // Logging para debug
+  if (req.path === '/' || req.path === '/login') {
+    console.log('[auth-middleware] Path:', req.path, 'Autenticado:', usuarioAutenticado, 'Query:', req.query);
+  }
+  
+  if (usuarioAutenticado) {
     // Si el usuario está autenticado:
     // - Si va a la raiz, servir la app principal
     // - Si va a /login sin parámetros de auth, redirigir a la app principal
     // - Si va a /login con parámetros de auth (paso/error), dejar pasar (puede ser flujo de registro)
-    if (req.path === '/') return res.sendFile(path.join(__dirname, 'public', 'index.html'));
-    if (req.path === '/login' && !req.query.paso && !req.query.error) return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    if (req.path === '/') {
+      console.log('[auth-middleware] Sirviendo index.html para usuario autenticado en /');
+      return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    }
+    if (req.path === '/login' && !req.query.paso && !req.query.error) {
+      console.log('[auth-middleware] Sirviendo index.html para usuario autenticado en /login (sin parámetros)');
+      return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    }
     return next();
   }
+  
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
   // Un visitante sin cuenta que entra a la raiz ve el chat de prueba (invitado)
   // en vez de ser mandado directo al formulario de login.
-  if (req.path === '/') return res.sendFile(path.join(__dirname, 'public', 'demo.html'));
+  if (req.path === '/') {
+    console.log('[auth-middleware] Sirviendo demo.html para usuario no autenticado en /');
+    return res.sendFile(path.join(__dirname, 'public', 'demo.html'));
+  }
   return res.redirect('/login');
 });
 
@@ -3752,8 +3770,13 @@ app.post('/api/google/confirmar', (req, res) => {
   const necesitaNombre = !usuarios[email].nombre;
 
   let cookieStr = `verbo_auth=${encodeURIComponent(firmarValor(email))}; HttpOnly; Path=/; Max-Age=${60 * 60 * 24 * 30}; SameSite=Lax`;
-  if (req.secure) cookieStr += '; Secure';
+  // En producción siempre agregar Secure para cookies HTTPS
+  if (req.secure || process.env.NODE_ENV === 'production') cookieStr += '; Secure';
   res.setHeader('Set-Cookie', [cookieStr, 'verbo_google_pendiente=; HttpOnly; Path=/; Max-Age=0']);
+  
+  console.log('[google-confirmar] Login exitoso para:', email, 'necesitaNombre:', necesitaNombre);
+  console.log('[google-confirmar] Cookie establecida:', cookieStr);
+  
   res.json({ ok: true, necesitaNombre });
 });
 
