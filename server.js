@@ -2703,8 +2703,12 @@ app.use((req, res, next) => {
   if (req.path === '/login.html') return res.redirect(301, '/login');
   if (RUTAS_PUBLICAS.has(req.path) || req.path.startsWith('/icons/') || req.path.startsWith('/uploads/') || req.path.startsWith('/api/v1/verbocode/link/') || req.path.startsWith('/api/biblia/capitulo/')) return next();
   if (estaAutenticado(req)) {
-    // Si el usuario está autenticado y va a la raiz o /login, servir la app principal
-    if (req.path === '/' || req.path === '/login') return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    // Si el usuario está autenticado:
+    // - Si va a la raiz, servir la app principal
+    // - Si va a /login sin parámetros de auth, redirigir a la app principal
+    // - Si va a /login con parámetros de auth (paso/error), dejar pasar (puede ser flujo de registro)
+    if (req.path === '/') return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    if (req.path === '/login' && !req.query.paso && !req.query.error) return res.sendFile(path.join(__dirname, 'public', 'index.html'));
     return next();
   }
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No autenticado.' });
