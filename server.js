@@ -400,12 +400,36 @@ const GPT4FREE_URLS = (process.env.GPT4FREE_URLS || process.env.GPT4FREE_URL || 
 const GPT4FREE_URL = GPT4FREE_URLS[0] || ''; // URL principal para compatibilidad
 const GPT4FREE_MODEL = process.env.GPT4FREE_MODEL || 'glm-4';
 // Sistema de múltiples modelos GPT4FREE (MODEL2, MODEL3, etc)
+// IMPORTANTE: esta lista tiene que coincidir con los modelos reales que
+// bridge.py sabe resolver (ver MAPEO_MODELO_PROVIDER e intentos_hosted en
+// bridge.py). Tras la simplificación del bridge (commit "Simplificar a solo
+// modelos con providers específicos...") ya NO hay provider para
+// kimi-k2.7-code ni deepseek-v4-pro — pedirlos hace que el bridge caiga a
+// providers generales (lento, poco confiable) o falle directo. Se sacan de
+// la cascada y se dejan solo los modelos que el bridge resuelve de forma
+// directa:
+//   'gpt-5.6-luna'          -> hosteado en g4f.space (custom server opencode.ai/go), el mas nuevo/potente
+//   'glm-4'                -> provider GLM (chat.z.ai)      -> GLM-4.7
+//   'glm-5.2'               -> provider GLM (chat.z.ai)      -> GLM-4.7 (alias)
+//   'zai-org/glm-5.2'       -> provider DeepInfra            -> zai-org/GLM-5.2 (el GLM-5.2 real)
+//   'openai/gpt-oss-120b'   -> provider Nvidia               -> openai/gpt-oss-120b
 const GPT4FREE_MODELS = {
+  'gpt-5.6-luna': process.env.GPT4FREE_MODEL_LUNA || 'gpt-5.6-luna',
   'glm-4': GPT4FREE_MODEL,
   'glm-5.2': process.env.GPT4FREE_MODEL2 || 'glm-5.2',
-  'kimi-k2.7-code': process.env.GPT4FREE_MODEL3 || 'kimi-k2.7-code',
-  'deepseek-v4-pro': process.env.GPT4FREE_MODEL4 || 'deepseek-v4-pro',
+  'zai-org/glm-5.2': process.env.GPT4FREE_MODEL3 || 'zai-org/glm-5.2',
+  'openai/gpt-oss-120b': process.env.GPT4FREE_MODEL4 || 'openai/gpt-oss-120b',
 };
+// Cascada ordenada de mejor a peor de los modelos REALES del bridge (glm-bridge),
+// usada por NewserPlus en vez del placeholder generico 'g4f-bridge'.
+// 'gpt-5.6-luna' va PRIMERO: es el modelo más nuevo/potente, servido por el
+// custom server "opencode.ai/go" (OPENCODE_GO_SERVER_ID) en la infraestructura
+// hosteada de g4f.space — bridge.py lo intenta ahí ANTES de caer a los
+// providers locales (ver PASO 0 / intentos_hosted en bridge.py). Después va
+// glm-5.2 (mas rapido y estable, provider directo GLM), despues GLM-5.2 real
+// via DeepInfra, y por ultimo GPT-OSS-120B via Nvidia (Nvidia suele tardar
+// mas, por eso va al final).
+const MODELOS_G4F_BRIDGE = ['gpt-5.6-luna', 'glm-5.2', 'zai-org/glm-5.2', 'openai/gpt-oss-120b'];
 const GPT4FREE_ENABLED = (process.env.GPT4FREE_ENABLED_PRO || 'false').toLowerCase() === 'true';
 const GPT4FREE_TIMEOUT = parseInt(process.env.GPT4FREE_TIMEOUT || '300000', 10); // Aumentado a 5 minutos para evitar timeouts
 // API keys de GPT4FREE (múltiples para rotación)
@@ -641,10 +665,8 @@ const MODELOS_DISPONIBLES = {
     // Usar G4F si está habilitado, sino Anthropic, sino el mejor modelo free
     modeloOpenRouter: GPT4FREE_ENABLED ? 'glm-5.2' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-ultra-550b-a55b:free'),
     modelosOpenRouterTexto: [
-      // GLM-5.2 (PRIMERO si está habilitado)
-      GPT4FREE_ENABLED ? 'glm-5.2' : null,
-      // G4F Bridge (segundo si está habilitado)
-      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
+      // Cascada real del bridge (glm-5.2 -> zai-org/glm-5.2 -> gpt-oss-120b), si está habilitado
+      ...(GPT4FREE_ENABLED ? MODELOS_G4F_BRIDGE : []),
       // Anthropic Direct (tercero si está habilitado)
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Mejores modelos free (prioridad)
@@ -658,10 +680,10 @@ const MODELOS_DISPONIBLES = {
       'poolside/laguna-m.1:free',
       'z-ai/glm-4.5-air:free',
     ].filter(Boolean),
-    modeloOpenRouterRazonamiento: GPT4FREE_ENABLED ? 'g4f-bridge' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'),
+    modeloOpenRouterRazonamiento: GPT4FREE_ENABLED ? 'glm-5.2' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'),
     modelosOpenRouterRazonamiento: [
-      // G4F Bridge (PRIMERO si está habilitado)
-      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
+      // Cascada real del bridge (PRIMERO si está habilitado)
+      ...(GPT4FREE_ENABLED ? MODELOS_G4F_BRIDGE : []),
       // Anthropic Direct (segundo si está habilitado)
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Mejores modelos free de reasoning
@@ -673,10 +695,8 @@ const MODELOS_DISPONIBLES = {
     ].filter(Boolean),
     // Cascada optimizada para coding (con glm-5.2 como especialista en programación)
     modelosOpenRouterCodigo: [
-      // GLM-5.2 (ESPECIALISTA en programación - PRIMERO si está habilitado)
-      GPT4FREE_ENABLED ? 'glm-5.2' : null,
-      // G4F Bridge (segundo si está habilitado)
-      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
+      // Cascada real del bridge (glm-5.2 -> zai-org/glm-5.2 -> gpt-oss-120b), si está habilitado
+      ...(GPT4FREE_ENABLED ? MODELOS_G4F_BRIDGE : []),
       // Anthropic Direct (tercero si está habilitado)
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Mejores modelos free para código
@@ -688,15 +708,12 @@ const MODELOS_DISPONIBLES = {
       'meta-llama/llama-3.3-70b-instruct:free',         // General coding
       'nousresearch/hermes-3-llama-3.1-405b:free',      // Complex coding
     ].filter(Boolean),
-    // Cascada para canvas/visuales/juegos/Modo Design (qwen/qwen3.6-27b primero)
+    // Cascada para canvas/visuales/juegos/Modo Design
+    // Nota: 'qwen/qwen3.6-27b' y 'gpt-4o' no tienen provider real en el bridge
+    // (no aparecen en MAPEO_MODELO_PROVIDER de bridge.py), asi que se sacaron
+    // y se usa la misma cascada real del bridge que en las demas.
     modelosOpenRouterCanvas: [
-      // qwen/qwen3.6-27b (ESPECIALISTA en canvas/visuales - PRIMERO si está habilitado)
-      GPT4FREE_ENABLED ? 'qwen/qwen3.6-27b' : null,
-      // gpt-4o (multimodal, bueno para diseño - SEGUNDO si está habilitado)
-      GPT4FREE_ENABLED ? 'gpt-4o' : null,
-      // Cascada de código normal (TERCERO)
-      GPT4FREE_ENABLED ? 'glm-5.2' : null,
-      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
+      ...(GPT4FREE_ENABLED ? MODELOS_G4F_BRIDGE : []),
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Modelos de diseño adicionales
       'cohere/north-mini-code:free',
@@ -707,10 +724,11 @@ const MODELOS_DISPONIBLES = {
       'nvidia/nemotron-3-super-120b-a12b:free',
       'meta-llama/llama-3.3-70b-instruct:free',
     ].filter(Boolean),
-    modeloOpenRouterVision: GPT4FREE_ENABLED ? 'g4f-bridge' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'google/gemma-4-31b-it:free'),
+    modeloOpenRouterVision: GPT4FREE_ENABLED ? 'glm-5.2' : (ANTHROPIC_ENABLED ? 'anthropic-direct' : 'google/gemma-4-31b-it:free'),
     modelosOpenRouterVision: [
-      // G4F Bridge (PRIMERO si está habilitado)
-      GPT4FREE_ENABLED ? 'g4f-bridge' : null,
+      // Cascada real del bridge (PRIMERO si está habilitado; el bridge no es
+      // multimodal de verdad, pero mantiene el fallback consistente)
+      ...(GPT4FREE_ENABLED ? MODELOS_G4F_BRIDGE : []),
       // Anthropic Direct (segundo si está habilitado)
       ANTHROPIC_ENABLED ? 'anthropic-direct' : null,
       // Mejores modelos free multimodales
@@ -1163,8 +1181,9 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
       };
 
       let r;
-      // Si el modelo es un modelo de G4F (glm-5.2, g4f-bridge, etc), usar la función de G4F
-      if (modelo === 'g4f-bridge' || modelo === 'glm-5.2' || modelo.startsWith('glm-')) {
+      // Si el modelo es uno de los modelos reales del bridge (glm-5.2,
+      // zai-org/glm-5.2, openai/gpt-oss-120b, etc), usar la función de G4F
+      if (modelo === 'g4f-bridge' || MODELOS_G4F_BRIDGE.includes(modelo) || modelo.startsWith('glm-')) {
         r = await llamarG4F(messages, systemPrompt, modelo, opcionesConConfig);
       } else if (modelo === 'anthropic-direct') {
         r = await llamarAnthropic(messages, systemPrompt, ANTHROPIC_MODEL, opcionesConConfig);
@@ -1190,7 +1209,7 @@ async function llamarModeloGratisConReintentos(messages, systemPrompt, modelos, 
             { role: 'user', content: 'Continuá exactamente donde te quedaste. No repitas nada de lo ya escrito, no reinicies archivos ni agregues explicaciones nuevas, seguí el contenido tal cual iba.' },
           ];
           let rCont;
-          if (modelo === 'g4f-bridge' || modelo === 'glm-5.2' || modelo.startsWith('glm-')) {
+          if (modelo === 'g4f-bridge' || MODELOS_G4F_BRIDGE.includes(modelo) || modelo.startsWith('glm-')) {
             rCont = await llamarG4F(mensajesContinuar, systemPrompt, modelo, opciones);
           } else if (modelo === 'anthropic-direct') {
             rCont = await llamarAnthropic(mensajesContinuar, systemPrompt, ANTHROPIC_MODEL, opciones);
@@ -2411,6 +2430,24 @@ function guardarImagenDisco(buffer, mime) {
   const nombre = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
   fs.writeFileSync(path.join(UPLOADS_DIR, nombre), buffer);
   return `/uploads/${nombre}`;
+}
+
+// Igual que guardarImagenDisco pero para archivos de texto/codigo arbitrarios
+// (usado por la herramienta [[CREAR_ARCHIVO::nombre::contenido]] del chat
+// general). Sanitiza el nombre pedido por el modelo (nada de rutas, nada de
+// caracteres raros) y le agrega un prefijo unico para que dos archivos con
+// el mismo nombre pedido por distintos usuarios/mensajes no se pisen.
+// Devuelve la URL real (/uploads/...) donde el archivo QUEDO GUARDADO DE
+// VERDAD en disco, lista para servir como descarga real.
+function guardarArchivoTextoDisco(nombreSugerido, contenido) {
+  const base = (nombreSugerido || 'archivo.txt')
+    .replace(/[\\/]+/g, '_')          // sin separadores de carpeta
+    .replace(/\.\.+/g, '.')           // sin path traversal
+    .replace(/[^a-zA-Z0-9._-]+/g, '_')
+    .slice(0, 80) || 'archivo.txt';
+  const nombreFinal = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}-${base}`;
+  fs.writeFileSync(path.join(UPLOADS_DIR, nombreFinal), contenido, 'utf8');
+  return { url: `/uploads/${nombreFinal}`, nombre: base };
 }
 
 function borrarImagenDisco(urlRelativa) {
@@ -4320,6 +4357,38 @@ app.post('/api/v1/chat', chatRateLimit, async (req, res) => {
       }).join('\n');
     }
     textoLimpio = textoLimpio.replace(reDescargarApi, '');
+
+    // HERRAMIENTA CREAR_ARCHIVO: a diferencia de las etiquetas de arriba (que
+    // disparan una busqueda/descarga async manejada mas abajo en el pipeline),
+    // esta se resuelve ACA MISMO, sincronicamente, porque escribir a disco es
+    // instantaneo. Antes NewserPlus/NewserAdvanced1.5 no tenian NINGUNA
+    // herramienta real para crear archivos en el chat general (a diferencia de
+    // Verbo Code) — asi que cuando el modelo decia "listo, ya te cree/guarde
+    // el archivo X" en realidad no pasaba nada, ningun archivo se generaba.
+    // Ahora la etiqueta [[CREAR_ARCHIVO::nombre::contenido]] SI escribe el
+    // archivo real a disco (guardarArchivoTextoDisco) y devuelve un link de
+    // descarga real que se agrega a la respuesta.
+    const reCrearArchivoApi = /\[\[CREAR_ARCHIVO::([^:\]]+?)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
+    const crearArchivosApi = [...textoLimpio.matchAll(reCrearArchivoApi)];
+    if (crearArchivosApi.length) {
+      const linksArchivos = [];
+      for (const m of crearArchivosApi) {
+        const nombrePedido = (m[1] || '').trim();
+        const contenidoArchivo = m[2] || '';
+        if (!nombrePedido || !contenidoArchivo.trim()) continue;
+        try {
+          const { url, nombre } = guardarArchivoTextoDisco(nombrePedido, contenidoArchivo);
+          linksArchivos.push(`📄 [${nombre}](${url})`);
+        } catch (e) {
+          console.error('[api/v1/chat] error creando archivo:', e.message);
+        }
+      }
+      if (linksArchivos.length) {
+        if (textoExtraidoEtiquetas) textoExtraidoEtiquetas += '\n\n';
+        textoExtraidoEtiquetas += linksArchivos.join('\n');
+      }
+    }
+    textoLimpio = textoLimpio.replace(reCrearArchivoApi, '');
 
     if (textoExtraidoEtiquetas) {
       textoLimpio = (textoLimpio + '\n\n' + textoExtraidoEtiquetas).replace(/\n{3,}/g, '\n\n').trim();
@@ -7674,6 +7743,9 @@ Genera una imagen.
 [[TEXTURE::prompt en inglés]]
 Genera una TEXTURA real, tileable (que repite sin costura), lista para usar en un juego 2D o 3D (piso, pared, bloque estilo Minecraft, terreno estilo Terraria, sprite sheet, etc). Se guarda como archivo en la carpeta textures/. Usalo en vez de IMAGE cuando el usuario pida texturas, sprites, o assets visuales para un juego.
 
+MODELOS 3D — cuando el usuario pida un "modelo 3D", un objeto/personaje/escenario en 3D, o algo para un juego/visor en 3D:
+No existe (todavía) una API gratuita confiable para generar mallas .glb/.gltf/.obj desde texto, así que NUNCA prometas ni simules que "generaste un archivo .glb" — eso sería mentirle al usuario. En cambio, construí el modelo 3D DE VERDAD con código real usando Three.js: geometría real (BufferGeometry, geometrías primitivas combinadas — Box/Sphere/Cylinder/Cone/Extrude/Lathe —, grupos y jerarquías para articulaciones, normales e iluminación correctas). Guardalo con [[FILE_CREATE::...]] como parte del proyecto (un .js/.html real que corre en el navegador con WebGL), no como texto explicativo. Para los materiales, usá [[TEXTURE::prompt en inglés]] (genera una textura real, después aplicala como material/mapa en el mesh de Three.js) en vez de colores planos cuando el usuario pida algo con textura o detalle visual. Si el pedido es simple (una caja, una esfera), igual construilo con código real y prolijo, no placeholders. Si el usuario específicamente necesita un archivo .glb/.obj exportable para usar afuera del navegador (Blender, Unity, Minecraft, etc), aclaráselo: contale que podés generarle el modelo procedural en Three.js/código para verlo y usarlo en la web, pero que para un archivo exportable en un formato estándar necesita herramientas de modelado 3D (Blender, etc) o un servicio pago de texto-a-3D — no inventes que ya lo generaste en ese formato.
+
 [[AUDIO::descripción corta en español]]
 Genera CÓDIGO REAL de Web Audio API (osciladores, envolventes ADSR, ruido filtrado, etc) para un efecto de sonido o música procedural — sin archivos externos, 100% sintetizado en el navegador. Poné el código directamente en el archivo JS correspondiente, esta etiqueta es solo para marcar en el plan que se generó audio.
 
@@ -8768,6 +8840,20 @@ ${construirContextoArchivosProyecto(proyecto.archivos)}`;
     res.end();
   } catch (e) {
     console.error('[verbocode] error en chat:', e.message);
+    // FIX: antes, si algo tiraba una excepcion DESPUES de que ya se
+    // aplicaron archivos a proyecto.archivos en memoria (ej. un error en la
+    // ronda de verificacion/auditoria, o en una llamada de red durante el
+    // auto-ajuste) pero ANTES de llegar al guardarProyectoVerboCode() de
+    // arriba, esos archivos quedaban SOLO en memoria de este request y se
+    // perdian apenas terminaba: el usuario veia "Archivo creado: x" en las
+    // acciones que ya se habian mandado por SSE, pero al recargar el
+    // proyecto el archivo no estaba — exactamente el reporte de "dice que
+    // lo implementa pero no es asi". Este es el guardado de emergencia: pase
+    // lo que pase, si el proyecto tiene archivos aplicados en memoria, se
+    // guardan antes de responder el error.
+    try { if (proyecto && proyecto.archivos) guardarProyectoVerboCode(proyecto); } catch (e2) {
+      console.error('[verbocode] guardado de emergencia tambien fallo:', e2.message);
+    }
     enviarSSE({ type: 'error', message: 'Error: ' + e.message });
     res.end();
   }
@@ -8991,6 +9077,13 @@ solo agregando /ID, ej "posts/1" o "users/3").
 Ejemplo: "mostrame un ejemplo de un post de una API" -> tu respuesta breve + [[APIDATA::posts/1]]
 Esto consulta JSONPlaceholder (API REST publica de prueba) y agrega el JSON real despues de tu respuesta.
 
+HERRAMIENTA "CREAR_ARCHIVO" (para entregar un archivo real y descargable: script, documento, JSON, HTML, modelo 3D en codigo, lo que sea):
+Cuando el usuario te pida CREAR, GENERAR, GUARDAR o DARLE un archivo, NUNCA digas "listo, ya te cree/guarde el archivo" sin mas: eso es mentira si no usas esta herramienta, porque el sistema NO tiene forma de saber que "creaste" algo salvo que se lo digas con esta etiqueta. Agrega al FINAL de tu respuesta, en su propia linea, EXACTAMENTE este formato:
+[[CREAR_ARCHIVO::nombre.ext::contenido completo del archivo]]
+Esto escribe el archivo REAL en el servidor y le da al usuario un link de descarga real. Podes usar varias etiquetas CREAR_ARCHIVO en la misma respuesta si son varios archivos. Si el contenido tiene saltos de linea reales, dejalos tal cual. Nunca inventes un link de descarga vos mismo ni digas "aca tenes el archivo" sin la etiqueta: si no la usaste, el archivo NO existe, aunque lo hayas mostrado como bloque de codigo en el chat.
+
+MODELOS 3D Y TEXTURAS: si el usuario pide un modelo 3D, un objeto/escena/juego en 3D, o texturas para uno, no existe en este sistema una API gratuita para generar mallas .glb/.gltf/.obj desde texto, asi que NUNCA digas que generaste un archivo en esos formatos. En cambio, construi el modelo 3D DE VERDAD con codigo real de Three.js (geometrias combinadas, jerarquias, iluminacion, y CanvasTexture o patrones procedurales por codigo para las texturas, ya que no hay generador de texturas en este modo) y entregaselo con [[CREAR_ARCHIVO::nombre.html::contenido HTML completo con el script de Three.js embebido]] para que lo pueda abrir y ver funcionando de una. Si el usuario necesita especificamente un archivo exportable en formato estandar (para Blender, Unity, Minecraft, etc.), aclaraselo: le podes dar el modelo funcionando en el navegador via Three.js, pero un archivo exportable en esos formatos requiere herramientas de modelado 3D o un servicio pago de texto-a-3D — no inventes que ya lo generaste asi.
+
 Estas etiquetas [[CODE::...]] y [[APIDATA::...]] son invisibles para el usuario, se procesan aparte por el
 sistema. Nunca las menciones ni las escribas a la mitad del texto. Podes combinar varias herramientas
 en la misma respuesta (WEB, CODE, APIDATA), cada una en su propia linea al final.`;
@@ -9104,6 +9197,13 @@ solo agregando /ID, ej "posts/1" o "users/3").
 Ejemplo: "mostrame un ejemplo de un post de una API" -> tu respuesta breve + [[APIDATA::posts/1]]
 Esto consulta JSONPlaceholder (API REST publica de prueba) y agrega el JSON real despues de tu respuesta.
 
+HERRAMIENTA "CREAR_ARCHIVO" (para entregar un archivo real y descargable: script, documento, JSON, HTML, modelo 3D en codigo, lo que sea):
+Cuando el usuario te pida CREAR, GENERAR, GUARDAR o DARLE un archivo, NUNCA digas "listo, ya te cree/guarde el archivo" sin mas: eso es mentira si no usas esta herramienta, porque el sistema NO tiene forma de saber que "creaste" algo salvo que se lo digas con esta etiqueta. Agrega al FINAL de tu respuesta, en su propia linea, EXACTAMENTE este formato:
+[[CREAR_ARCHIVO::nombre.ext::contenido completo del archivo]]
+Esto escribe el archivo REAL en el servidor y le da al usuario un link de descarga real. Podes usar varias etiquetas CREAR_ARCHIVO en la misma respuesta si son varios archivos. Si el contenido tiene saltos de linea reales, dejalos tal cual. Nunca inventes un link de descarga vos mismo ni digas "aca tenes el archivo" sin la etiqueta: si no la usaste, el archivo NO existe, aunque lo hayas mostrado como bloque de codigo en el chat.
+
+MODELOS 3D Y TEXTURAS: si el usuario pide un modelo 3D, un objeto/escena/juego en 3D, o texturas para uno, no existe en este sistema una API gratuita para generar mallas .glb/.gltf/.obj desde texto, asi que NUNCA digas que generaste un archivo en esos formatos. En cambio, construi el modelo 3D DE VERDAD con codigo real de Three.js (geometrias combinadas, jerarquias, iluminacion, y CanvasTexture o patrones procedurales por codigo para las texturas, ya que no hay generador de texturas en este modo) y entregaselo con [[CREAR_ARCHIVO::nombre.html::contenido HTML completo con el script de Three.js embebido]] para que lo pueda abrir y ver funcionando de una. Si el usuario necesita especificamente un archivo exportable en formato estandar (para Blender, Unity, Minecraft, etc.), aclaraselo: le podes dar el modelo funcionando en el navegador via Three.js, pero un archivo exportable en esos formatos requiere herramientas de modelado 3D o un servicio pago de texto-a-3D — no inventes que ya lo generaste asi.
+
 Estas etiquetas [[CODE::...]] y [[APIDATA::...]] son invisibles para el usuario, se procesan aparte por
 el sistema. Nunca las menciones ni las escribas a la mitad del texto. Podes combinar varias herramientas
 en la misma respuesta (WEB, CODE, APIDATA), cada una en su propia linea al final.`;
@@ -9192,6 +9292,13 @@ Donde "recurso" es uno de: posts, comments, albums, photos, todos, users (opcion
 solo agregando /ID, ej "posts/1" o "users/3").
 Ejemplo: "mostrame un ejemplo de un post de una API" -> tu respuesta breve + [[APIDATA::posts/1]]
 Esto consulta JSONPlaceholder (API REST publica de prueba) y agrega el JSON real despues de tu respuesta.
+
+HERRAMIENTA "CREAR_ARCHIVO" (para entregar un archivo real y descargable: script, documento, JSON, HTML, modelo 3D en codigo, lo que sea):
+Cuando el usuario te pida CREAR, GENERAR, GUARDAR o DARLE un archivo, NUNCA digas "listo, ya te cree/guarde el archivo" sin mas: eso es mentira si no usas esta herramienta, porque el sistema NO tiene forma de saber que "creaste" algo salvo que se lo digas con esta etiqueta. Agrega al FINAL de tu respuesta, en su propia linea, EXACTAMENTE este formato:
+[[CREAR_ARCHIVO::nombre.ext::contenido completo del archivo]]
+Esto escribe el archivo REAL en el servidor y le da al usuario un link de descarga real. Podes usar varias etiquetas CREAR_ARCHIVO en la misma respuesta si son varios archivos. Si el contenido tiene saltos de linea reales, dejalos tal cual. Nunca inventes un link de descarga vos mismo ni digas "aca tenes el archivo" sin la etiqueta: si no la usaste, el archivo NO existe, aunque lo hayas mostrado como bloque de codigo en el chat.
+
+MODELOS 3D Y TEXTURAS: si el usuario pide un modelo 3D, un objeto/escena/juego en 3D, o texturas para uno, no existe en este sistema una API gratuita para generar mallas .glb/.gltf/.obj desde texto, asi que NUNCA digas que generaste un archivo en esos formatos. En cambio, construi el modelo 3D DE VERDAD con codigo real de Three.js (geometrias combinadas, jerarquias, iluminacion, y CanvasTexture o patrones procedurales por codigo para las texturas, ya que no hay generador de texturas en este modo) y entregaselo con [[CREAR_ARCHIVO::nombre.html::contenido HTML completo con el script de Three.js embebido]] para que lo pueda abrir y ver funcionando de una. Si el usuario necesita especificamente un archivo exportable en formato estandar (para Blender, Unity, Minecraft, etc.), aclaraselo: le podes dar el modelo funcionando en el navegador via Three.js, pero un archivo exportable en esos formatos requiere herramientas de modelado 3D o un servicio pago de texto-a-3D — no inventes que ya lo generaste asi.
 
 Estas etiquetas [[CODE::...]] y [[APIDATA::...]] son invisibles para el usuario, se procesan aparte por
 el sistema. Nunca las menciones ni las escribas a la mitad del texto. Podes combinar varias herramientas
@@ -11879,6 +11986,31 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
       textoVisible = textoVisible.replace(reDescargarG, '');
     }
 
+    // HERRAMIENTA CREAR_ARCHIVO (ver bloque gemelo en /api/v1/chat mas arriba
+    // en el archivo para el detalle completo): escribe el archivo REAL a
+    // disco y agrega un link de descarga real al texto visible, para que
+    // "ya te cree el archivo" corresponda a un archivo que existe de verdad.
+    const reCrearArchivoG = /\[\[CREAR_ARCHIVO::([^:\]]+?)::([\s\S]*?)\]\](?=\s*(?:\[\[[A-Z_]+::|$))/g;
+    const coincidenciasCrearArchivo = [...textoVisible.matchAll(reCrearArchivoG)];
+    if (coincidenciasCrearArchivo.length) {
+      const linksArchivosG = [];
+      for (const m of coincidenciasCrearArchivo) {
+        const nombrePedidoG = (m[1] || '').trim();
+        const contenidoArchivoG = m[2] || '';
+        if (!nombrePedidoG || !contenidoArchivoG.trim()) continue;
+        try {
+          const { url, nombre } = guardarArchivoTextoDisco(nombrePedidoG, contenidoArchivoG);
+          linksArchivosG.push(`📄 [${nombre}](${url})`);
+        } catch (e) {
+          console.error('[chat] error creando archivo:', e.message);
+        }
+      }
+      textoVisible = textoVisible.replace(reCrearArchivoG, '').trim();
+      if (linksArchivosG.length) {
+        textoVisible = `${textoVisible}\n\n${linksArchivosG.join('\n')}`;
+      }
+    }
+
     textoVisible = textoVisible.replace(/\[\[IMAGEN::[^\]]*\]\]/g, '');
 
     const reWebG = /\[\[WEB::([^\]]+)\]\]/g;
@@ -11937,7 +12069,7 @@ app.post('/api/chat', upload.array('imagenes', 5), async (req, res) => {
 
     if (emitido < textoCompleto.length) {
       let restante = textoCompleto.slice(emitido);
-      restante = restante.replace(reCuadernoG, '').replace(reBuscarG, '').replace(reInvestigarG, '').replace(reDescargarG, '').replace(/\[\[IMAGEN::[^\]]*\]\]/g, '').replace(reWebG, '').replace(reClimaG, '').replace(reCodeG, '').replace(reApidataG, '').trim();
+      restante = restante.replace(reCuadernoG, '').replace(reBuscarG, '').replace(reInvestigarG, '').replace(reDescargarG, '').replace(reCrearArchivoG, '').replace(/\[\[IMAGEN::[^\]]*\]\]/g, '').replace(reWebG, '').replace(reClimaG, '').replace(reCodeG, '').replace(reApidataG, '').trim();
       if (restante) enviar({ type: 'chunk', text: restante });
     }
 
